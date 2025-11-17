@@ -1,0 +1,18 @@
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:50:08.933Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:50:08.937Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:50:08.938Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:54:08.533Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:54:08.545Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:54:08.546Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:55:44.662Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:55:44.666Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:55:44.667Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:56:23.508Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:56:23.512Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:56:23.513Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:57:21.133Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:57:21.138Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:57:21.140Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:57:48.731Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:57:48.735Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T19:57:48.736Z"}

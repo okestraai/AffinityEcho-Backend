@@ -1,0 +1,31 @@
+{"ip":"::1","level":"info","message":"Rate limit key generated","path":"/","service":"affinity-echo-api","timestamp":"2025-11-11T22:20:50.289Z"}
+{"ip":"::1","level":"info","message":"Rate limit key generated","path":"/","service":"affinity-echo-api","timestamp":"2025-11-11T22:20:51.246Z"}
+{"ip":"::1","level":"info","message":"Rate limit key generated","path":"/","service":"affinity-echo-api","timestamp":"2025-11-11T22:21:00.418Z"}
+{"ip":"::1","level":"info","message":"Rate limit key generated","path":"/","service":"affinity-echo-api","timestamp":"2025-11-11T22:21:24.161Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:22:37.933Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:22:37.948Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:22:37.951Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:29:40.543Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:29:40.550Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:29:40.552Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:34:28.422Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:34:28.432Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:34:28.434Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:36:48.916Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:36:48.931Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:36:48.941Z"}
+{"ip":"::1","level":"info","message":"Rate limit key generated","path":"/","service":"affinity-echo-api","timestamp":"2025-11-11T22:37:49.494Z"}
+{"level":"warn","message":"Client Error Unauthorized","method":"GET","path":"/auth/me","service":"affinity-echo-api","statusCode":401,"timestamp":"2025-11-11T22:37:49.502Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:44:00.495Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:44:00.508Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:44:00.510Z"}
+{"level":"info","message":"FORTRESS LIVE ON PORT 3000","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:22.623Z"}
+{"level":"info","message":"SWAGGER → http://localhost:3000/docs","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:22.632Z"}
+{"level":"info","message":"HEALTH  → http://localhost:3000/health","module":"Bootstrap","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:22.635Z"}
+{"ip":"::1","level":"info","message":"Rate limit key generated","path":"/","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:56.634Z"}
+{"body":{"email":"user@example.com","password":"***","username":"BraveLeader42"},"ip":"::1","level":"info","message":"Incoming request","method":"POST","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:56.644Z","url":"/auth/signup","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0","userId":null}
+{"email":"user@example.com","level":"info","message":"Signup attempt","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:56.674Z","username":"BraveLeader42"}
+{"error":{"code":"PGRST205","details":null,"hint":null,"message":"Could not find the table 'public.user_profiles' in the schema cache"},"level":"error","message":"Database error during username check","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:58.471Z"}
+{"level":"info","message":"Creating user profile","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:59.386Z","userId":"d28033c9-a210-4d73-be1b-f6ce3fcc7680","username":"BraveLeader42"}
+{"error":"Could not find the table 'public.user_profiles' in the schema cache","level":"error","message":"Failed to create profile","service":"affinity-echo-api","timestamp":"2025-11-11T22:49:59.713Z","userId":"d28033c9-a210-4d73-be1b-f6ce3fcc7680"}
+{"error":{"code":"PGRST205","details":null,"hint":null,"message":"Could not find the table 'public.user_profiles' in the schema cache"},"level":"error","message":"HTTP Exception Internal server error","method":"POST","path":"/auth/signup","service":"affinity-echo-api","statusCode":500,"timestamp":"2025-11-11T22:49:59.716Z"}

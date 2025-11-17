@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to Affinity Echo!</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background: #f8f9fa; }
+        .container { max-width: 600px; margin: 0 auto; background: white; }
+        .header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 40px; text-align: center; color: white; }
+        .content { padding: 40px; }
+        .button { display: inline-block; padding: 14px 35px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 25px 0; }
+        .footer { background: #f1f3f4; padding: 25px; text-align: center; color: #666; font-size: 14px; border-top: 1px solid #e0e0e0; }
+        .feature { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #4facfe; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin: 0; font-size: 32px;">Welcome to the Community!</h1>
+            <p style="margin: 10px 0 0; opacity: 0.9; font-size: 18px;">Your journey with Affinity Echo begins now</p>
+        </div>
+        
+        <div class="content">
+            <h2 style="color: #333; margin-bottom: 10px;">Hello <strong style="color: #4facfe;"><%= username %></strong>,</h2>
+            <p style="font-size: 16px;">Welcome to Affinity Echo - your safe space in corporate America! We're thrilled to have you join our community of professionals supporting each other.</p>
+
+            <div class="feature">
+                <h3 style="margin: 0 0 15px; color: #333; display: flex; align-items: center; gap: 10px;">
+                    <span>🚀</span> Get Started
+                </h3>
+                <p style="margin: 0;">Complete your onboarding to unlock all features:</p>
+                <ul style="margin: 10px 0 0; padding-left: 20px;">
+                    <li>Join company-specific forums</li>
+                    <li>Connect with affinity groups</li>
+                    <li>Find mentorship opportunities</li>
+                    <li>Participate in anonymous discussions</li>
+                </ul>
+            </div>
+
+            <div class="feature">
+                <h3 style="margin: 0 0 15px; color: #333; display: flex; align-items: center; gap: 10px;">
+                    <span>🛡️</span> Your Privacy Matters
+                </h3>
+                <p style="margin: 0;">Remember, your identity is protected. You control what information you share and when. Our platform is designed to keep you anonymous while building meaningful connections.</p>
+            </div>
+
+            <div class="feature">
+                <h3 style="margin: 0 0 15px; color: #333; display: flex; align-items: center; gap: 10px;">
+                    <span>💼</span> Explore Your Dashboard
+                </h3>
+                <p style="margin: 0;">Visit your dashboard to:</p>
+                <ul style="margin: 10px 0 0; padding-left: 20px;">
+                    <li>Browse forums and discussions</li>
+                    <li>Join affinity groups that match your experiences</li>
+                    <li>Set up your mentorship preferences</li>
+                    <li>Connect with professionals who understand your journey</li>
+                </ul>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="<%= loginUrl %>" class="button">Go to Dashboard</a>
+            </div>
+
+            <p style="font-size: 16px;">If you have any questions or need support, our community guidelines and help resources are always available in your dashboard.</p>
+
+            <p style="font-size: 16px; margin-top: 30px;">
+                Welcome aboard,<br>
+                <strong style="color: #4facfe;">The Affinity Echo Team</strong>
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p style="margin: 0 0 10px;">You're receiving this email because you recently joined Affinity Echo.</p>
+            <p style="margin: 0; font-size: 12px;">Need help? Contact us at <a href="mailto:<%= supportEmail %>" style="color: #4facfe;"><%= supportEmail %></a></p>
+            <p style="margin: 15px 0 0; font-size: 12px;">&copy; 2024 Affinity Echo. Building stronger professionals together.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,406 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+//
+// USER PROFILES
+//
+model user_profiles {
+  id                       String   @id @default(uuid()) @db.Uuid
+  username                 String   @unique @db.VarChar(50)
+  email                    String?  @db.VarChar(254)  // ← ADD THIS LINE
+  avatar                   String   @default("User")
+  bio                      String?
+  company                  String?
+  job_title                String?
+  location                 String?
+  years_experience         Int?
+  skills                   String[] @default([])
+  linkedin_url             String?
+
+  // Onboarding & Demographics
+  has_completed_onboarding Boolean  @default(false)
+  is_willing_to_mentor     Boolean  @default(false)
+  badges                   String[] @default([])
+  career_level             String?  @db.VarChar(254)
+  affinity_tags            String[] @default([])
+
+  // Encrypted PII
+  race_encrypted           String?
+  gender_encrypted         String?
+
+  // Privacy
+  privacy_level            String   @default("anonymous") @db.VarChar(20)
+
+  // Stats
+  reputation_score         Int      @default(0)
+  total_posts              Int      @default(0)
+  total_comments           Int      @default(0)
+  helpful_votes_received   Int      @default(0)
+  mentorship_sessions_completed Int @default(0)
+  successful_referrals     Int      @default(0)
+
+  // Timestamps
+  created_at               DateTime @default(now()) @db.Timestamptz(3)
+  updated_at               DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  last_active_at           DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations - FIXED: Remove the problematic relations
+  referral_posts            referral_posts[]
+  sent_connections          referral_connections[] @relation("sent_connections")
+  received_connections      referral_connections[] @relation("received_connections")
+  forum_topics              forum_topics[]
+  forum_comments            forum_comments[]
+  topic_reactions           topic_reactions[]
+  mentor_relationships      mentorship_relationships[] @relation("mentor_relationships")
+  mentee_relationships      mentorship_relationships[] @relation("mentee_relationships")
+  conversations_user1       conversations[] @relation("conversations_user1")
+  conversations_user2       conversations[] @relation("conversations_user2")
+  messages                  messages[]
+  notification_users        notifications[] @relation("notification_user")
+  notification_actors       notifications[] @relation("notification_actor")
+  followers                 user_follows[] @relation("user_followers")
+  following                 user_follows[] @relation("user_following")
+  identity_reveals_requester identity_reveals[] @relation("identity_reveals_requester")
+  identity_reveals_responder identity_reveals[] @relation("identity_reveals_responder")
+
+  @@map("user_profiles")
+}
+
+//
+// REFERRAL POSTS
+//
+model referral_posts {
+  id                     String   @id @default(uuid()) @db.Uuid
+  user_id                String   @db.Uuid
+  type                   String   // request | offer
+  title_encrypted        String
+  company_encrypted      String
+  job_title_encrypted    String?
+  job_link               String?
+  description_encrypted  String
+
+  scope                  String   @default("global")
+  status                 String   @default("open")
+  affinity_groups        String[] @default([])
+  available_slots        Int?
+  total_slots            Int?
+  tags                   String[] @default([])
+  required_skills        String[] @default([])
+  preferred_experience   String?
+
+  views_count            Int      @default(0)
+  likes_count            Int      @default(0)
+  comments_count         Int      @default(0)
+  bookmarks_count        Int      @default(0)
+  connection_requests_count Int   @default(0)
+
+  created_at             DateTime @default(now()) @db.Timestamptz(3)
+  updated_at             DateTime @updatedAt @db.Timestamptz(3)
+  last_activity_at       DateTime @default(now()) @db.Timestamptz(3)
+  expires_at             DateTime? @db.Timestamptz(3)
+
+  // Relations
+  user_profile           user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connections            referral_connections[]
+
+  @@map("referral_posts")
+}
+
+//
+// REFERRAL CONNECTIONS
+//
+model referral_connections {
+  id                     String   @id @default(uuid()) @db.Uuid
+  referral_post_id       String   @db.Uuid
+  sender_id              String   @db.Uuid
+  receiver_id            String   @db.Uuid
+  status                 String   @default("pending")
+  message_encrypted      String?
+  sender_notes_encrypted String?
+  receiver_notes_encrypted String?
+
+  referral_submitted     Boolean  @default(false)
+  interview_scheduled    Boolean  @default(false)
+  offer_received         Boolean  @default(false)
+  outcome_notes          String?
+  identity_revealed      Boolean  @default(false)
+
+  created_at             DateTime @default(now()) @db.Timestamptz(3)
+  updated_at             DateTime @updatedAt @db.Timestamptz(3)
+  responded_at           DateTime? @db.Timestamptz(3)
+
+  // Relations
+  referral_post        referral_posts    @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
+  sender               user_profiles     @relation("sent_connections", fields: [sender_id], references: [id], onDelete: Cascade)
+  receiver             user_profiles     @relation("received_connections", fields: [receiver_id], references: [id], onDelete: Cascade)
+  identity_reveals     identity_reveals[]
+
+  @@unique([referral_post_id, sender_id, receiver_id])
+  @@map("referral_connections")
+}
+
+//
+// IDENTITY REVEALS
+//
+model identity_reveals {
+  id              String   @id @default(uuid()) @db.Uuid
+  connection_id   String   @db.Uuid
+  requester_id    String   @db.Uuid
+  responder_id    String   @db.Uuid
+  status          String   @default("pending")
+  requester_message_encrypted String?
+
+  created_at      DateTime @default(now()) @db.Timestamptz(3)
+  updated_at      DateTime @updatedAt @db.Timestamptz(3)
+  responded_at    DateTime? @db.Timestamptz(3)
+
+  // Relations
+  connection          referral_connections @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  requester           user_profiles        @relation("identity_reveals_requester", fields: [requester_id], references: [id], onDelete: Cascade)
+  responder           user_profiles        @relation("identity_reveals_responder", fields: [responder_id], references: [id], onDelete: Cascade)
+
+  @@unique([connection_id, requester_id, responder_id])
+  @@map("identity_reveals")
+}
+
+//
+// FORUM TOPICS & COMMENTS
+//
+model forum_topics {
+  id                 String   @id @default(uuid()) @db.Uuid
+  user_id            String   @db.Uuid
+  forum_id           String
+  title              String
+  content            String
+  content_encrypted  String?
+
+  scope              String   @default("global")
+  is_anonymous       Boolean  @default(true)
+  is_pinned          Boolean  @default(false)
+  is_locked          Boolean  @default(false)
+  tags               String[] @default([])
+  affinity_groups    String[] @default([])
+
+  views_count        Int      @default(0)
+  comments_count     Int      @default(0)
+  reaction_seen_count      Int @default(0)
+  reaction_validated_count Int @default(0)
+  reaction_inspired_count  Int @default(0)
+  reaction_heard_count     Int @default(0)
+
+  created_at         DateTime @default(now()) @db.Timestamptz(3)
+  updated_at         DateTime @updatedAt @db.Timestamptz(3)
+  last_activity_at   DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user_profile        user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  comments            forum_comments[]
+  reactions           topic_reactions[]
+
+  @@map("forum_topics")
+}
+
+model forum_comments {
+  id                 String   @id @default(uuid()) @db.Uuid
+  topic_id           String   @db.Uuid
+  user_id            String   @db.Uuid
+  parent_comment_id  String?  @db.Uuid
+  content            String
+  content_encrypted  String?
+  is_anonymous       Boolean  @default(true)
+  is_removed         Boolean  @default(false)
+  removed_reason     String?
+
+  helpful_count      Int      @default(0)
+  supportive_count   Int      @default(0)
+
+  created_at         DateTime @default(now()) @db.Timestamptz(3)
+  updated_at         DateTime @updatedAt @db.Timestamptz(3)
+
+  // Relations
+  topic               forum_topics     @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  user_profile        user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent              forum_comments?  @relation("comment_replies", fields: [parent_comment_id], references: [id], onDelete: Cascade)
+  replies             forum_comments[] @relation("comment_replies")
+
+  @@map("forum_comments")
+}
+
+model topic_reactions {
+  id           String @id @default(uuid()) @db.Uuid
+  topic_id     String @db.Uuid
+  user_id      String @db.Uuid
+  reaction_type String
+
+  created_at   DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  topic               forum_topics     @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  user_profile        user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([topic_id, user_id, reaction_type])
+  @@map("topic_reactions")
+}
+
+//
+// MENTORSHIP
+//
+model mentorship_relationships {
+  id                  String   @id @default(uuid()) @db.Uuid
+  mentor_id           String   @db.Uuid
+  mentee_id           String   @db.Uuid
+  status              String   @default("pending")
+  mentor_skills       String[] @default([])
+  mentee_goals_encrypted String?
+  meeting_frequency   String?
+  total_sessions      Int      @default(0)
+  completed_sessions  Int      @default(0)
+  next_session_at     DateTime? @db.Timestamptz(3)
+
+  mentor_rating       Int?
+  mentee_rating       Int?
+  mentor_feedback     String?
+  mentee_feedback     String?
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  started_at          DateTime? @db.Timestamptz(3)
+  completed_at        DateTime? @db.Timestamptz(3)
+
+  // Relations
+  mentor              user_profiles        @relation("mentor_relationships", fields: [mentor_id], references: [id], onDelete: Cascade)
+  mentee              user_profiles        @relation("mentee_relationships", fields: [mentee_id], references: [id], onDelete: Cascade)
+  sessions            mentorship_sessions[]
+
+  @@unique([mentor_id, mentee_id])
+  @@map("mentorship_relationships")
+}
+
+model mentorship_sessions {
+  id                  String   @id @default(uuid()) @db.Uuid
+  relationship_id     String   @db.Uuid
+  scheduled_at        DateTime @db.Timestamptz(3)
+  duration_minutes    Int
+  meeting_url         String?
+  agenda_encrypted    String?
+  status              String   @default("scheduled")
+  mentor_notes_encrypted     String?
+  mentee_notes_encrypted     String?
+  session_notes_encrypted    String?
+
+  mentor_feedback     String?
+  mentee_feedback     String?
+  mentor_rating       Int?
+  mentee_rating       Int?
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+
+  // Relations
+  relationship        mentorship_relationships @relation(fields: [relationship_id], references: [id], onDelete: Cascade)
+
+  @@map("mentorship_sessions")
+}
+
+//
+// MESSAGING & NOTIFICATIONS
+//
+model conversations {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user1_id            String   @db.Uuid
+  user2_id            String   @db.Uuid
+  context_type        String?
+  context_id          String?  @db.Uuid
+  is_active           Boolean  @default(true)
+  user1_cleared_at    DateTime? @db.Timestamptz(3)
+  user2_cleared_at    DateTime? @db.Timestamptz(3)
+  user1_identity_revealed Boolean @default(false)
+  user2_identity_revealed Boolean @default(false)
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  last_message_at     DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user1               user_profiles    @relation("conversations_user1", fields: [user1_id], references: [id], onDelete: Cascade)
+  user2               user_profiles    @relation("conversations_user2", fields: [user2_id], references: [id], onDelete: Cascade)
+  messages            messages[]
+
+  @@unique([user1_id, user2_id, context_type, context_id])
+  @@map("conversations")
+}
+
+model messages {
+  id                  String   @id @default(uuid()) @db.Uuid
+  conversation_id     String   @db.Uuid
+  sender_id           String   @db.Uuid
+  content_encrypted   String
+  content_type        String   @default("text")
+  file_url            String?
+  file_name           String?
+  file_size           Int?
+  file_type           String?
+
+  is_delivered        Boolean  @default(false)
+  is_read             Boolean  @default(false)
+  read_at             DateTime? @db.Timestamptz(3)
+  is_flagged          Boolean  @default(false)
+  flagged_reason      String?
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  conversation        conversations    @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender              user_profiles    @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model notifications {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+  actor_id            String?  @db.Uuid
+  type                String
+  title               String
+  message             String
+  action_url          String?
+  reference_id        String?  @db.Uuid
+  reference_type      String?
+  metadata            Json     @default("{}")
+  is_read             Boolean  @default(false)
+  is_delivered        Boolean  @default(false)
+  action_taken        Boolean  @default(false)
+  delivery_method     String[] @default(["in_app"])
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  read_at             DateTime? @db.Timestamptz(3)
+  delivered_at        DateTime? @db.Timestamptz(3)
+
+  // Relations - FIXED with proper back-relations
+  user_profile        user_profiles    @relation("notification_user", fields: [user_id], references: [id], onDelete: Cascade)
+  actor               user_profiles?   @relation("notification_actor", fields: [actor_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model user_follows {
+  id                  String   @id @default(uuid()) @db.Uuid
+  follower_id         String   @db.Uuid
+  following_id        String   @db.Uuid
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  follower            user_profiles    @relation("user_followers", fields: [follower_id], references: [id], onDelete: Cascade)
+  following           user_profiles    @relation("user_following", fields: [following_id], references: [id], onDelete: Cascade)
+
+  @@unique([follower_id, following_id])
+  @@map("user_follows")
+}
