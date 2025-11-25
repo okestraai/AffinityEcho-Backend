@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.b54a90379c1d3bf7d779d5f369e14d2ce361dcf5-audit.json",
+    "files": [
+        {
+            "date": 1764021494696,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2025-11-24.log",
+            "hash": "d23f7c3feb959b33e0f1b97d143fdf1d459227256a17dd9aa094a4760072e604"
+        },
+        {
+            "date": 1764081637156,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2025-11-25.log",
+            "hash": "a5b31d53a11fdfb43649ee6f5007a0b505ed1aa0624ead7eead3c38bc8e86d51"
+        }
+    ],
+    "hashType": "sha256"
+}

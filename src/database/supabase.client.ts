@@ -12,7 +12,7 @@ export const supabaseClient = (config: ConfigService) => {
       hasAnonKey: !!anonKey,
     });
     throw new Error(
-      `Missing Supabase configuration: URL=${!!url}, ANON_KEY=${!!anonKey}`
+      `Missing Supabase configuration: URL=${!!url}, ANON_KEY=${!!anonKey}`,
     );
   }
 

@@ -1,5 +1,10 @@
 // src/common/interceptors/logging.interceptor.ts
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import logger from '../utils/logger.util';
@@ -16,7 +21,9 @@ export class LoggingInterceptor implements NestInterceptor {
     if (safeBody.token) safeBody.token = '***';
 
     logger.info('Incoming request', {
-      method, url, ip,
+      method,
+      url,
+      ip,
       userAgent: headers['user-agent'],
       userId: user?.sub || null,
       body: method !== 'GET' ? safeBody : undefined,
@@ -27,9 +34,13 @@ export class LoggingInterceptor implements NestInterceptor {
         const res = context.switchToHttp().getResponse();
         const delay = Date.now() - now;
         logger.info('Request completed', {
-          method, url, statusCode: res.statusCode, duration: `${delay}ms`, ip
+          method,
+          url,
+          statusCode: res.statusCode,
+          duration: `${delay}ms`,
+          ip,
         });
-      })
+      }),
     );
   }
 }

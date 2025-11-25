@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,10 +14,9 @@ datasource db {
 model user_profiles {
   id                       String   @id @default(uuid()) @db.Uuid
   username                 String   @unique @db.VarChar(50)
-  email                    String?  @db.VarChar(254)  // ← ADD THIS LINE
+  email                    String?  @db.VarChar(254)
   avatar                   String   @default("User")
   bio                      String?
-  company                  String?
   job_title                String?
   location                 String?
   years_experience         Int?
@@ -29,12 +27,13 @@ model user_profiles {
   has_completed_onboarding Boolean  @default(false)
   is_willing_to_mentor     Boolean  @default(false)
   badges                   String[] @default([])
-  career_level             String?  @db.VarChar(254)
-  affinity_tags            String[] @default([])
 
   // Encrypted PII
   race_encrypted           String?
   gender_encrypted         String?
+  career_level_encrypted   String?   @db.Text
+  company_encrypted        String?   @db.Text
+  affinity_tags_encrypted  String?   @db.Text
 
   // Privacy
   privacy_level            String   @default("anonymous") @db.VarChar(20)
@@ -52,13 +51,14 @@ model user_profiles {
   updated_at               DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   last_active_at           DateTime @default(now()) @db.Timestamptz(3)
 
-  // Relations - FIXED: Remove the problematic relations
+  // Relations
   referral_posts            referral_posts[]
   sent_connections          referral_connections[] @relation("sent_connections")
   received_connections      referral_connections[] @relation("received_connections")
   forum_topics              forum_topics[]
   forum_comments            forum_comments[]
   topic_reactions           topic_reactions[]
+  comment_reactions         comment_reactions[] // NEW
   mentor_relationships      mentorship_relationships[] @relation("mentor_relationships")
   mentee_relationships      mentorship_relationships[] @relation("mentee_relationships")
   conversations_user1       conversations[] @relation("conversations_user1")
@@ -70,10 +70,149 @@ model user_profiles {
   following                 user_follows[] @relation("user_following")
   identity_reveals_requester identity_reveals[] @relation("identity_reveals_requester")
   identity_reveals_responder identity_reveals[] @relation("identity_reveals_responder")
+  forum_memberships         forum_members[] @relation("forum_memberships")
 
   @@map("user_profiles")
 }
 
+//
+// FORUMS
+//
+model forums {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  description     String
+  icon            String
+  is_global       Boolean  @default(false)
+  company_name    String?
+  category        String   @db.VarChar(20)
+  topic_count     Int      @default(0)
+  member_count    Int      @default(0)
+  last_activity   DateTime @default(now()) @db.Timestamptz(3)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  rules           String[]
+  moderators      String[]
+
+  // Relations
+  forum_topics    forum_topics[]
+  forum_members   forum_members[]
+
+  @@map("forums")
+}
+
+model forum_members {
+  id        String   @id @default(uuid()) @db.Uuid
+  forum_id  String   @db.Uuid
+  user_id   String   @db.Uuid
+  joined_at DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  forum     forums        @relation(fields: [forum_id], references: [id], onDelete: Cascade)
+  user      user_profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, name: "forum_memberships")
+
+  @@unique([forum_id, user_id])
+  @@map("forum_members")
+}
+
+//
+// FORUM TOPICS & COMMENTS
+//
+model forum_topics {
+  id                 String   @id @default(uuid()) @db.Uuid
+  user_id            String   @db.Uuid
+  forum_id           String   @db.Uuid
+  title              String
+  content            String
+  content_encrypted  String?
+  company_name       String?
+  scope              String   @default("global")
+  is_anonymous       Boolean  @default(true)
+  is_pinned          Boolean  @default(false)
+  is_locked          Boolean  @default(false)
+  tags               String[] @default([])
+  affinity_groups    String[] @default([])
+  link               String?
+
+  views_count        Int      @default(0)
+  comments_count     Int      @default(0)
+  reaction_seen_count      Int @default(0)
+  reaction_validated_count Int @default(0)
+  reaction_inspired_count  Int @default(0)
+  reaction_heard_count     Int @default(0)
+
+  created_at         DateTime @default(now()) @db.Timestamptz(3)
+  updated_at         DateTime @updatedAt @db.Timestamptz(3)
+  last_activity_at   DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user_profile user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  forum        forums           @relation(fields: [forum_id], references: [id], onDelete: Cascade)
+  comments     forum_comments[]
+  reactions    topic_reactions[]
+
+  @@map("forum_topics")
+}
+
+model forum_comments {
+  id                 String   @id @default(uuid()) @db.Uuid
+  topic_id           String   @db.Uuid
+  user_id            String   @db.Uuid
+  parent_comment_id  String?  @db.Uuid
+  content            String
+  content_encrypted  String?
+  is_anonymous       Boolean  @default(true)
+  is_removed         Boolean  @default(false)
+  removed_reason     String?
+
+  helpful_count      Int      @default(0)
+  supportive_count   Int      @default(0)
+
+  created_at         DateTime @default(now()) @db.Timestamptz(3)
+  updated_at         DateTime @updatedAt @db.Timestamptz(3)
+
+  // Relations
+  topic        forum_topics     @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  user_profile user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent       forum_comments?  @relation("comment_replies", fields: [parent_comment_id], references: [id], onDelete: Cascade)
+  replies      forum_comments[] @relation("comment_replies")
+  reactions    comment_reactions[] // NEW
+
+  @@map("forum_comments")
+}
+
+//
+// REACTIONS
+//
+model topic_reactions {
+  id           String @id @default(uuid()) @db.Uuid
+  topic_id     String @db.Uuid
+  user_id      String @db.Uuid
+  reaction_type String
+
+  created_at   DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  topic        forum_topics  @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  user_profile user_profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([topic_id, user_id, reaction_type])
+  @@map("topic_reactions")
+}
+
+model comment_reactions {
+  id            String   @id @default(uuid()) @db.Uuid
+  comment_id    String   @db.Uuid
+  user_id       String   @db.Uuid
+  reaction_type String
+  created_at    DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  comment forum_comments @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  user    user_profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([comment_id, user_id, reaction_type])
+  @@map("comment_reactions")
+}
 //
 // REFERRAL POSTS
 //
@@ -108,8 +247,8 @@ model referral_posts {
   expires_at             DateTime? @db.Timestamptz(3)
 
   // Relations
-  user_profile           user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  connections            referral_connections[]
+  user_profile user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connections  referral_connections[]
 
   @@map("referral_posts")
 }
@@ -138,10 +277,10 @@ model referral_connections {
   responded_at           DateTime? @db.Timestamptz(3)
 
   // Relations
-  referral_post        referral_posts    @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
-  sender               user_profiles     @relation("sent_connections", fields: [sender_id], references: [id], onDelete: Cascade)
-  receiver             user_profiles     @relation("received_connections", fields: [receiver_id], references: [id], onDelete: Cascade)
-  identity_reveals     identity_reveals[]
+  referral_post referral_posts @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
+  sender        user_profiles  @relation("sent_connections", fields: [sender_id], references: [id], onDelete: Cascade)
+  receiver      user_profiles  @relation("received_connections", fields: [receiver_id], references: [id], onDelete: Cascade)
+  identity_reveals identity_reveals[]
 
   @@unique([referral_post_id, sender_id, receiver_id])
   @@map("referral_connections")
@@ -163,91 +302,12 @@ model identity_reveals {
   responded_at    DateTime? @db.Timestamptz(3)
 
   // Relations
-  connection          referral_connections @relation(fields: [connection_id], references: [id], onDelete: Cascade)
-  requester           user_profiles        @relation("identity_reveals_requester", fields: [requester_id], references: [id], onDelete: Cascade)
-  responder           user_profiles        @relation("identity_reveals_responder", fields: [responder_id], references: [id], onDelete: Cascade)
+  connection referral_connections @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  requester  user_profiles        @relation("identity_reveals_requester", fields: [requester_id], references: [id], onDelete: Cascade)
+  responder  user_profiles        @relation("identity_reveals_responder", fields: [responder_id], references: [id], onDelete: Cascade)
 
   @@unique([connection_id, requester_id, responder_id])
   @@map("identity_reveals")
-}
-
-//
-// FORUM TOPICS & COMMENTS
-//
-model forum_topics {
-  id                 String   @id @default(uuid()) @db.Uuid
-  user_id            String   @db.Uuid
-  forum_id           String
-  title              String
-  content            String
-  content_encrypted  String?
-
-  scope              String   @default("global")
-  is_anonymous       Boolean  @default(true)
-  is_pinned          Boolean  @default(false)
-  is_locked          Boolean  @default(false)
-  tags               String[] @default([])
-  affinity_groups    String[] @default([])
-
-  views_count        Int      @default(0)
-  comments_count     Int      @default(0)
-  reaction_seen_count      Int @default(0)
-  reaction_validated_count Int @default(0)
-  reaction_inspired_count  Int @default(0)
-  reaction_heard_count     Int @default(0)
-
-  created_at         DateTime @default(now()) @db.Timestamptz(3)
-  updated_at         DateTime @updatedAt @db.Timestamptz(3)
-  last_activity_at   DateTime @default(now()) @db.Timestamptz(3)
-
-  // Relations
-  user_profile        user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  comments            forum_comments[]
-  reactions           topic_reactions[]
-
-  @@map("forum_topics")
-}
-
-model forum_comments {
-  id                 String   @id @default(uuid()) @db.Uuid
-  topic_id           String   @db.Uuid
-  user_id            String   @db.Uuid
-  parent_comment_id  String?  @db.Uuid
-  content            String
-  content_encrypted  String?
-  is_anonymous       Boolean  @default(true)
-  is_removed         Boolean  @default(false)
-  removed_reason     String?
-
-  helpful_count      Int      @default(0)
-  supportive_count   Int      @default(0)
-
-  created_at         DateTime @default(now()) @db.Timestamptz(3)
-  updated_at         DateTime @updatedAt @db.Timestamptz(3)
-
-  // Relations
-  topic               forum_topics     @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-  user_profile        user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  parent              forum_comments?  @relation("comment_replies", fields: [parent_comment_id], references: [id], onDelete: Cascade)
-  replies             forum_comments[] @relation("comment_replies")
-
-  @@map("forum_comments")
-}
-
-model topic_reactions {
-  id           String @id @default(uuid()) @db.Uuid
-  topic_id     String @db.Uuid
-  user_id      String @db.Uuid
-  reaction_type String
-
-  created_at   DateTime @default(now()) @db.Timestamptz(3)
-
-  // Relations
-  topic               forum_topics     @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-  user_profile        user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@unique([topic_id, user_id, reaction_type])
-  @@map("topic_reactions")
 }
 
 //
@@ -276,9 +336,9 @@ model mentorship_relationships {
   completed_at        DateTime? @db.Timestamptz(3)
 
   // Relations
-  mentor              user_profiles        @relation("mentor_relationships", fields: [mentor_id], references: [id], onDelete: Cascade)
-  mentee              user_profiles        @relation("mentee_relationships", fields: [mentee_id], references: [id], onDelete: Cascade)
-  sessions            mentorship_sessions[]
+  mentor user_profiles @relation("mentor_relationships", fields: [mentor_id], references: [id], onDelete: Cascade)
+  mentee user_profiles @relation("mentee_relationships", fields: [mentee_id], references: [id], onDelete: Cascade)
+  sessions mentorship_sessions[]
 
   @@unique([mentor_id, mentee_id])
   @@map("mentorship_relationships")
@@ -305,7 +365,7 @@ model mentorship_sessions {
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
 
   // Relations
-  relationship        mentorship_relationships @relation(fields: [relationship_id], references: [id], onDelete: Cascade)
+  relationship mentorship_relationships @relation(fields: [relationship_id], references: [id], onDelete: Cascade)
 
   @@map("mentorship_sessions")
 }
@@ -330,9 +390,9 @@ model conversations {
   last_message_at     DateTime @default(now()) @db.Timestamptz(3)
 
   // Relations
-  user1               user_profiles    @relation("conversations_user1", fields: [user1_id], references: [id], onDelete: Cascade)
-  user2               user_profiles    @relation("conversations_user2", fields: [user2_id], references: [id], onDelete: Cascade)
-  messages            messages[]
+  user1    user_profiles @relation("conversations_user1", fields: [user1_id], references: [id], onDelete: Cascade)
+  user2    user_profiles @relation("conversations_user2", fields: [user2_id], references: [id], onDelete: Cascade)
+  messages messages[]
 
   @@unique([user1_id, user2_id, context_type, context_id])
   @@map("conversations")
@@ -358,8 +418,8 @@ model messages {
   created_at          DateTime @default(now()) @db.Timestamptz(3)
 
   // Relations
-  conversation        conversations    @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
-  sender              user_profiles    @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+  conversation conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender       user_profiles @relation(fields: [sender_id], references: [id], onDelete: Cascade)
 
   @@map("messages")
 }
@@ -384,9 +444,9 @@ model notifications {
   read_at             DateTime? @db.Timestamptz(3)
   delivered_at        DateTime? @db.Timestamptz(3)
 
-  // Relations - FIXED with proper back-relations
-  user_profile        user_profiles    @relation("notification_user", fields: [user_id], references: [id], onDelete: Cascade)
-  actor               user_profiles?   @relation("notification_actor", fields: [actor_id], references: [id], onDelete: Cascade)
+  // Relations
+  user_profile user_profiles @relation("notification_user", fields: [user_id], references: [id], onDelete: Cascade)
+  actor        user_profiles? @relation("notification_actor", fields: [actor_id], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }
@@ -398,8 +458,8 @@ model user_follows {
   created_at          DateTime @default(now()) @db.Timestamptz(3)
 
   // Relations
-  follower            user_profiles    @relation("user_followers", fields: [follower_id], references: [id], onDelete: Cascade)
-  following           user_profiles    @relation("user_following", fields: [following_id], references: [id], onDelete: Cascade)
+  follower  user_profiles @relation("user_followers", fields: [follower_id], references: [id], onDelete: Cascade)
+  following user_profiles @relation("user_following", fields: [following_id], references: [id], onDelete: Cascade)
 
   @@unique([follower_id, following_id])
   @@map("user_follows")

@@ -21,19 +21,24 @@ import { ResetPasswordWithOtpDto } from '../dto/reset-password.dto';
 import { RefreshTokenDto } from '../dto/password.dto';
 import { OnboardingDataDto } from '../dto/onboarding.dto';
 import logger from '../../../common/utils/logger.util';
+import { UserProfileResponse } from '../interfaces/user-profile.interface';
+import { OnboardingService } from './onboarding.service';
 
 @Injectable()
 export class AuthService {
   private supabase;
   private admin;
   // UPDATE THIS TYPE DEFINITION
-  private otpStore: Map<string, { 
-    otp: string; 
-    expires: number; 
-    attempts: number; 
-    lastSent: number;
-    type?: string; // ADD THIS - make it optional
-  }>;
+  private otpStore: Map<
+    string,
+    {
+      otp: string;
+      expires: number;
+      attempts: number;
+      lastSent: number;
+      type?: string; // ADD THIS - make it optional
+    }
+  >;
   private readonly MAX_OTP_ATTEMPTS = 3;
   private readonly OTP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -42,6 +47,7 @@ export class AuthService {
     private jwt: JwtService,
     private encryption: EncryptionUtil,
     private emailService: EmailService,
+    private onboardingService: OnboardingService,
   ) {
     this.supabase = supabaseClient(config);
     this.admin = supabaseAdmin(config);
@@ -60,10 +66,10 @@ export class AuthService {
     isValid: boolean;
     message?: string;
   } {
-    if (!password || password.length < 6) {
+    if (!password || password.length < 8) {
       return {
         isValid: false,
-        message: 'Password must be at least 6 characters long',
+        message: 'Password must be at least 8 characters long',
       };
     }
     return { isValid: true };
@@ -93,6 +99,42 @@ export class AuthService {
       };
     }
     return { isValid: true };
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // FIXED: STORE OTP (case-insensitive + type)
+  // ──────────────────────────────────────────────────────────────
+  private async storeOtp(
+    email: string,
+    otp: string,
+    type: 'signup' | 'password_reset' = 'signup',
+  ): Promise<void> {
+    const now = Date.now();
+    this.otpStore.set(email.toLowerCase(), {
+      otp,
+      expires: now + 15 * 60 * 1000,
+      attempts: 1,
+      lastSent: now,
+      type,
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // FIXED: VERIFY OTP (only delete on success)
+  // ──────────────────────────────────────────────────────────────
+  private async verifyStoredOtp(
+    email: string,
+    token: string,
+  ): Promise<boolean> {
+    const stored = this.otpStore.get(email.toLowerCase());
+    if (!stored || stored.expires < Date.now()) {
+      return false;
+    }
+    const isValid = stored.otp === token;
+    if (isValid) {
+      this.otpStore.delete(email.toLowerCase());
+    }
+    return isValid;
   }
 
   // EMAIL + PASSWORD SIGNUP
@@ -230,12 +272,9 @@ export class AuthService {
         });
       }
 
-      // Generate and send OTP for email verification
       const otp = this.generateOtp();
+      await this.storeOtp(dto.email.toLowerCase(), otp, 'signup'); // ← FIXED
       await this.emailService.sendOtpEmail(dto.email, otp, dto.username);
-
-      // Store OTP in temporary storage
-      await this.storeOtp(dto.email, otp);
 
       logger.info('Signup successful - OTP sent', {
         userId: data.user.id,
@@ -341,33 +380,37 @@ export class AuthService {
         throw new UnauthorizedException('Login failed - user data missing');
       }
 
-      // Ensure user profile exists - don't fail login if profile creation has issues
-      let profileExists = false;
+      // Ensure user profile exists
+      await this.ensureProfileExists(data.user.id, data.user.email!);
+
+      // Get has_completed_onboarding
+      let hasCompletedOnboarding = false;
       try {
-        profileExists = await this.ensureProfileExists(
-          data.user.id,
-          data.user.email!,
-        );
-      } catch (profileError) {
-        logger.warn(
-          'Profile check/creation failed during login, but continuing',
-          {
-            userId: data.user.id,
-            error:
-              profileError instanceof Error
-                ? profileError.message
-                : String(profileError),
-          },
-        );
+        const { data: profile } = await this.admin
+          .from('user_profiles')
+          .select('has_completed_onboarding')
+          .eq('id', data.user.id)
+          .single();
+
+        hasCompletedOnboarding = !!profile?.has_completed_onboarding;
+      } catch (err: any) {
+        logger.warn('Could not fetch onboarding status during login', {
+          userId: data.user.id,
+        });
       }
+
+      const tokens = this.generateTokens(data.user.id, data.user.email!);
 
       logger.info('Login successful', {
         userId: data.user.id,
         email: data.user.email,
-        profileExists,
+        hasCompletedOnboarding,
       });
 
-      return this.generateTokens(data.user.id, data.user.email!);
+      return {
+        ...tokens,
+        has_completed_onboarding: hasCompletedOnboarding,
+      };
     } catch (error) {
       if (
         error instanceof UnauthorizedException ||
@@ -397,7 +440,7 @@ export class AuthService {
     try {
       const redirectTo = `${this.config.get('FRONTEND_URL')}/auth/callback`;
       const { data, error } = await this.supabase.auth.signInWithOAuth({
-        provider: provider as any,
+        provider: provider,
         options: {
           redirectTo,
           skipBrowserRedirect: false,
@@ -434,175 +477,207 @@ export class AuthService {
     }
   }
 
+  // ALTERNATIVE APPROACH - USE OTP FOR PASSWORD RESET
+  async forgotPassword(dto: ForgotPasswordDto) {
+    logger.info('Password reset requested', { email: dto.email });
 
-// ALTERNATIVE APPROACH - USE OTP FOR PASSWORD RESET
-async forgotPassword(dto: ForgotPasswordDto) {
-  logger.info('Password reset requested', { email: dto.email });
-
-  if (!this.validateEmail(dto.email)) {
-    throw new BadRequestException('Invalid email format');
-  }
-
-  try {
-    // Use Supabase's OTP system but with custom email
-    const { data: userData, error: userError } = await this.admin.auth.admin.listUsers();
-    const user = userData?.users.find(u => u.email === dto.email);
-    
-    if (!user) {
-      // For security, don't reveal whether email exists
-      logger.info('Password reset requested for non-existent email', { email: dto.email });
-      return {
-        message: 'If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.',
-      };
+    if (!this.validateEmail(dto.email)) {
+      throw new BadRequestException('Invalid email format');
     }
 
-    // Generate OTP for password reset
-    const resetOtp = this.generateOtp();
-    
-    // Store OTP with password reset type
-    const now = Date.now();
-    this.otpStore.set(dto.email, {
-      otp: resetOtp,
-      expires: now + 15 * 60 * 1000, // 15 minutes
-      attempts: 1,
-      lastSent: now,
-      type: 'password_reset' // Mark as password reset OTP
-    });
-
-    // Get username for email
-    let username = 'User';
     try {
-      const { data: profile } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile?.username) {
-        username = profile.username;
+      // Use Supabase's OTP system but with custom email
+      const { data: userData, error: userError } =
+        await this.admin.auth.admin.listUsers();
+      const user = userData?.users.find((u) => u.email === dto.email);
+
+      if (!user) {
+        // For security, don't reveal whether email exists
+        logger.info('Password reset requested for non-existent email', {
+          email: dto.email,
+        });
+        return {
+          message:
+            'If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.',
+        };
       }
-    } catch (profileError) {
-      logger.warn('Could not fetch user profile for password reset', {
-        userId: user.id,
-        error: profileError instanceof Error ? profileError.message : String(profileError),
-      });
-    }
 
-    // Send custom password reset OTP email
-    await this.emailService.sendPasswordResetOtpEmail(dto.email, resetOtp, username);
+      // Generate OTP for password reset
+      const resetOtp = this.generateOtp();
 
-    logger.info('Password reset OTP sent successfully', {
-      email: dto.email,
-      userId: user.id,
-    });
-
-    return {
-      message: 'If an account exists with this email, a password reset code has been sent. Please check your inbox.',
-      method: 'otp'
-    };
-  } catch (error) {
-    if (error instanceof BadRequestException) {
-      throw error;
-    }
-    logger.error('Unexpected error during password reset request', {
-      error,
-      email: dto.email,
-    });
-    throw new InternalServerErrorException(
-      'Password reset service temporarily unavailable',
-    );
-  }
-}
-
-async resetPasswordWithOtp(dto: ResetPasswordWithOtpDto & { otp: string }) {
-  logger.info('Password reset with OTP attempt', { email: dto.email, hasOtp: !!dto.otp });
-
-  const passwordValidation = this.validatePassword(dto.password);
-  if (!passwordValidation.isValid) {
-    throw new BadRequestException(passwordValidation.message);
-  }
-
-  if (!dto.otp) {
-    throw new BadRequestException('OTP code is required');
-  }
-
-  try {
-    // Verify OTP
-    const stored = this.otpStore.get(dto.email);
-    if (!stored || stored.expires < Date.now() || stored.otp !== dto.otp || stored.type !== 'password_reset') {
-      throw new BadRequestException('Invalid or expired OTP code');
-    }
-
-    // Get user by email
-    const { data: userData, error: userError } = await this.admin.auth.admin.listUsers();
-    const user = userData?.users.find(u => u.email === dto.email);
-    
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
-
-    // Update password using Admin API
-    const { data, error } = await this.admin.auth.admin.updateUserById(
-      user.id,
-      { password: dto.password }
-    );
-
-    if (error) {
-      logger.warn('Password reset failed', {
-        userId: user.id,
-        error: error.message,
-        errorCode: error.code,
+      // Store OTP with password reset type
+      const now = Date.now();
+      this.otpStore.set(dto.email, {
+        otp: resetOtp,
+        expires: now + 15 * 60 * 1000, // 15 minutes
+        attempts: 1,
+        lastSent: now,
+        type: 'password_reset', // Mark as password reset OTP
       });
 
-      if (error.message.includes('password')) {
-        throw new BadRequestException(
-          'Password does not meet security requirements. Please choose a stronger password.',
-        );
-      } else {
-        throw new BadRequestException(
-          `Password reset failed: ${error.message}`,
-        );
-      }
-    }
-
-    // Clear OTP after successful reset
-    this.otpStore.delete(dto.email);
-
-    // Send confirmation email
-    try {
+      // Get username for email
       let username = 'User';
-      const { data: profile } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile?.username) {
-        username = profile.username;
+      try {
+        const { data: profile } = await this.admin
+          .from('user_profiles')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.username) {
+          username = profile.username;
+        }
+      } catch (profileError) {
+        logger.warn('Could not fetch user profile for password reset', {
+          userId: user.id,
+          error:
+            profileError instanceof Error
+              ? profileError.message
+              : String(profileError),
+        });
       }
 
-      await this.emailService.sendPasswordResetConfirmation(dto.email, username);
-    } catch (emailError) {
-      logger.warn('Password reset confirmation email failed, but password was reset', {
+      // Send custom password reset OTP email
+      await this.emailService.sendPasswordResetOtpEmail(
+        dto.email,
+        resetOtp,
+        username,
+      );
+
+      logger.info('Password reset OTP sent successfully', {
+        email: dto.email,
         userId: user.id,
-        error: emailError instanceof Error ? emailError.message : String(emailError),
       });
+
+      return {
+        message:
+          'If an account exists with this email, a password reset code has been sent. Please check your inbox.',
+        method: 'otp',
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      logger.error('Unexpected error during password reset request', {
+        error,
+        email: dto.email,
+      });
+      throw new InternalServerErrorException(
+        'Password reset service temporarily unavailable',
+      );
+    }
+  }
+
+  async resetPasswordWithOtp(dto: ResetPasswordWithOtpDto & { otp: string }) {
+    logger.info('Password reset with OTP attempt', {
+      email: dto.email,
+      hasOtp: !!dto.otp,
+    });
+
+    const passwordValidation = this.validatePassword(dto.password);
+    if (!passwordValidation.isValid) {
+      throw new BadRequestException(passwordValidation.message);
     }
 
-    logger.info('Password reset with OTP successful', { userId: user.id });
-    return {
-      message: 'Password has been reset successfully. You can now log in with your new password.',
-    };
-  } catch (error) {
-    if (error instanceof BadRequestException) {
-      throw error;
+    if (!dto.otp) {
+      throw new BadRequestException('OTP code is required');
     }
-    logger.error('Unexpected error during password reset with OTP', { error });
-    throw new InternalServerErrorException(
-      'Password reset service temporarily unavailable',
-    );
+
+    try {
+      // Verify OTP
+      const stored = this.otpStore.get(dto.email);
+      if (
+        !stored ||
+        stored.expires < Date.now() ||
+        stored.otp !== dto.otp ||
+        stored.type !== 'password_reset'
+      ) {
+        throw new BadRequestException('Invalid or expired OTP code');
+      }
+
+      // Get user by email
+      const { data: userData, error: userError } =
+        await this.admin.auth.admin.listUsers();
+      const user = userData?.users.find((u) => u.email === dto.email);
+
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
+      // Update password using Admin API
+      const { data, error } = await this.admin.auth.admin.updateUserById(
+        user.id,
+        { password: dto.password },
+      );
+
+      if (error) {
+        logger.warn('Password reset failed', {
+          userId: user.id,
+          error: error.message,
+          errorCode: error.code,
+        });
+
+        if (error.message.includes('password')) {
+          throw new BadRequestException(
+            'Password does not meet security requirements. Please choose a stronger password.',
+          );
+        } else {
+          throw new BadRequestException(
+            `Password reset failed: ${error.message}`,
+          );
+        }
+      }
+
+      // Clear OTP after successful reset
+      this.otpStore.delete(dto.email);
+
+      // Send confirmation email
+      try {
+        let username = 'User';
+        const { data: profile } = await this.admin
+          .from('user_profiles')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.username) {
+          username = profile.username;
+        }
+
+        await this.emailService.sendPasswordResetConfirmation(
+          dto.email,
+          username,
+        );
+      } catch (emailError) {
+        logger.warn(
+          'Password reset confirmation email failed, but password was reset',
+          {
+            userId: user.id,
+            error:
+              emailError instanceof Error
+                ? emailError.message
+                : String(emailError),
+          },
+        );
+      }
+
+      logger.info('Password reset with OTP successful', { userId: user.id });
+      return {
+        message:
+          'Password has been reset successfully. You can now log in with your new password.',
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      logger.error('Unexpected error during password reset with OTP', {
+        error,
+      });
+      throw new InternalServerErrorException(
+        'Password reset service temporarily unavailable',
+      );
+    }
   }
-}
 
   // REFRESH TOKEN - UPDATED TO RETURN BOTH TOKENS
   async refresh(dto: RefreshTokenDto) {
@@ -738,358 +813,181 @@ async resetPasswordWithOtp(dto: ResetPasswordWithOtpDto & { otp: string }) {
     }
   }
 
- // RESEND OTP WITH RATE LIMITING
   async resendOtp(dto: SendOtpDto) {
     logger.info('Resend OTP request', { email: dto.email });
 
-    // Validate email format
     if (!this.validateEmail(dto.email)) {
+      throw new BadRequestException('Invalid email format.');
+    }
+
+    const email = dto.email.toLowerCase();
+    const now = Date.now();
+
+    const existing = this.otpStore.get(email);
+    if (existing) {
+      if (existing.attempts >= this.MAX_OTP_ATTEMPTS) {
+        const timeLeft = this.OTP_COOLDOWN_MS - (now - existing.lastSent);
+        if (timeLeft > 0) {
+          const minutes = Math.ceil(timeLeft / 1000 / 60);
+          throw new BadRequestException(
+            `Too many attempts. Try again in ${minutes} minute(s).`,
+          );
+        }
+        existing.attempts = 0;
+      }
+      if (now - existing.lastSent < 30_000) {
+        throw new BadRequestException('Please wait 30 seconds.');
+      }
+    }
+
+    const { data: userData } = await this.admin.auth.admin.listUsers();
+    const user = userData?.users.find((u) => u.email?.toLowerCase() === email);
+
+    // Allow resend if user exists and NOT confirmed OR has pending OTP
+    if (user?.email_confirmed_at && !this.otpStore.has(email)) {
       throw new BadRequestException(
-        'Invalid email format. Please use a valid email address.',
+        'Email is already verified. Please log in.',
       );
     }
 
-    try {
-      // Check rate limiting
-      const existingOtp = this.otpStore.get(dto.email);
-      const now = Date.now();
+    const otp = this.generateOtp();
+    this.otpStore.set(email, {
+      otp,
+      expires: now + 15 * 60 * 1000,
+      attempts: (existing?.attempts || 0) + 1,
+      lastSent: now,
+      type: 'signup',
+    });
 
-      if (existingOtp) {
-        // Check if user has exceeded maximum attempts
-        if (existingOtp.attempts >= this.MAX_OTP_ATTEMPTS) {
-          const timeSinceLastAttempt = now - existingOtp.lastSent;
-          if (timeSinceLastAttempt < this.OTP_COOLDOWN_MS) {
-            const remainingTime = Math.ceil((this.OTP_COOLDOWN_MS - timeSinceLastAttempt) / 1000 / 60);
-            throw new BadRequestException(
-              `Too many OTP requests. Please try again in ${remainingTime} minutes.`,
-            );
-          } else {
-            // Reset attempts after cooldown period
-            existingOtp.attempts = 0;
-          }
-        }
-
-        // Check if we're sending too quickly (minimum 30 seconds between sends)
-        const timeSinceLastSend = now - existingOtp.lastSent;
-        if (timeSinceLastSend < 30000) { // 30 seconds
-          throw new BadRequestException(
-            'Please wait 30 seconds before requesting another OTP.',
-          );
-        }
-      }
-
-      // Check if user exists and is not verified
-      const { data: userData, error: userError } = await this.admin.auth.admin.listUsers();
-      const user = userData?.users.find(u => u.email === dto.email);
-      
-      if (!user) {
-        // For security, don't reveal whether email exists
-        logger.info('OTP requested for non-existent email', { email: dto.email });
-        return {
-          message: 'If an account exists with this email, a new verification code has been sent.',
-        };
-      }
-
-      // Check if user is already verified
-      if (user.email_confirmed_at) {
-        throw new BadRequestException('Email is already verified. Please log in instead.');
-      }
-
-      // Generate new OTP
-      const otp = this.generateOtp();
-      
-      // Update OTP store with new attempt
-      this.otpStore.set(dto.email, {
-        otp,
-        expires: now + 15 * 60 * 1000, // 15 minutes
-        attempts: (existingOtp?.attempts || 0) + 1,
-        lastSent: now
-      });
-
-      // Get username for email
-      let username = 'User';
+    let username = 'User';
+    if (user) {
       try {
         const { data: profile } = await this.admin
           .from('user_profiles')
           .select('username')
           .eq('id', user.id)
           .single();
-        
-        if (profile?.username) {
-          username = profile.username;
-        }
-      } catch (profileError) {
-        logger.warn('Could not fetch user profile for OTP resend', {
-          userId: user.id,
-          error: profileError instanceof Error ? profileError.message : String(profileError),
-        });
+        if (profile?.username) username = profile.username;
+      } catch (e) {
+        /* ignore */
       }
-
-      // Send OTP email
-      await this.emailService.sendOtpEmail(dto.email, otp, username);
-
-      logger.info('OTP resent successfully', { 
-        email: dto.email,
-        userId: user.id,
-        attempt: (existingOtp?.attempts || 0) + 1
-      });
-
-      return {
-        message: `A new verification code has been sent to ${dto.email}. Please check your inbox.`,
-        attemptsRemaining: this.MAX_OTP_ATTEMPTS - ((existingOtp?.attempts || 0) + 1)
-      };
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      logger.error('Unexpected error during OTP resend', {
-        error,
-        email: dto.email,
-      });
-      throw new InternalServerErrorException(
-        'OTP service temporarily unavailable',
-      );
     }
+
+    await this.emailService.sendOtpEmail(dto.email, otp, username);
+
+    return {
+      message: `A new code has been sent to ${dto.email}.`,
+      attemptsRemaining:
+        this.MAX_OTP_ATTEMPTS - ((existing?.attempts || 0) + 1),
+    };
   }
 
-  // VERIFY OTP - UPDATED TO HANDLE RATE LIMITING
+  // ──────────────────────────────────────────────────────────────
+  // VERIFY OTP — FINAL FIXED
+  // ──────────────────────────────────────────────────────────────
   async verifyOtp(email: string, token: string) {
     logger.info('OTP verification attempt', { email });
 
-    if (!this.validateEmail(email)) {
+    if (!this.validateEmail(email))
       throw new BadRequestException('Invalid email format');
-    }
-
-    if (!token || token.length !== 6) {
+    if (!token || token.length !== 6 || !/^\d+$/.test(token)) {
       throw new BadRequestException('Invalid OTP code');
     }
 
-    try {
-      // Verify OTP from storage
-      const isValidOtp = await this.verifyStoredOtp(email, token);
-      if (!isValidOtp) {
-        throw new UnauthorizedException('Invalid or expired OTP code');
-      }
+    const emailLower = email.toLowerCase();
 
-      // Get user by email
-      const { data: userData, error: userError } = await this.admin.auth.admin.listUsers();
-      const user = userData?.users.find(u => u.email === email);
-      
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Update user email confirmation status
-      await this.admin.auth.admin.updateUserById(
-        user.id,
-        { email_confirm: true }
-      );
-
-      let profileExists = false;
-      try {
-        profileExists = await this.ensureProfileExists(user.id, email);
-      } catch (profileError) {
-        logger.warn(
-          'Profile creation failed during OTP verification, but continuing',
-          {
-            userId: user.id,
-            error: profileError instanceof Error ? profileError.message : String(profileError),
-          },
-        );
-      }
-
-      // Send welcome email
-      await this.emailService.sendWelcomeEmail(email, user.user_metadata?.username || 'User');
-
-      // Clear OTP attempts on successful verification
-      this.otpStore.delete(email);
-
-      logger.info('OTP verified and email confirmed', {
-        userId: user.id,
-        email,
-        profileExists,
-      });
-
-      return this.generateTokens(user.id, email);
-    } catch (error) {
-      if (
-        error instanceof UnauthorizedException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      logger.error('Unexpected error during OTP verification', {
-        error,
-        email,
-      });
-      throw new InternalServerErrorException(
-        'OTP verification service temporarily unavailable',
-      );
+    const isValid = await this.verifyStoredOtp(emailLower, token);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid or expired code');
     }
+
+    const { data: userData } = await this.admin.auth.admin.listUsers();
+    const user = userData?.users.find(
+      (u) => u.email?.toLowerCase() === emailLower,
+    );
+    if (!user) throw new UnauthorizedException('User not found');
+
+    await this.admin.auth.admin.updateUserById(user.id, {
+      email_confirm: true,
+    });
+    await this.ensureProfileExists(user.id, email);
+    await this.emailService.sendWelcomeEmail(
+      email,
+      user.user_metadata?.username || 'User',
+    );
+
+    return this.generateTokens(user.id, email);
   }
 
   // ONBOARDING METHODS - UPDATED TO NOT DECRYPT RACE/GENDER
-  async completeOnboarding(userId: string, data: OnboardingDataDto) {
-    logger.info('Completing onboarding', { userId });
-
-    try {
-      // Encrypt sensitive data
-      const encryptedData: any = {
-        has_completed_onboarding: true,
-        updated_at: new Date().toISOString(),
-        last_active_at: new Date().toISOString(),
-      };
-
-      // Encrypt sensitive fields - DO NOT DECRYPT WHEN RETURNING
-      if (data.race) {
-        encryptedData.race_encrypted = this.encryption.encrypt(data.race);
-      }
-      if (data.gender) {
-        encryptedData.gender_encrypted = this.encryption.encrypt(data.gender);
-      }
-
-      // Add non-sensitive fields
-      if (data.careerLevel)
-        encryptedData.career_level = data.careerLevel.substring(0, 20); // Truncate to 20 chars
-      if (data.company) encryptedData.company = data.company;
-      if (data.jobTitle) encryptedData.job_title = data.jobTitle;
-      if (data.location) encryptedData.location = data.location;
-      if (data.skills) encryptedData.skills = data.skills;
-      if (data.affinityTags) encryptedData.affinity_tags = data.affinityTags;
-      if (data.isWillingToMentor !== undefined) {
-        encryptedData.is_willing_to_mentor = data.isWillingToMentor;
-      }
-
-      const { data: updatedUser, error } = await this.admin
-        .from('user_profiles')
-        .update(encryptedData)
-        .eq('id', userId)
-        .select()
-        .single();
-
-      if (error) {
-        logger.error('Failed to save onboarding data', {
-          userId,
-          error: error.message,
-        });
-        throw new BadRequestException(
-          `Failed to save onboarding data: ${error.message}`,
-        );
-      }
-
-      logger.info('Onboarding completed successfully', { userId });
-
-      // Return user data WITHOUT decrypting race/gender - frontend will handle decryption
-      return {
-        message: 'Onboarding completed successfully',
-        user: this.cleanUserData(updatedUser), // Use cleanUserData instead of decryptUserData
-      };
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      logger.error('Unexpected error during onboarding', {
-        userId,
-        error,
-      });
-      throw new InternalServerErrorException(
-        'Onboarding service temporarily unavailable',
-      );
-    }
+  async completeOnboarding(
+    userId: string,
+    data: OnboardingDataDto,
+  ): Promise<{ message: string; has_completed_onboarding: boolean }> {
+    return await this.onboardingService.saveOnboardingData(userId, data);
   }
 
-  async getOnboardingStatus(userId: string) {
-    logger.info('Fetching onboarding status', { userId });
+  async getOnboardingStatus(
+    userId: string,
+  ): Promise<{ hasCompletedOnboarding: boolean }> {
+    return await this.onboardingService.getOnboardingStatus(userId);
+  }
+  // GET CURRENT USER
+  async getCurrentUser(userId: string): Promise<UserProfileResponse> {
+    logger.info('Fetching current user', { userId });
 
     try {
-      const { data: user, error } = await this.admin
+      const { data: profile, error } = await this.admin
         .from('user_profiles')
         .select(
-          'has_completed_onboarding, career_level, company, job_title, location, skills, affinity_tags, is_willing_to_mentor, race_encrypted, gender_encrypted',
+          `
+        id,
+        username,
+        email,
+        avatar,
+        bio,
+        job_title,
+        location,
+        years_experience,
+        skills,
+        linkedin_url,
+        privacy_level,
+        is_willing_to_mentor,
+        has_completed_onboarding,
+        reputation_score,
+        total_posts,
+        total_comments,
+        helpful_votes_received,
+        mentorship_sessions_completed,
+        successful_referrals,
+        created_at,
+        updated_at,
+        last_active_at,
+        race_encrypted,
+        gender_encrypted,
+        career_level_encrypted,
+        company_encrypted,
+        affinity_tags_encrypted
+      `,
         )
         .eq('id', userId)
         .single();
 
-      if (error) {
-        logger.warn('User not found when fetching onboarding status', {
+      if (error || !profile) {
+        logger.warn('User profile not found, attempting auto-create', {
           userId,
         });
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Return encrypted data - frontend will decrypt if needed
-      return {
-        hasCompletedOnboarding: user.has_completed_onboarding,
-        currentData: {
-          careerLevel: user.career_level,
-          company: user.company,
-          jobTitle: user.job_title,
-          location: user.location,
-          skills: user.skills,
-          affinityTags: user.affinity_tags,
-          isWillingToMentor: user.is_willing_to_mentor,
-          raceEncrypted: user.race_encrypted, // Send encrypted to frontend
-          genderEncrypted: user.gender_encrypted, // Send encrypted to frontend
-        },
-      };
-    } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-      logger.error('Unexpected error fetching onboarding status', {
-        userId,
-        error,
-      });
-      throw new InternalServerErrorException(
-        'Unable to fetch onboarding status',
-      );
-    }
-  }
-
-  // GET CURRENT USER
-  async getCurrentUser(userId: string) {
-    logger.info('Fetching current user', { userId });
-
-    try {
-      const { data: user, error } = await this.admin
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        logger.warn('User profile not found, creating one', {
-          userId,
-          error: error.message,
-        });
-
-        // Auto-create profile if not found
-        const profileCreated = await this.ensureProfileExists(userId, '');
-        if (profileCreated) {
-          // Retry fetching the user
-          const { data: newUser, error: retryError } = await this.admin
-            .from('user_profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-          if (!retryError && newUser) {
-            return this.cleanUserData(newUser); // Use cleanUserData
-          }
+        const created = await this.ensureProfileExists(userId, '');
+        if (created) {
+          return this.getCurrentUser(userId); // Now type-safe recursion!
         }
-
-        throw new UnauthorizedException(
-          'User profile not found and could not be created',
-        );
+        throw new UnauthorizedException('User profile not found');
       }
 
-      logger.info('User profile fetched successfully', { userId });
-      return this.cleanUserData(user); // Use cleanUserData
+      return this.cleanUserData(profile);
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-      logger.error('Unexpected error fetching user profile', { userId, error });
+      if (error instanceof UnauthorizedException) throw error;
+      logger.error('Failed to fetch user profile', { userId, error });
       throw new InternalServerErrorException('Unable to fetch user profile');
     }
   }
@@ -1098,39 +996,70 @@ async resetPasswordWithOtp(dto: ResetPasswordWithOtpDto & { otp: string }) {
   async updateProfile(userId: string, updateData: any) {
     logger.info('Updating user profile', { userId });
 
+    // Filter out undefined + prepare encrypted fields safely
+    const allowedFields = {
+      avatar: updateData.avatar,
+      bio: updateData.bio,
+      job_title: updateData.job_title,
+      location: updateData.location,
+      years_experience: updateData.years_experience,
+      skills: updateData.skills,
+      linkedin_url: updateData.linkedin_url,
+      is_willing_to_mentor: updateData.is_willing_to_mentor,
+      privacy_level: updateData.privacy_level,
+
+      // Encrypted fields (sent already encrypted from frontend)
+      company_encrypted: updateData.company_encrypted,
+      career_level_encrypted: updateData.career_level_encrypted,
+      race_encrypted: updateData.race_encrypted,
+      gender_encrypted: updateData.gender_encrypted,
+      affinity_tags_encrypted: updateData.affinity_tags_encrypted,
+    };
+
+    // Remove undefined values
+    const cleanedUpdate = Object.fromEntries(
+      Object.entries(allowedFields).filter(([_, v]) => v !== undefined),
+    );
+
+    if (Object.keys(cleanedUpdate).length === 0) {
+      throw new BadRequestException('No valid fields provided to update');
+    }
+
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.admin // ← CRITICAL: Use admin client!
         .from('user_profiles')
         .update({
-          ...updateData,
+          ...cleanedUpdate,
           updated_at: new Date().toISOString(),
+          last_active_at: new Date().toISOString(),
         })
         .eq('id', userId)
         .select()
         .single();
 
       if (error) {
-        logger.warn('Profile update failed', { userId, error: error.message });
-        throw new BadRequestException(
-          `Profile update failed: ${error.message}`,
-        );
+        logger.error('Profile update failed in DB', {
+          userId,
+          error: error.message,
+        });
+        throw new BadRequestException('Failed to update profile');
       }
 
       logger.info('Profile updated successfully', { userId });
-      return this.cleanUserData(data); // Use cleanUserData
+      return this.cleanUserData(data);
     } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
+      if (error instanceof BadRequestException) throw error;
       logger.error('Unexpected error during profile update', { userId, error });
-      throw new InternalServerErrorException(
-        'Profile update service temporarily unavailable',
-      );
+      throw new InternalServerErrorException('Profile update failed');
     }
   }
 
   // CHANGE PASSWORD
-async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     logger.info('Changing password', { userId });
 
     const passwordValidation = this.validatePassword(newPassword);
@@ -1140,12 +1069,15 @@ async changePassword(userId: string, currentPassword: string, newPassword: strin
 
     try {
       // Get user email from Supabase Auth, not from user_profiles table
-      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
-      
+      const {
+        data: { user },
+        error: userError,
+      } = await this.supabase.auth.getUser();
+
       if (userError || !user) {
         logger.error('User not found in Supabase Auth during password change', {
           userId,
-          error: userError?.message
+          error: userError?.message,
         });
         throw new BadRequestException('User not found');
       }
@@ -1157,15 +1089,16 @@ async changePassword(userId: string, currentPassword: string, newPassword: strin
       }
 
       // Verify current password by attempting to sign in
-      const { error: signInError } = await this.supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: currentPassword,
-      });
+      const { error: signInError } =
+        await this.supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: currentPassword,
+        });
 
       if (signInError) {
         logger.warn('Current password verification failed', {
           userId,
-          error: signInError.message
+          error: signInError.message,
         });
         throw new BadRequestException('Current password is incorrect');
       }
@@ -1176,18 +1109,20 @@ async changePassword(userId: string, currentPassword: string, newPassword: strin
       });
 
       if (error) {
-        logger.warn('Password change failed', { 
-          userId, 
+        logger.warn('Password change failed', {
+          userId,
           error: error.message,
-          errorCode: error.code 
+          errorCode: error.code,
         });
-        
+
         if (error.message.includes('password')) {
           throw new BadRequestException(
             'Password does not meet security requirements. Please choose a stronger password.',
           );
         } else {
-          throw new BadRequestException(`Password change failed: ${error.message}`);
+          throw new BadRequestException(
+            `Password change failed: ${error.message}`,
+          );
         }
       }
 
@@ -1197,11 +1132,13 @@ async changePassword(userId: string, currentPassword: string, newPassword: strin
       if (error instanceof BadRequestException) {
         throw error;
       }
-      logger.error('Unexpected error during password change', { 
-        userId, 
-        error: error instanceof Error ? error.message : String(error)
+      logger.error('Unexpected error during password change', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException('Password change service temporarily unavailable');
+      throw new InternalServerErrorException(
+        'Password change service temporarily unavailable',
+      );
     }
   }
 
@@ -1210,40 +1147,44 @@ async changePassword(userId: string, currentPassword: string, newPassword: strin
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
- private async storeOtp(email: string, otp: string): Promise<void> {
-    const now = Date.now();
-    this.otpStore.set(email, {
-      otp,
-      expires: now + 15 * 60 * 1000, // 15 minutes
-      attempts: 1,
-      lastSent: now
-    });
-  }
+  private cleanUserData(profile: any): UserProfileResponse {
+    // Supabase returns `any` from .single(), so we cast safely
+    const p = profile as any;
 
-private async verifyStoredOtp(email: string, otp: string): Promise<boolean> {
-    const stored = this.otpStore.get(email);
-    if (!stored || stored.expires < Date.now()) {
-      return false;
-    }
-    
-    // Remove OTP after verification (successful or not)
-    this.otpStore.delete(email);
-    return stored.otp === otp;
-  }
+    return {
+      id: p.id,
+      username: p.username,
+      email: p.email,
+      avatar: p.avatar ?? null,
+      bio: p.bio ?? null,
+      job_title: p.job_title ?? null,
+      location: p.location ?? null,
+      years_experience: p.years_experience ?? null,
+      skills: p.skills || [],
+      linkedin_url: p.linkedin_url ?? null,
+      privacy_level: p.privacy_level,
+      is_willing_to_mentor: !!p.is_willing_to_mentor,
+      has_completed_onboarding: !!p.has_completed_onboarding,
+      reputation_score: p.reputation_score || 0,
+      total_posts: p.total_posts || 0,
+      total_comments: p.total_comments || 0,
+      helpful_votes_received: p.helpful_votes_received || 0,
+      mentorship_sessions_completed: p.mentorship_sessions_completed || 0,
+      successful_referrals: p.successful_referrals || 0,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+      last_active_at: p.last_active_at,
 
-
-  private cleanUserData(user: any): any {
-    const cleaned = { ...user };
-
-    // Remove the decrypted fields if they exist
-    delete cleaned.race;
-    delete cleaned.gender;
-
-    // Keep the encrypted fields as they are - frontend will decrypt
-    return cleaned;
+      race_encrypted: p.race_encrypted,
+      gender_encrypted: p.gender_encrypted,
+      career_level_encrypted: p.career_level_encrypted,
+      company_encrypted: p.company_encrypted,
+      affinity_tags_encrypted: p.affinity_tags_encrypted,
+    };
   }
 
   // PRIVATE: CREATE PROFILE
+  //
   private async createProfile(
     userId: string,
     username: string,
@@ -1251,64 +1192,55 @@ private async verifyStoredOtp(email: string, otp: string): Promise<boolean> {
   ): Promise<boolean> {
     logger.info('Creating user profile', { userId, username, email });
 
-    try {
-      const profileData = {
-        id: userId,
-        username,
-        email,
-        avatar: 'User',
-        privacy_level: 'anonymous',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        last_active_at: new Date().toISOString(),
-      };
+    const profileData = {
+      id: userId,
+      username,
+      email,
+      avatar: 'User',
+      privacy_level: 'anonymous',
+      has_completed_onboarding: false,
+      is_willing_to_mentor: false,
+      // Explicitly set all encrypted fields to null (required if NOT NULL in DB)
+      race_encrypted: null,
+      gender_encrypted: null,
+      career_level_encrypted: null,
+      company_encrypted: null,
+      affinity_tags_encrypted: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
+    };
 
-      const { data, error } = await this.admin
-        .from('user_profiles')
-        .insert(profileData)
-        .select();
+    const { error } = await this.admin
+      .from('user_profiles')
+      .insert(profileData);
 
-      if (error) {
-        // Check if it's a unique constraint violation (username already exists)
-        if (error.code === '23505') {
-          logger.warn('Username already taken, generating new one', {
-            userId,
-            username,
-            errorMessage: error.message,
-          });
-          const uniqueUsername = this.generateUniqueUsername(username);
-          return await this.createProfileWithUniqueUsername(
-            userId,
-            uniqueUsername,
-            email,
-          );
-        } else {
-          logger.error('Failed to create profile', {
-            userId,
-            username,
-            email,
-            errorMessage: error.message,
-            errorCode: error.code,
-          });
-          return false;
-        }
+    if (error) {
+      if (error.code === '23505') {
+        logger.warn('Username already taken, generating new one', {
+          userId,
+          username,
+        });
+        const uniqueUsername = this.generateUniqueUsername(username);
+        return this.createProfileWithUniqueUsername(
+          userId,
+          uniqueUsername,
+          email,
+        );
       }
 
-      // Success case - profile created
-      logger.info('Profile created successfully', {
+      logger.error('Failed to create profile', {
         userId,
         username,
         email,
-        profileId: data?.[0]?.id,
-      });
-      return true;
-    } catch (error) {
-      logger.error('Unexpected error during profile creation', {
-        userId,
-        error: error instanceof Error ? error.message : String(error),
+        errorCode: error.code,
+        errorMessage: error.message,
       });
       return false;
     }
+
+    logger.info('Profile created successfully', { userId, username });
+    return true;
   }
 
   private async createProfileWithUniqueUsername(
@@ -1316,43 +1248,36 @@ private async verifyStoredOtp(email: string, otp: string): Promise<boolean> {
     username: string,
     email: string,
   ): Promise<boolean> {
-    try {
-      const { error } = await this.admin.from('user_profiles').insert({
-        id: userId,
-        username,
-        email,
-        avatar: 'User',
-        privacy_level: 'anonymous',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        last_active_at: new Date().toISOString(),
-      });
+    const { error } = await this.admin.from('user_profiles').insert({
+      id: userId,
+      username,
+      email,
+      avatar: 'User',
+      privacy_level: 'anonymous',
+      has_completed_onboarding: false,
+      is_willing_to_mentor: false,
+      race_encrypted: null,
+      gender_encrypted: null,
+      career_level_encrypted: null,
+      company_encrypted: null,
+      affinity_tags_encrypted: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
+    });
 
-      if (error) {
-        logger.error('Failed to create profile even with unique username', {
-          userId,
-          username,
-          email,
-          error: error.message,
-        });
-        return false;
-      }
-
-      logger.info('Profile created with unique username', {
+    if (error) {
+      logger.error('Failed to create profile with unique username', {
         userId,
         username,
-        email,
-      });
-      return true;
-    } catch (error) {
-      logger.error('Unexpected error during fallback profile creation', {
-        userId,
-        error: error instanceof Error ? error.message : String(error),
+        error: error.message,
       });
       return false;
     }
-  }
 
+    logger.info('Profile created with unique username', { userId, username });
+    return true;
+  }
   // Update ensureProfileExists to include email
   private async ensureProfileExists(
     userId: string,
@@ -1474,11 +1399,15 @@ private async verifyStoredOtp(email: string, otp: string): Promise<boolean> {
   // PRIVATE: GENERATE TOKENS
   private generateTokens(userId: string, email: string) {
     try {
+      // Calculate expires_in dynamically to avoid hard-coded values
+      const accessTokenExpiresIn = '24h';
+      const refreshTokenExpiresIn = '7d';
+
       const accessToken = this.jwt.sign(
         { sub: userId, email },
         {
           secret: this.config.get('JWT_SECRET'),
-          expiresIn: '15m',
+          expiresIn: accessTokenExpiresIn,
         },
       );
 
@@ -1486,16 +1415,19 @@ private async verifyStoredOtp(email: string, otp: string): Promise<boolean> {
         { sub: userId, email },
         {
           secret: this.config.get('JWT_REFRESH_SECRET'),
-          expiresIn: '7d',
+          expiresIn: refreshTokenExpiresIn,
         },
       );
+
+      // Convert '24h' to seconds (86400) for the response
+      const expiresInSeconds = 24 * 60 * 60; // 86400
 
       logger.info('Tokens generated successfully', { userId, email });
       return {
         access_token: accessToken,
         refresh_token: refreshToken,
         token_type: 'Bearer',
-        expires_in: 900,
+        expires_in: expiresInSeconds,
         user: {
           id: userId,
           email: email,

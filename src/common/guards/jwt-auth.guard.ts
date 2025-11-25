@@ -1,4 +1,8 @@
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { supabaseClient } from '../../database/supabase.client';
 import { ConfigService } from '@nestjs/config';
 
@@ -18,7 +22,7 @@ export class JwtAuthGuard {
     console.log('🔐 Request URL:', request.url);
     console.log('🔐 Request method:', request.method);
     console.log('🔐 Token present:', !!token);
-    
+
     if (!token) {
       console.log('❌ JwtAuthGuard: No token provided');
       throw new UnauthorizedException('No token provided');
@@ -30,14 +34,16 @@ export class JwtAuthGuard {
     try {
       console.log('🔐 Validating token with Supabase...');
       const { data, error } = await this.supabase.auth.getUser(token);
-      
+
       if (error) {
         console.log('❌ Supabase validation error:', {
           message: error.message,
           name: error.name,
-          status: error.status
+          status: error.status,
         });
-        throw new UnauthorizedException(`Token validation failed: ${error.message}`);
+        throw new UnauthorizedException(
+          `Token validation failed: ${error.message}`,
+        );
       }
 
       if (!data.user) {
@@ -48,7 +54,7 @@ export class JwtAuthGuard {
       console.log('✅ Token validated successfully:', {
         userId: data.user.id,
         email: data.user.email,
-        emailConfirmed: !!data.user.email_confirmed_at
+        emailConfirmed: !!data.user.email_confirmed_at,
       });
 
       // Set user in request - CRITICAL for CurrentUser to work
@@ -59,9 +65,9 @@ export class JwtAuthGuard {
       };
 
       console.log('✅ Request user set:', request.user);
-      
+
       return true;
-    } catch (error : any) {
+    } catch (error: any) {
       console.log('❌ JwtAuthGuard error:', error.message);
       if (error instanceof UnauthorizedException) {
         throw error;
@@ -72,7 +78,7 @@ export class JwtAuthGuard {
 
   private extractToken(request: any): string | null {
     const authHeader = request.headers.authorization;
-    
+
     if (!authHeader) {
       console.log('📝 No Authorization header found');
       console.log('📝 Available headers:', Object.keys(request.headers));
@@ -82,7 +88,7 @@ export class JwtAuthGuard {
     console.log('📝 Authorization header:', authHeader);
 
     const [type, token] = authHeader.split(' ');
-    
+
     if (type !== 'Bearer') {
       console.log('❌ Invalid token type:', type);
       return null;

@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
+import { ForumModule } from './modules/forum/forum.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RateLimitMiddleware } from './common/middlewares/rate-limit.middleware';
 import { EncryptionUtil } from './common/utils/encryption.util';
@@ -12,13 +13,14 @@ import configuration from './config/configuration';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ 
+    ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env', 
+      envFilePath: '.env',
       load: [configuration],
     }),
     AuthModule,
     UserModule,
+    ForumModule,
     PrismaModule,
   ],
   controllers: [AppController],

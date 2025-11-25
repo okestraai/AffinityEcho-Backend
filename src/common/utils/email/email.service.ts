@@ -21,8 +21,15 @@ export class EmailService {
     });
   }
 
-  private async renderTemplate(templateName: string, data: any): Promise<string> {
-    const templatePath = path.join(__dirname, '../../templates/emails', `${templateName}.ejs`);
+  private async renderTemplate(
+    templateName: string,
+    data: any,
+  ): Promise<string> {
+    const templatePath = path.join(
+      __dirname,
+      '../../templates/emails',
+      `${templateName}.ejs`,
+    );
     return await ejs.renderFile(templatePath, data);
   }
 
@@ -38,10 +45,18 @@ export class EmailService {
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info('Email sent successfully', { to, subject, messageId: result.messageId });
+      logger.info('Email sent successfully', {
+        to,
+        subject,
+        messageId: result.messageId,
+      });
       return result;
     } catch (error: any) {
-      logger.error('Failed to send email', { to, subject, error: error.message });
+      logger.error('Failed to send email', {
+        to,
+        subject,
+        error: error.message,
+      });
       throw error;
     }
   }
@@ -54,44 +69,43 @@ export class EmailService {
     });
   }
 
+  async sendPasswordResetEmail(email: string, token: string, username: string) {
+    try {
+      const resetUrl = `${this.config.get('FRONTEND_URL')}/reset-password?token=${token}`;
 
-async sendPasswordResetEmail(email: string, token: string, username: string) {
-  try {
-    const resetUrl = `${this.config.get('FRONTEND_URL')}/reset-password?token=${token}`;
-    
-    logger.info('Sending password reset email', { 
-      email, 
-      username,
-      frontendUrl: this.config.get('FRONTEND_URL'),
-      hasToken: !!token 
-    });
-    
-    const result = await this.sendEmail(
-      email, 
-      'Reset Your Password - Affinity Echo', 
-      'reset-password', 
-      {
+      logger.info('Sending password reset email', {
+        email,
         username,
-        resetUrl,
-        supportEmail: this.config.get('SUPPORT_EMAIL'),
-      }
-    );
+        frontendUrl: this.config.get('FRONTEND_URL'),
+        hasToken: !!token,
+      });
 
-    logger.info('Password reset email sent successfully', { 
-      email, 
-      messageId: result.messageId 
-    });
-    
-    return result;
-  } catch (error) {
-    logger.error('Failed to send password reset email', { 
-      email, 
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    throw error;
+      const result = await this.sendEmail(
+        email,
+        'Reset Your Password - Affinity Echo',
+        'reset-password',
+        {
+          username,
+          resetUrl,
+          supportEmail: this.config.get('SUPPORT_EMAIL'),
+        },
+      );
+
+      logger.info('Password reset email sent successfully', {
+        email,
+        messageId: result.messageId,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Failed to send password reset email', {
+        email,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
-}
 
   async sendWelcomeEmail(email: string, username: string) {
     return this.sendEmail(email, 'Welcome to Affinity Echo!', 'welcome', {
@@ -101,29 +115,33 @@ async sendPasswordResetEmail(email: string, token: string, username: string) {
     });
   }
   // Add to your EmailService
-async sendPasswordResetOtpEmail(email: string, otp: string, username: string) {
-  return this.sendEmail(
-    email, 
-    'Reset Your Password - Affinity Echo', 
-    'password-reset-otp', 
-    {
-      username,
-      otp,
-      supportEmail: this.config.get('SUPPORT_EMAIL'),
-    }
-  );
-}
+  async sendPasswordResetOtpEmail(
+    email: string,
+    otp: string,
+    username: string,
+  ) {
+    return this.sendEmail(
+      email,
+      'Reset Your Password - Affinity Echo',
+      'password-reset-otp',
+      {
+        username,
+        otp,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
+    );
+  }
 
-async sendPasswordResetConfirmation(email: string, username: string) {
-  return this.sendEmail(
-    email, 
-    'Password Reset Successful - Affinity Echo', 
-    'password-reset-confirmation', 
-    {
-      username,
-      loginUrl: `${this.config.get('FRONTEND_URL')}/login`,
-      supportEmail: this.config.get('SUPPORT_EMAIL'),
-    }
-  );
-}
+  async sendPasswordResetConfirmation(email: string, username: string) {
+    return this.sendEmail(
+      email,
+      'Password Reset Successful - Affinity Echo',
+      'password-reset-confirmation',
+      {
+        username,
+        loginUrl: `${this.config.get('FRONTEND_URL')}/login`,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
+    );
+  }
 }
