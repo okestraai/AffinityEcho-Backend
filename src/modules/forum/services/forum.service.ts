@@ -243,6 +243,9 @@ export class ForumService {
             title,
             content,
             created_at,
+            views_count,
+            comments_count,
+            reaction_validated_count,
             user_profile:user_id(
               id,
               username,
@@ -269,19 +272,11 @@ export class ForumService {
         throw new NotFoundException('Forum not found');
       }
 
-      // Get member count separately
-      const { data: members, error: membersError } = await this.admin
-        .from('forum_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('forum_id', id);
-
-      const memberCount = membersError ? 0 : members?.length || 0;
-
-      // Format the response
+      // Use the cached counts from the forum table instead of separate queries
       const formattedForum = {
         ...forum,
-        memberCount,
-        topicCount: forum.forum_topics?.length || 0,
+        memberCount: forum.member_count || 0,
+        topicCount: forum.topic_count || 0,
       };
 
       logger.info('Forum fetched successfully', { forumId: id });
@@ -420,6 +415,7 @@ export class ForumService {
 
       // Add user to forum
       const { error } = await this.admin.from('forum_members').insert({
+        id: crypto.randomUUID(), // ← CRITICAL: generate UUID here
         forum_id: forumId,
         user_id: userId,
         joined_at: new Date().toISOString(),
@@ -434,23 +430,25 @@ export class ForumService {
         throw new BadRequestException('Failed to join forum');
       }
 
-      // Update member count by fetching current count and incrementing
-      const { data: currentForum, error: fetchError } = await this.admin
-        .from('forums')
-        .select('member_count')
-        .eq('id', forumId)
-        .single();
+      const { error: incError } = await this.admin.rpc(
+        'increment_forum_member_count',
+        { forum_id: forumId },
+      );
 
-      if (!fetchError && currentForum) {
+      if (incError) {
+        logger.warn('RPC increment failed, falling back to manual update', {
+          forumId,
+          error: incError.message,
+        });
+        // Fallback: manual update
         await this.admin
           .from('forums')
           .update({
-            member_count: currentForum.member_count + 1,
+            member_count: forum.member_count + 1,
             last_activity: new Date().toISOString(),
           })
           .eq('id', forumId);
       }
-
       logger.info('User joined forum successfully', { forumId, userId });
       return { success: true, message: 'Successfully joined forum' };
     } catch (error) {
@@ -505,18 +503,29 @@ export class ForumService {
         throw new BadRequestException('Failed to leave forum');
       }
 
-      // Update member count by fetching current count and decrementing
-      const { data: currentForum, error: fetchError } = await this.admin
-        .from('forums')
-        .select('member_count')
-        .eq('id', forumId)
-        .single();
+      // Optimized: Update member count using decrement
+      // Decrement member count using RPC
+      const { error: decError } = await this.admin.rpc(
+        'decrement_forum_member_count',
+        { forum_id: forumId },
+      );
 
-      if (!fetchError && currentForum) {
+      if (decError) {
+        logger.warn('RPC decrement failed, falling back to manual update', {
+          forumId,
+          error: decError.message,
+        });
+        // Get current count first to avoid going negative
+        const { data: currentForum } = await this.admin
+          .from('forums')
+          .select('member_count')
+          .eq('id', forumId)
+          .single();
+
         await this.admin
           .from('forums')
           .update({
-            member_count: Math.max(0, currentForum.member_count - 1),
+            member_count: Math.max(0, (currentForum?.member_count || 1) - 1),
           })
           .eq('id', forumId);
       }
@@ -547,11 +556,30 @@ export class ForumService {
     logger.info('Fetching user joined forums', { userId, companyName });
 
     try {
-      // Get forum IDs that the user has joined
-      const { data: memberships, error } = await this.admin
+      let query = this.admin
         .from('forum_members')
-        .select('forum_id')
+        .select(
+          `
+        forum_id,
+        forums:forum_id(
+          id,
+          name,
+          description,
+          icon,
+          is_global,
+          company_name,
+          category,
+          topic_count,
+          member_count,
+          last_activity,
+          rules,
+          moderators
+        )
+      `,
+        )
         .eq('user_id', userId);
+
+      const { data: memberships, error } = await query;
 
       if (error) {
         logger.error('Failed to fetch user forum memberships', {
@@ -565,45 +593,24 @@ export class ForumService {
         return [];
       }
 
-      const forumIds = memberships.map((m) => m.forum_id);
+      let forums = memberships
+        .map((m: any) => m.forums)
+        .filter((forum: any) => forum !== null);
 
-      // Build query to get forums
-      let query = this.admin.from('forums').select('*').in('id', forumIds);
-
-      // Apply company filter if provided - FIXED: use company_name instead of company_id
       if (companyName) {
-        query = query.or(`company_name.eq.${companyName},is_global.eq.true`);
+        forums = forums.filter(
+          (forum: any) =>
+            forum.company_name === companyName || forum.is_global === true,
+        );
       } else {
-        query = query.eq('is_global', true);
+        forums = forums.filter((forum: any) => forum.is_global === true);
       }
 
-      const { data: forums, error: forumsError } = await query;
-
-      if (forumsError) {
-        logger.error('Failed to fetch forums for user', {
-          userId,
-          error: forumsError.message,
-        });
-        throw new BadRequestException('Failed to fetch forums');
-      }
-
-      // Add isJoined flag and get topic counts
-      const forumsWithDetails = await Promise.all(
-        (forums || []).map(async (forum: Forum) => {
-          const { data: topics, error: topicsError } = await this.admin
-            .from('forum_topics')
-            .select('id', { count: 'exact', head: true })
-            .eq('forum_id', forum.id);
-
-          const topicCount = topicsError ? 0 : topics?.length || 0;
-
-          return {
-            ...forum,
-            isJoined: true,
-            topicCount,
-          };
-        }),
-      );
+      const forumsWithDetails = forums.map((forum: any) => ({
+        ...forum,
+        isJoined: true,
+        topicCount: forum.topic_count || 0,
+      }));
 
       logger.info('User forums fetched successfully', {
         userId,
@@ -623,7 +630,7 @@ export class ForumService {
   }
 
   async bootstrapFoundationForums(companyName: string) {
-    logger.info('Bootstrapping foundation forums', { companyName });
+    logger.info('=== START: Bootstrap Foundation Forums ===', { companyName });
 
     const foundationForums = [
       {
@@ -694,106 +701,195 @@ export class ForumService {
       },
     ];
 
+    const createdForums: any[] = [];
+
     try {
-      const createdForums = [];
+      // Step 1: Prepare forum names
+      const forumNames = foundationForums.map((f) => f.name);
+      logger.debug('STEP 1 - Forum names to check:', {
+        forumNames,
+        count: forumNames.length,
+        companyName,
+      });
 
-      for (const forumData of foundationForums) {
-        // Check if forum already exists for this company
-        const { data: existingForum, error: checkError } = await this.admin
-          .from('forums')
-          .select('id')
-          .eq('name', forumData.name)
-          .eq('company_name', companyName)
-          .single();
+      // Step 2: Check for existing forums
+      logger.debug('STEP 2 - Querying existing forums...');
+      const { data: existingForumsData, error: checkError } = await this.admin
+        .from('forums')
+        .select('id, name, company_name')
+        .eq('company_name', companyName)
+        .in('name', forumNames);
 
-        if (checkError && checkError.code !== 'PGRST116') {
-          // PGRST116 is "not found" error
-          logger.warn('Error checking existing forum', {
-            name: forumData.name,
-            error: checkError.message,
-          });
-          continue;
-        }
+      // Log the raw query response
+      logger.debug('STEP 2 - Raw query response:', {
+        data: existingForumsData,
+        error: checkError,
+        hasData: !!existingForumsData,
+        dataLength: existingForumsData?.length || 0,
+        errorMessage: checkError?.message,
+      });
 
-        // If forum doesn't exist, create it
-        if (!existingForum) {
-          const { data: forum, error: createError } = await this.admin
-            .from('forums')
-            .insert({
-              ...forumData,
-              company_name: companyName,
-              topic_count: 0,
-              member_count: 0,
-              last_activity: new Date().toISOString(),
-            })
-            .select()
-            .single();
-
-          if (createError) {
-            logger.warn('Failed to create foundation forum', {
-              name: forumData.name,
-              error: createError.message,
-            });
-            continue;
-          }
-
-          createdForums.push(forum);
-          logger.info('Created foundation forum', {
-            name: forumData.name,
-            id: forum.id,
-          });
-        } else {
-          logger.info('Foundation forum already exists', {
-            name: forumData.name,
-            id: existingForum.id,
-          });
-        }
+      if (checkError) {
+        logger.error('ERROR checking existing forums:', {
+          error: checkError.message,
+          details: checkError,
+          companyName,
+          forumNames,
+        });
+        throw new Error(`Database query failed: ${checkError.message}`);
       }
 
-      logger.info('Foundation forums bootstrapped', {
-        companyName,
-        created: createdForums.length,
+      // Ensure we have an array (even if empty)
+      const existingRecords = Array.isArray(existingForumsData)
+        ? existingForumsData
+        : [];
+      logger.debug('STEP 2 - Processed existing records:', {
+        count: existingRecords.length,
+        records: existingRecords.map((r) => ({
+          id: r.id,
+          name: r.name,
+          company: r.company_name,
+        })),
       });
-      return createdForums;
+
+      // Step 3: Identify which forums need to be created
+      const existingForumNames = new Set(
+        existingRecords.map((f: any) => f.name),
+      );
+      logger.debug('STEP 3 - Existing forum names set:', {
+        existingForumNames: Array.from(existingForumNames),
+        setSize: existingForumNames.size,
+      });
+
+      const forumsToCreate = foundationForums
+        .filter((f) => !existingForumNames.has(f.name))
+        .map((f) => ({
+          ...f,
+          company_name: companyName,
+          topic_count: 0,
+          member_count: 0,
+          last_activity: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+
+      logger.debug('STEP 3 - Forums to create:', {
+        count: forumsToCreate.length,
+        forums: forumsToCreate.map((f) => ({
+          name: f.name,
+          company: f.company_name,
+          category: f.category,
+        })),
+      });
+
+      // Step 4: Insert new forums
+      if (forumsToCreate.length > 0) {
+        logger.debug('STEP 4 - Inserting new forums...', {
+          forumCount: forumsToCreate.length,
+          firstForum: forumsToCreate[0],
+        });
+
+        const { data: newForums, error: insertError } = await this.admin
+          .from('forums')
+          .insert(forumsToCreate)
+          .select('id, name, company_name, created_at');
+
+        logger.debug('STEP 4 - Insert response:', {
+          newForums,
+          insertError,
+          hasNewForums: !!newForums,
+          newForumsCount: newForums?.length || 0,
+          insertErrorMessage: insertError?.message,
+          insertErrorDetails: insertError,
+        });
+
+        if (insertError) {
+          logger.error('ERROR inserting forums:', {
+            error: insertError.message,
+            details: insertError,
+            forumsAttempted: forumsToCreate.map((f) => f.name),
+          });
+          throw new Error(`Failed to create forums: ${insertError.message}`);
+        }
+
+        if (newForums && newForums.length > 0) {
+          createdForums.push(...newForums);
+          logger.info('SUCCESS - Created forums:', {
+            count: newForums.length,
+            names: newForums.map((f) => f.name),
+          });
+        } else {
+          logger.warn('No forums were created despite insert attempt');
+        }
+      } else {
+        logger.info('No new forums to create - all already exist');
+      }
+
+      // Step 5: Build comprehensive response
+      const existingForums = existingRecords.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        message: `${f.name} forum already exists`,
+      }));
+
+      // Log each existing forum for tracking
+      existingForums.forEach((f) => {
+        logger.debug('Existing forum:', {
+          name: f.name,
+          id: f.id,
+          company: companyName,
+        });
+      });
+
+      const response = {
+        companyName,
+        createdCount: createdForums.length,
+        existingCount: existingForums.length,
+        createdForums: createdForums.map((f) => ({
+          id: f.id,
+          name: f.name,
+          created_at: f.created_at,
+        })),
+        existingForums,
+        message:
+          existingForums.length > 0
+            ? `${createdForums.length} new forum(s) created, ${existingForums.length} already existed for ${companyName}.`
+            : `All ${createdForums.length} foundation forums were created for ${companyName}.`,
+        timestamp: new Date().toISOString(),
+      };
+
+      logger.info('=== COMPLETE: Foundation forums bootstrapped ===', response);
+
+      return {
+        success: true,
+        data: response,
+        timestamp: response.timestamp,
+      };
     } catch (error) {
-      // Properly handle the unknown error type
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
 
-      logger.error('Unexpected error bootstrapping foundation forums', {
+      logger.error('=== FAILED: Bootstrap foundation forums ===', {
         companyName,
         error: errorMessage,
+        stack: errorStack,
+        timestamp: new Date().toISOString(),
       });
-      throw new InternalServerErrorException(
-        'Failed to bootstrap foundation forums',
-      );
+
+      // Return error response instead of throwing
+      return {
+        success: false,
+        error: errorMessage,
+        message: `Failed to bootstrap forums for ${companyName}`,
+        timestamp: new Date().toISOString(),
+      };
     }
   }
-
   async getLocalForumMetrics(companyName: string) {
     logger.info('Fetching local forum metrics', { companyName });
 
     try {
-      // Debug: Let's see what the actual query returns
-      const { data: debugForums, error: debugError } = await this.admin
-        .from('forums')
-        .select('id, name, company_name, is_global')
-        .eq('company_name', companyName)
-        .eq('is_global', false);
-
-      if (debugError) {
-        logger.error('Debug query failed', {
-          companyName,
-          error: debugError.message,
-        });
-      } else {
-        logger.debug('Debug query results', {
-          companyName,
-          forumsFound: debugForums?.length,
-          forums: debugForums,
-        });
-      }
-
       // Get all local forums for the company
       const { data: forums, error } = await this.admin
         .from('forums')
@@ -825,48 +921,14 @@ export class ForumService {
       logger.debug('Final forums query results', {
         companyName,
         forumsFound: forums?.length,
-        forums: forums?.map((f) => ({
-          id: f.id,
-          name: f.name,
-          topic_count: f.topic_count,
-          member_count: f.member_count,
-        })),
       });
 
-      // Calculate totals from forum data
+      // OPTIMIZED: Use cached counts from forum table
       const totalForums = forums?.length || 0;
       const totalTopics =
         forums?.reduce((sum, forum) => sum + (forum.topic_count || 0), 0) || 0;
       const totalMembers =
         forums?.reduce((sum, forum) => sum + (forum.member_count || 0), 0) || 0;
-
-      // Get actual counts from database for accuracy
-      let actualTotalTopics = 0;
-      let actualTotalMembers = 0;
-
-      if (forums && forums.length > 0) {
-        const forumIds = forums.map((f) => f.id);
-
-        // Get actual topic counts
-        const { data: topicsData, error: topicsError } = await this.admin
-          .from('forum_topics')
-          .select('id', { count: 'exact', head: true })
-          .in('forum_id', forumIds);
-
-        if (!topicsError) {
-          actualTotalTopics = topicsData?.length || 0;
-        }
-
-        // Get actual member counts
-        const { data: membersData, error: membersError } = await this.admin
-          .from('forum_members')
-          .select('id', { count: 'exact', head: true })
-          .in('forum_id', forumIds);
-
-        if (!membersError) {
-          actualTotalMembers = membersData?.length || 0;
-        }
-      }
 
       // Get most active forum
       let mostActiveForum = null;
@@ -882,14 +944,14 @@ export class ForumService {
             new Date(mostActive.last_activity)
             ? forum
             : mostActive;
-        }, forums[0]); // Start with first forum as initial value
+        }, forums[0]);
       }
 
       const metrics = {
         companyName,
         totalForums,
-        totalTopics: actualTotalTopics || totalTopics,
-        totalMembers: actualTotalMembers || totalMembers,
+        totalTopics,
+        totalMembers,
         mostActiveForum: mostActiveForum
           ? {
               id: mostActiveForum.id,
@@ -907,8 +969,8 @@ export class ForumService {
       logger.info('Local forum metrics fetched successfully', {
         companyName,
         totalForums,
-        totalTopics: metrics.totalTopics,
-        totalMembers: metrics.totalMembers,
+        totalTopics,
+        totalMembers,
       });
       return metrics;
     } catch (error) {
@@ -924,11 +986,12 @@ export class ForumService {
       );
     }
   }
+
   async getGlobalForumMetrics() {
     logger.info('Fetching global forum metrics');
 
     try {
-      // Get all global forums
+      // OPTIMIZED: Use cached counts, single query
       const { data: forums, error } = await this.admin
         .from('forums')
         .select(
@@ -958,7 +1021,7 @@ export class ForumService {
       const forumsWithMetrics = (forums || []).map((forum) => ({
         ...forum,
         engagementScore:
-          (forum.topic_count || 0) * 2 + (forum.member_count || 0), // Weight topics more
+          (forum.topic_count || 0) * 2 + (forum.member_count || 0),
       }));
 
       // Sort by engagement score (highest first)
@@ -989,6 +1052,219 @@ export class ForumService {
       throw new InternalServerErrorException(
         'Failed to fetch global forum metrics',
       );
+    }
+  }
+
+  async getFoundationForumsWithMetrics(companyName: string) {
+    logger.info('Fetching foundation forums with metrics', { companyName });
+
+    try {
+      // Get all foundation forums for the company
+      const { data: forums, error } = await this.admin
+        .from('forums')
+        .select(
+          `
+        id,
+        name,
+        description,
+        icon,
+        topic_count,
+        member_count,
+        last_activity,
+        category,
+        rules,
+        moderators
+        `,
+        )
+        .eq('company_name', companyName)
+        .eq('category', 'foundation')
+        .order('name', { ascending: true });
+
+      if (error) {
+        logger.error('Failed to fetch foundation forums', {
+          companyName,
+          error: error.message,
+        });
+        throw new BadRequestException('Failed to fetch foundation forums');
+      }
+
+      if (!forums || forums.length === 0) {
+        logger.info('No foundation forums found for company', { companyName });
+        return {
+          companyName,
+          totalFoundationForums: 0,
+          totalTopics: 0,
+          totalMembers: 0,
+          forums: [],
+        };
+      }
+
+      const forumIds = forums.map((f) => f.id);
+
+      // OPTIMIZED: Batch fetch recent topics for all forums at once
+      const { data: recentTopics } = await this.admin
+        .from('forum_topics')
+        .select(
+          `
+          id,
+          title,
+          created_at,
+          forum_id,
+          user_id,
+          user_profiles!forum_topics_user_id_fkey(username, avatar)
+        `,
+        )
+        .in('forum_id', forumIds)
+        .order('created_at', { ascending: false });
+
+      // Group recent topics by forum_id
+      const recentTopicsByForum = new Map();
+      (recentTopics || []).forEach((topic: any) => {
+        if (!recentTopicsByForum.has(topic.forum_id)) {
+          recentTopicsByForum.set(topic.forum_id, topic);
+        }
+      });
+
+      // OPTIMIZED: Batch fetch unique topic creators for all forums
+      const { data: topicCreators } = await this.admin
+        .from('forum_topics')
+        .select('forum_id, user_id')
+        .in('forum_id', forumIds);
+
+      // Group creators by forum_id
+      const creatorsByForum = new Map();
+      (topicCreators || []).forEach((tc: any) => {
+        if (!creatorsByForum.has(tc.forum_id)) {
+          creatorsByForum.set(tc.forum_id, new Set());
+        }
+        creatorsByForum.get(tc.forum_id).add(tc.user_id);
+      });
+
+      // Build detailed metrics using cached data
+      const forumsWithDetailedMetrics = forums.map((forum) => {
+        const actualTopicCount = forum.topic_count || 0;
+        const actualMemberCount = forum.member_count || 0;
+
+        // Get recent activity
+        const recentTopic = recentTopicsByForum.get(forum.id);
+        let recentActivity = null;
+        if (recentTopic) {
+          recentActivity = {
+            topicId: recentTopic.id,
+            topicTitle: recentTopic.title,
+            createdAt: recentTopic.created_at,
+            author: recentTopic.user_profiles
+              ? {
+                  username: recentTopic.user_profiles.username,
+                  avatar: recentTopic.user_profiles.avatar,
+                }
+              : null,
+          };
+        }
+
+        // Calculate engagement rate
+        let engagementRate = 0;
+        if (actualMemberCount > 0 && actualTopicCount > 0) {
+          const uniqueCreators = creatorsByForum.get(forum.id)?.size || 0;
+          engagementRate = Math.round(
+            (uniqueCreators / actualMemberCount) * 100,
+          );
+        }
+
+        return {
+          id: forum.id,
+          name: forum.name,
+          description: forum.description,
+          icon: forum.icon,
+          category: forum.category,
+          rules: forum.rules || [],
+          moderators: forum.moderators || [],
+          originalTopicCount: forum.topic_count || 0,
+          originalMemberCount: forum.member_count || 0,
+          lastActivity: forum.last_activity,
+          metrics: {
+            topicCount: actualTopicCount,
+            memberCount: actualMemberCount,
+            engagementRate,
+            recentActivity,
+            activityLevel: this.calculateActivityLevel(forum.last_activity),
+            growthTrend: 'stable' as const, // Simplified to avoid extra queries
+          },
+        };
+      });
+
+      // Calculate overall metrics
+      const totalTopics = forumsWithDetailedMetrics.reduce(
+        (sum, forum) => sum + forum.metrics.topicCount,
+        0,
+      );
+      const totalMembers = forumsWithDetailedMetrics.reduce(
+        (sum, forum) => sum + forum.metrics.memberCount,
+        0,
+      );
+
+      // Sort forums by activity level (most active first)
+      const sortedForums = forumsWithDetailedMetrics.sort((a, b) => {
+        const aScore = a.metrics.topicCount * 2 + a.metrics.memberCount;
+        const bScore = b.metrics.topicCount * 2 + b.metrics.memberCount;
+        return bScore - aScore;
+      });
+
+      const result = {
+        companyName,
+        totalFoundationForums: sortedForums.length,
+        totalTopics,
+        totalMembers,
+        overallEngagementRate:
+          totalMembers > 0
+            ? Math.round(
+                sortedForums.reduce(
+                  (sum, forum) => sum + forum.metrics.engagementRate,
+                  0,
+                ) / sortedForums.length,
+              )
+            : 0,
+        forums: sortedForums,
+      };
+
+      logger.info('Foundation forums with metrics fetched successfully', {
+        companyName,
+        forumCount: result.totalFoundationForums,
+        totalTopics: result.totalTopics,
+        totalMembers: result.totalMembers,
+      });
+
+      return result;
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      logger.error('Unexpected error fetching foundation forums with metrics', {
+        companyName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new InternalServerErrorException(
+        'Failed to fetch foundation forums with metrics',
+      );
+    }
+  }
+
+  // Helper method to calculate activity level
+  private calculateActivityLevel(lastActivity: string | null): string {
+    if (!lastActivity) return 'low';
+
+    try {
+      const lastActivityDate = new Date(lastActivity);
+      const now = new Date();
+      const daysSinceActivity = Math.floor(
+        (now.getTime() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      if (daysSinceActivity <= 1) return 'high';
+      if (daysSinceActivity <= 7) return 'medium';
+      return 'low';
+    } catch (error) {
+      return 'low';
     }
   }
 }

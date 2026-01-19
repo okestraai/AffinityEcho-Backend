@@ -963,6 +963,7 @@ export class AuthService {
         created_at,
         updated_at,
         last_active_at,
+        company_type,
         race_encrypted,
         gender_encrypted,
         career_level_encrypted,
@@ -1175,6 +1176,7 @@ export class AuthService {
       updated_at: p.updated_at,
       last_active_at: p.last_active_at,
 
+      company_type: p.company_type,
       race_encrypted: p.race_encrypted,
       gender_encrypted: p.gender_encrypted,
       career_level_encrypted: p.career_level_encrypted,

@@ -1,1 +1,0 @@
-{"error":"\"failed to parse logic tree ((forum.is_global.eq.true,forum.company_name.eq.undefined))\" (line 1, column 12)","level":"error","message":"Failed to fetch recent discussions","service":"affinity-echo-api","timestamp":"2025-11-24T22:28:11.308Z"}

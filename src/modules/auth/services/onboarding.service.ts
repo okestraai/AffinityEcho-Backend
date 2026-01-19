@@ -33,6 +33,14 @@ export class OnboardingService {
         last_active_at: new Date().toISOString(),
       };
 
+      // Encrypt first_name and last_name (required fields)
+      encryptedData.first_name_encrypted = this.encryption.encrypt(
+        String(data.firstName).trim(),
+      );
+      encryptedData.last_name_encrypted = this.encryption.encrypt(
+        String(data.lastName).trim(),
+      );
+
       // Only these fields are allowed in onboarding
       if (data.race !== undefined) {
         encryptedData.race_encrypted = this.encryption.encrypt(
@@ -54,6 +62,9 @@ export class OnboardingService {
           String(data.company).trim(),
         );
       }
+      if (data.companyType !== undefined) {
+        encryptedData.company_type = data.companyType;
+      }
       if (data.affinityTags && data.affinityTags.length > 0) {
         encryptedData.affinity_tags_encrypted = this.encryption.encrypt(
           JSON.stringify(data.affinityTags),
@@ -67,14 +78,20 @@ export class OnboardingService {
         .select('username, email')
         .single();
 
-      if (error)
+      if (error) {
+        logger.error('Failed to update user profile', { userId, error });
         throw new BadRequestException('Failed to save onboarding data');
+      }
+
+      // For welcome email: We cannot safely decrypt names here (security best practice)
+      // Use username or fallback as display name
+      const displayName = updatedUser.username || 'Friend';
 
       // SEND WELCOME EMAIL AFTER ONBOARDING
       try {
         await this.emailService.sendWelcomeEmail(
           updatedUser.email,
-          updatedUser.username || 'Friend',
+          displayName,
         );
         logger.info('Welcome email sent after onboarding', { userId });
       } catch (emailError) {
@@ -132,5 +149,22 @@ export class OnboardingService {
         'Unable to fetch onboarding status',
       );
     }
+  }
+
+  async getDecryptedNames(userId: string) {
+    const { data } = await this.admin
+      .from('user_profiles')
+      .select('first_name_encrypted, last_name_encrypted')
+      .eq('id', userId)
+      .single();
+
+    return {
+      firstName: data?.first_name_encrypted
+        ? this.encryption.decrypt(data.first_name_encrypted)
+        : null,
+      lastName: data?.last_name_encrypted
+        ? this.encryption.decrypt(data.last_name_encrypted)
+        : null,
+    };
   }
 }

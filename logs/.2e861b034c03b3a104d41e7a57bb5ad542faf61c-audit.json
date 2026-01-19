@@ -6,9 +6,14 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.2e861b034c03b3a104d41e7a57bb5ad542faf61c-audit.json",
     "files": [
         {
-            "date": 1764021494715,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2025-11-24.log",
-            "hash": "e4054115c1f49a012d76aefd510bd37bfb5bb933e870a884c36a827814a30b60"
+            "date": 1767900914937,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-01-08.log",
+            "hash": "a80d42baf3b38b9521f225aa7f08b71b8275de8a00bfc41b69fb3fa885c689aa"
+        },
+        {
+            "date": 1768234935903,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-01-12.log",
+            "hash": "b3927bf03994514030345fd9a290471152e1865da56993a38601c5f2d9073220"
         }
     ],
     "hashType": "sha256"

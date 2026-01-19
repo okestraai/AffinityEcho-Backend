@@ -1,6 +1,12 @@
 // src/modules/auth/dto/onboarding.dto.ts
-import { IsString, IsOptional, IsArray, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum CareerLevel {
   ENTRY = 'Entry Level (0-2 years)',
@@ -10,7 +16,22 @@ export enum CareerLevel {
   EXECUTIVE = 'Executive/C-Suite',
 }
 
+export enum CompanyType {
+  STATIC = 'static',
+  OTHER = 'other',
+}
+
 export class OnboardingDataDto {
+  @ApiProperty({ example: 'John', description: 'First name (required)' })
+  @IsString()
+  @IsNotEmpty({ message: 'First name is required' })
+  firstName!: string;
+
+  @ApiProperty({ example: 'Doe', description: 'Last name (required)' })
+  @IsString()
+  @IsNotEmpty({ message: 'Last name is required' })
+  lastName!: string;
+
   @ApiPropertyOptional({
     description: 'User race/ethnicity - will be encrypted',
     examples: [
@@ -42,6 +63,15 @@ export class OnboardingDataDto {
   @IsOptional()
   @IsString()
   company?: string;
+
+  @ApiPropertyOptional({
+    description: 'Type of company - static (from list) or other (custom)',
+    enum: CompanyType,
+    example: CompanyType.STATIC,
+  })
+  @IsOptional()
+  @IsEnum(CompanyType)
+  companyType?: CompanyType;
 
   @ApiPropertyOptional({
     description: 'Affinity groups for community connection',

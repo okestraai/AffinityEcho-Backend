@@ -27,6 +27,13 @@ interface DatabaseTopicReaction {
   reaction_type: string;
 }
 
+interface TopicReactionCounts {
+  reaction_seen_count: number;
+  reaction_validated_count: number;
+  reaction_inspired_count: number;
+  reaction_heard_count: number;
+}
+
 @Injectable()
 export class TopicService {
   private admin;
@@ -35,96 +42,104 @@ export class TopicService {
     this.admin = supabaseAdmin(config);
   }
 
+  // Fixed: fallback MUST return Promise<void> by executing the query
+  private async safeRpc(
+    rpcName: string,
+    params: any,
+    fallback: () => Promise<void>,
+  ): Promise<void> {
+    const { error } = await this.admin.rpc(rpcName, params);
+    if (error) {
+      logger.warn(`RPC ${rpcName} failed, using fallback`, {
+        error: error.message,
+      });
+      await fallback();
+    }
+  }
+
   async createTopic(createTopicDto: CreateTopicDto, userId: string) {
-    logger.info('Creating topic', {
-      forumId: createTopicDto.forumId,
-      userId,
-    });
+    logger.info('Creating topic', { forumId: createTopicDto.forumId, userId });
 
     try {
-      const { forumId, companyName } = createTopicDto;
+      const { forumId } = createTopicDto;
 
-      // Check if forum exists
       const { data: forum, error: forumError } = await this.admin
         .from('forums')
         .select('id, is_global, topic_count')
         .eq('id', forumId)
         .single();
 
-      if (forumError || !forum) {
-        throw new NotFoundException('Forum not found');
-      }
+      if (forumError || !forum) throw new NotFoundException('Forum not found');
 
-      // Check if user is member of the forum (for non-global forums)
       if (!forum.is_global) {
-        const { data: membership, error: membershipError } = await this.admin
+        const { data: membership } = await this.admin
           .from('forum_members')
           .select('id')
           .eq('forum_id', forumId)
           .eq('user_id', userId)
           .single();
 
-        if (membershipError?.code === 'PGRST116' || !membership) {
+        if (!membership) {
           throw new ForbiddenException(
             'You must join the forum before creating topics',
           );
         }
       }
 
+      // Current timestamp for updated_at
+      const currentTimestamp = new Date().toISOString();
+
       const { data: topic, error } = await this.admin
         .from('forum_topics')
         .insert({
           title: createTopicDto.title,
           content: createTopicDto.content,
-          forum_id: createTopicDto.forumId,
-          company_name: createTopicDto.companyName, // FIXED: changed from company_id to company_name
+          forum_id: forumId,
+          company_name: createTopicDto.companyName,
           scope: createTopicDto.scope,
           user_id: userId,
-          is_anonymous: createTopicDto.isAnonymous || true,
+          is_anonymous: createTopicDto.isAnonymous ?? true,
           tags: createTopicDto.tags || [],
           affinity_groups: createTopicDto.affinityGroups || [],
-          link: createTopicDto.link || null, // ADDED: optional link field
+          link: createTopicDto.link || null,
           reaction_seen_count: 0,
           reaction_validated_count: 0,
           reaction_inspired_count: 0,
           reaction_heard_count: 0,
           views_count: 0,
           comments_count: 0,
-          last_activity_at: new Date().toISOString(),
+          updated_at: currentTimestamp,
+          created_at: currentTimestamp,
+          last_activity_at: currentTimestamp,
         })
         .select(
           `
-        *,
-        user_profile:user_id(
-          id,
-          username,
-          avatar
-        ),
-        forum:forum_id(
-          id,
-          name,
-          icon
-        )
-      `,
+          *,
+          user_profile:user_id(id, username, avatar),
+          forum:forum_id(id, name, icon)
+        `,
         )
         .single();
 
-      if (error) {
-        logger.error('Topic creation failed', {
-          error: error.message,
-          data: createTopicDto,
-        });
+      if (error || !topic) {
+        logger.error('Topic creation failed', { error: error?.message });
         throw new BadRequestException('Failed to create topic');
       }
 
-      // Update forum activity and topic count
-      await this.admin
-        .from('forums')
-        .update({
-          topic_count: forum.topic_count + 1,
-          last_activity: new Date().toISOString(),
-        })
-        .eq('id', forumId);
+      // Update forum stats
+      await this.safeRpc(
+        'increment_forum_topic_count',
+        { forum_id: forumId },
+        async () => {
+          await this.admin
+            .from('forums')
+            .update({
+              topic_count: forum.topic_count + 1,
+              last_activity: currentTimestamp,
+            })
+            .eq('id', forumId);
+        },
+      );
 
       logger.info('Topic created successfully', { topicId: topic.id });
       return topic;
@@ -136,228 +151,177 @@ export class TopicService {
       ) {
         throw error;
       }
-      logger.error('Unexpected error creating topic', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.error('Unexpected error creating topic', { error });
       throw new InternalServerErrorException('Failed to create topic');
     }
   }
 
   async findAllTopics(filters: ForumFiltersDto, userId?: string) {
-    logger.info('Fetching topics', { filters, userId });
+    let query = this.admin.from('forum_topics').select(
+      `
+      *,
+      user_profile:user_id(id, username, avatar),
+      forum:forum_id(id, name, icon, is_global),
+      topic_reactions!topic_id(count)
+    `,
+      { count: 'exact' },
+    );
 
-    try {
-      const {
-        search,
-        sortBy = 'recent',
-        timeFilter,
-        companyName,
-        forumId,
-        page = 1,
-        limit = 10,
-      } = filters;
+    // Apply filters
+    if (filters.forumId) {
+      query = query.eq('forum_id', filters.forumId);
+    }
 
-      const skip = (page - 1) * limit;
+    if (filters.search) {
+      query = query.or(`
+      title.ilike.%${filters.search}%,
+      content.ilike.%${filters.search}%
+    `);
+    }
 
-      let query = this.admin.from('forum_topics').select(
-        `
-        *,
-        user_profile:user_id(
-          id,
-          username,
-          avatar
-        ),
-        forum:forum_id(
-          id,
-          name,
-          icon
-        ),
-        forum_comments(count)
-      `,
-        { count: 'exact' },
-      );
+    if (filters.companyName) {
+      query = query.ilike('company_name', `%${filters.companyName}%`);
+    }
 
-      // Apply filters
-      if (search) {
-        query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
-      }
+    // Sorting logic
+    switch (filters.sortBy) {
+      case 'recent':
+        query = query.order('created_at', { ascending: false });
+        break;
+      case 'popular':
+        query = query.order('views_count', { ascending: false });
+        break;
+      case 'trending':
+        query = query.order('last_activity_at', { ascending: false });
+        break;
+      case 'relevant':
+      default:
+        query = query.order('created_at', { ascending: false });
+        break;
+    }
 
-      // FIXED: Use company_name instead of company_id
-      if (companyName) {
-        query = query.eq('company_name', companyName);
-      }
+    // Pagination
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const from = (page - 1) * limit;
 
-      if (forumId) {
-        query = query.eq('forum_id', forumId);
-      }
+    query = query.range(from, from + limit - 1);
 
-      if (timeFilter && timeFilter !== 'all') {
-        const now = new Date();
-        const timeMap = {
-          today: new Date(now.setDate(now.getDate() - 1)),
-          week: new Date(now.setDate(now.getDate() - 7)),
-          month: new Date(now.setMonth(now.getMonth() - 1)),
-        };
-        query = query.gte('created_at', timeMap[timeFilter].toISOString());
-      }
+    const { data: topics, error, count } = await query;
 
-      // Apply sorting
-      switch (sortBy) {
-        case 'recent':
-          query = query.order('last_activity_at', { ascending: false });
-          break;
-        case 'popular':
-          query = query.order('views_count', { ascending: false });
-          break;
-        case 'trending':
-          query = query.order('last_activity_at', { ascending: false });
-          break;
-        default:
-          query = query.order('last_activity_at', { ascending: false });
-      }
+    if (error) {
+      logger.error('Failed to fetch topics', { error });
+      throw new InternalServerErrorException('Failed to fetch topics');
+    }
 
-      // Apply pagination
-      query = query.range(skip, skip + limit - 1);
+    const topicsWithReactions = (topics || []).map((topic: any) => {
+      const totalReactions =
+        (topic.reaction_seen_count || 0) +
+        (topic.reaction_validated_count || 0) +
+        (topic.reaction_inspired_count || 0) +
+        (topic.reaction_heard_count || 0);
 
-      const { data: topics, error, count } = await query;
-
-      if (error) {
-        logger.error('Failed to fetch topics', { error: error.message });
-        throw new BadRequestException('Failed to fetch topics');
-      }
-
-      // Get user reactions if userId provided
-      let userReactions: UserReactionsMap = {};
-      if (userId && topics && topics.length > 0) {
-        const { data: reactions } = await this.admin
-          .from('topic_reactions')
-          .select('topic_id, reaction_type')
-          .eq('user_id', userId)
-          .in(
-            'topic_id',
-            topics.map((t) => t.id),
-          );
-
-        userReactions = (reactions || []).reduce(
-          (acc: UserReactionsMap, reaction: DatabaseTopicReaction) => {
-            const topicId = reaction.topic_id;
-            const reactionType = reaction.reaction_type;
-
-            if (!acc[topicId]) {
-              acc[topicId] = {
-                seen: false,
-                validated: false,
-                inspired: false,
-                heard: false,
-              };
-            }
-
-            if (reactionType === 'seen') acc[topicId].seen = true;
-            if (reactionType === 'validated') acc[topicId].validated = true;
-            if (reactionType === 'inspired') acc[topicId].inspired = true;
-            if (reactionType === 'heard') acc[topicId].heard = true;
-
-            return acc;
-          },
-          {},
-        );
-      }
-
-      const formattedTopics = (topics || []).map((topic) => {
-        const reactions = userReactions[topic.id] || {
+      return {
+        ...topic,
+        totalReactions,
+        userReactions: {
           seen: false,
           validated: false,
           inspired: false,
           heard: false,
-        };
-
-        return {
-          ...topic,
-          commentCount: topic.forum_comments?.[0]?.count || 0,
-          reactions: {
-            seen: topic.reaction_seen_count,
-            validated: topic.reaction_validated_count,
-            inspired: topic.reaction_inspired_count,
-            heard: topic.reaction_heard_count,
-          },
-          userReactions: reactions,
-        };
-      });
-
-      const total = count || 0;
-
-      logger.info('Topics fetched successfully', { count: total });
-      return {
-        topics: formattedTopics,
-        total,
-        page,
-        totalPages: Math.ceil(total / limit),
+        },
       };
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      logger.error('Unexpected error fetching topics', {
-        error: error instanceof Error ? error.message : String(error),
+    });
+
+    // Fetch user reactions if logged in
+    if (userId && topicsWithReactions.length > 0) {
+      const topicIds = topicsWithReactions.map((t) => t.id);
+
+      const { data: userReactions } = await this.admin
+        .from('topic_reactions')
+        .select('topic_id, reaction_type')
+        .eq('user_id', userId)
+        .in('topic_id', topicIds);
+
+      const reactionMap = (userReactions || []).reduce((acc: any, r: any) => {
+        if (!acc[r.topic_id]) acc[r.topic_id] = {};
+        acc[r.topic_id][r.reaction_type] = true;
+        return acc;
+      }, {});
+
+      topicsWithReactions.forEach((topic: any) => {
+        topic.userReactions = reactionMap[topic.id] || topic.userReactions;
       });
-      throw new InternalServerErrorException('Failed to fetch topics');
     }
+
+    return {
+      data: topicsWithReactions,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / limit) : 1,
+      },
+    };
   }
 
   async findTopicById(id: string, userId?: string) {
-    logger.info('Fetching topic by ID', { topicId: id, userId });
-
     try {
+      // First, get the current topic to check its views_count
+      const { data: currentTopic, error: fetchError } = await this.admin
+        .from('forum_topics')
+        .select('views_count')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) {
+        throw fetchError.code === 'PGRST116'
+          ? new NotFoundException('Topic not found')
+          : new BadRequestException('Failed to fetch topic');
+      }
+
+      // Increment view count - FIXED: Use proper RLS-bypassing update
+      const newViewCount = (currentTopic.views_count || 0) + 1;
+
+      await this.safeRpc(
+        'increment_topic_views',
+        { topic_id: id },
+        async () => {
+          // Fallback: Direct update with new count
+          await this.admin
+            .from('forum_topics')
+            .update({
+              views_count: newViewCount,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+        },
+      );
+
+      // Now fetch the complete topic data
       const { data: topic, error } = await this.admin
         .from('forum_topics')
         .select(
           `
           *,
-          user_profile:user_id(
-            id,
-            username,
-            avatar
-          ),
-          forum:forum_id(
-            id,
-            name,
-            description,
-            icon
-          ),
+          user_profile:user_id(id, username, avatar),
+          forum:forum_id(id, name, description, icon),
           forum_comments(
-            id,
-            content,
-            created_at,
-            user_profile:user_id(
-              id,
-              username,
-              avatar
-            ),
-            helpful_count,
-            supportive_count,
-            parent_comment_id
+            id, content, created_at,
+            user_profile:user_id(id, username, avatar),
+            helpful_count, supportive_count, parent_comment_id
           )
         `,
         )
         .eq('id', id)
         .single();
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          throw new NotFoundException('Topic not found');
-        }
-        logger.error('Failed to fetch topic', {
-          topicId: id,
-          error: error.message,
-        });
-        throw new BadRequestException('Failed to fetch topic');
+      if (error || !topic) {
+        throw error?.code === 'PGRST116'
+          ? new NotFoundException('Topic not found')
+          : new BadRequestException('Failed to fetch topic');
       }
 
-      if (!topic) {
-        throw new NotFoundException('Topic not found');
-      }
-
-      // Get user reactions if userId provided
       let userReactions: UserReaction = {
         seen: false,
         validated: false,
@@ -372,36 +336,17 @@ export class TopicService {
           .eq('topic_id', id)
           .eq('user_id', userId);
 
-        userReactions = (reactions || []).reduce(
-          (acc: UserReaction, reaction: any) => {
-            if (reaction.reaction_type === 'seen') acc.seen = true;
-            if (reaction.reaction_type === 'validated') acc.validated = true;
-            if (reaction.reaction_type === 'inspired') acc.inspired = true;
-            if (reaction.reaction_type === 'heard') acc.heard = true;
-            return acc;
-          },
-          { ...userReactions },
-        );
+        reactions?.forEach((r: any) => {
+          if (r.reaction_type in userReactions) {
+            userReactions[r.reaction_type as keyof UserReaction] = true;
+          }
+        });
       }
 
-      // Increment view count by fetching current value first
-      const { data: currentTopic } = await this.admin
-        .from('forum_topics')
-        .select('views_count')
-        .eq('id', id)
-        .single();
-
-      if (currentTopic) {
-        await this.admin
-          .from('forum_topics')
-          .update({
-            views_count: currentTopic.views_count + 1,
-          })
-          .eq('id', id);
-      }
-
-      const formattedTopic = {
+      // Return with updated view count
+      return {
         ...topic,
+        views_count: newViewCount, // Use the new count we just set
         reactions: {
           seen: topic.reaction_seen_count,
           validated: topic.reaction_validated_count,
@@ -411,180 +356,163 @@ export class TopicService {
         userReactions,
         commentCount: topic.forum_comments?.length || 0,
       };
-
-      logger.info('Topic fetched successfully', { topicId: id });
-      return formattedTopic;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
-      ) {
+      )
         throw error;
-      }
-      logger.error('Unexpected error fetching topic', { topicId: id, error });
+      logger.error('Unexpected error fetching topic', { error });
       throw new InternalServerErrorException('Failed to fetch topic');
     }
   }
 
-  async addReaction(topicId: string, userId: string, reactionType: string) {
-    logger.info('Adding topic reaction', { topicId, userId, reactionType });
+  async addReaction(
+    topicId: string,
+    userId: string,
+    reactionType: 'seen' | 'validated' | 'inspired' | 'heard',
+  ) {
+    const reactionField = `reaction_${reactionType}_count` as const;
 
     try {
-      // Check if topic exists and get current reaction counts
-      const { data: topic, error: topicError } = await this.admin
-        .from('forum_topics')
-        .select('*')
-        .eq('id', topicId)
-        .single();
-
-      if (topicError || !topic) {
-        throw new NotFoundException('Topic not found');
-      }
-
-      // Check if reaction already exists
-      const { data: existingReaction, error: checkError } = await this.admin
+      const { data: existing } = await this.admin
         .from('topic_reactions')
         .select('id')
         .eq('topic_id', topicId)
         .eq('user_id', userId)
         .eq('reaction_type', reactionType)
+        .maybeSingle();
+
+      if (existing) {
+        // Remove reaction
+        await this.admin.from('topic_reactions').delete().eq('id', existing.id);
+
+        // Get current count - FIXED: Proper type casting
+        const { data: currentTopic } = await this.admin
+          .from('forum_topics')
+          .select(
+            'reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count',
+          )
+          .eq('id', topicId)
+          .single();
+
+        const currentCount = (currentTopic as any)?.[reactionField] || 0;
+        const newCount = Math.max(0, currentCount - 1);
+
+        await this.safeRpc(
+          'decrement_topic_reaction',
+          { topic_id: topicId, reaction_field: reactionField },
+          async () => {
+            await this.admin
+              .from('forum_topics')
+              .update({
+                [reactionField]: newCount,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', topicId);
+          },
+        );
+
+        return { action: 'removed' as const, reactionType };
+      }
+
+      // Check if topic exists
+      const { error: topicError } = await this.admin
+        .from('forum_topics')
+        .select('id')
+        .eq('id', topicId)
         .single();
 
-      if (existingReaction) {
-        // Remove reaction
-        const { error: deleteError } = await this.admin
-          .from('topic_reactions')
-          .delete()
-          .eq('topic_id', topicId)
-          .eq('user_id', userId)
-          .eq('reaction_type', reactionType);
+      if (topicError) throw new NotFoundException('Topic not found');
 
-        if (deleteError) {
-          throw new BadRequestException('Failed to remove reaction');
-        }
-
-        // Decrement reaction count
-        const reactionField = `reaction_${reactionType}_count`;
-        const currentCount = topic[reactionField] || 0;
-
-        await this.admin
-          .from('forum_topics')
-          .update({
-            [reactionField]: Math.max(0, currentCount - 1),
-          })
-          .eq('id', topicId);
-
-        logger.info('Topic reaction removed', {
-          topicId,
-          userId,
-          reactionType,
-        });
-        return { action: 'removed', reactionType };
-      } else {
-        // Add reaction
-        const { error: insertError } = await this.admin
-          .from('topic_reactions')
-          .insert({
-            topic_id: topicId,
-            user_id: userId,
-            reaction_type: reactionType,
-          });
-
-        if (insertError) {
-          throw new BadRequestException('Failed to add reaction');
-        }
-
-        // Increment reaction count
-        const reactionField = `reaction_${reactionType}_count`;
-        const currentCount = topic[reactionField] || 0;
-
-        await this.admin
-          .from('forum_topics')
-          .update({
-            [reactionField]: currentCount + 1,
-            last_activity_at: new Date().toISOString(),
-          })
-          .eq('id', topicId);
-
-        logger.info('Topic reaction added', { topicId, userId, reactionType });
-        return { action: 'added', reactionType };
-      }
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      logger.error('Unexpected error adding reaction', {
-        topicId,
-        userId,
-        reactionType,
-        error,
+      // Add reaction
+      await this.admin.from('topic_reactions').insert({
+        topic_id: topicId,
+        user_id: userId,
+        reaction_type: reactionType,
       });
-      throw new InternalServerErrorException('Failed to add reaction');
+
+      // Get current count - FIXED: Proper type casting
+      const { data: currentTopic } = await this.admin
+        .from('forum_topics')
+        .select(
+          'reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count',
+        )
+        .eq('id', topicId)
+        .single();
+
+      const currentCount = (currentTopic as any)?.[reactionField] || 0;
+      const newCount = currentCount + 1;
+
+      await this.safeRpc(
+        'increment_topic_reaction',
+        { topic_id: topicId, reaction_field: reactionField },
+        async () => {
+          await this.admin
+            .from('forum_topics')
+            .update({
+              [reactionField]: newCount,
+              last_activity_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', topicId);
+        },
+      );
+
+      return { action: 'added' as const, reactionType };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      logger.error('Failed to toggle reaction', { error });
+      throw new InternalServerErrorException('Failed to update reaction');
     }
   }
 
   async deleteTopic(id: string, userId: string) {
-    logger.info('Deleting topic', { topicId: id, userId });
-
     try {
-      // Check if topic exists and user owns it
-      const { data: topic, error: topicError } = await this.admin
+      const { data: topic } = await this.admin
         .from('forum_topics')
         .select('id, user_id, forum_id')
         .eq('id', id)
         .single();
 
-      if (topicError || !topic) {
-        throw new NotFoundException('Topic not found');
-      }
+      if (!topic) throw new NotFoundException('Topic not found');
+      if (topic.user_id !== userId)
+        throw new ForbiddenException('Not authorized');
 
-      if (topic.user_id !== userId) {
-        throw new ForbiddenException('You can only delete your own topics');
-      }
+      await this.admin.from('forum_topics').delete().eq('id', id);
 
-      const { error } = await this.admin
-        .from('forum_topics')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        logger.error('Topic deletion failed', {
-          topicId: id,
-          error: error.message,
-        });
-        throw new BadRequestException('Failed to delete topic');
-      }
-
-      // Update forum topic count by fetching current value first
+      // Get current forum topic count
       const { data: forum } = await this.admin
         .from('forums')
         .select('topic_count')
         .eq('id', topic.forum_id)
         .single();
 
-      if (forum) {
-        await this.admin
-          .from('forums')
-          .update({
-            topic_count: Math.max(0, forum.topic_count - 1),
-          })
-          .eq('id', topic.forum_id);
-      }
+      const currentCount = forum?.topic_count || 0;
+      const newCount = Math.max(0, currentCount - 1);
 
-      logger.info('Topic deleted successfully', { topicId: id });
-      return { success: true, message: 'Topic deleted successfully' };
+      await this.safeRpc(
+        'decrement_forum_topic_count',
+        { forum_id: topic.forum_id },
+        async () => {
+          await this.admin
+            .from('forums')
+            .update({
+              topic_count: newCount,
+              last_activity: new Date().toISOString(),
+            })
+            .eq('id', topic.forum_id);
+        },
+      );
+
+      return { success: true };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof BadRequestException
-      ) {
+        error instanceof ForbiddenException
+      )
         throw error;
-      }
-      logger.error('Unexpected error deleting topic', { topicId: id, error });
+      logger.error('Failed to delete topic', { error });
       throw new InternalServerErrorException('Failed to delete topic');
     }
   }
@@ -592,12 +520,12 @@ export class TopicService {
   async findRecentDiscussions(
     filters: ForumFiltersDto,
     userId: string,
-    userCompanyName?: string,
+    companyName?: string,
   ) {
     logger.info('Fetching recent discussions', {
       filters,
       userId,
-      userCompanyName,
+      companyName,
     });
 
     try {
@@ -605,8 +533,6 @@ export class TopicService {
         search,
         sortBy = 'recent',
         timeFilter,
-        companyName,
-        isGlobal,
         category,
         page = 1,
         limit = 10,
@@ -614,46 +540,65 @@ export class TopicService {
 
       const skip = (page - 1) * limit;
 
-      let query = this.admin.from('forum_topics').select(
-        `
-      *,
-      user_profile:user_id(
-        id,
-        username,
-        avatar
-      ),
-      forum:forum_id(
-        id,
-        name,
-        icon,
-        is_global,
-        company_name
-      ),
-      forum_comments(count)
-    `,
-        { count: 'exact' },
-      );
-
-      // Apply filters for recent discussions
-      if (search) {
-        query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
-      }
-
-      // FIXED: Handle undefined userCompanyName and use provided companyName as fallback
-      const targetCompanyName = userCompanyName || companyName;
-
-      if (targetCompanyName) {
-        // Use OR filter for global topics OR local topics matching the company
-        query = query.or(
-          `forum.is_global.eq.true,forum.company_name.eq.${targetCompanyName}`,
+      // Get relevant forum IDs
+      let forumQuery = this.admin
+        .from('forums')
+        .select('id')
+        .or(
+          `is_global.eq.true${companyName ? `,company_name.eq.${companyName}` : ''}`,
         );
-      } else {
-        // If no company name is available, only show global topics
-        query = query.eq('forum.is_global', true);
-      }
 
       if (category) {
-        query = query.eq('forum.category', category);
+        forumQuery = forumQuery.eq('category', category);
+      }
+
+      const { data: forums, error: forumsError } = await forumQuery;
+
+      if (forumsError) {
+        logger.error('Failed to fetch forums for filtering', {
+          error: forumsError.message,
+        });
+        throw new BadRequestException('Failed to fetch discussions');
+      }
+
+      // If no forums found, return empty result
+      if (!forums || forums.length === 0) {
+        return {
+          topics: [],
+          total: 0,
+          page,
+          totalPages: 0,
+        };
+      }
+
+      const forumIds = forums.map((f) => f.id);
+
+      // Query topics with optimized selection
+      let query = this.admin
+        .from('forum_topics')
+        .select(
+          `
+        *,
+        user_profile:user_id(
+          id,
+          username,
+          avatar
+        ),
+        forum:forum_id(
+          id,
+          name,
+          icon,
+          is_global,
+          company_name
+        )
+      `,
+          { count: 'exact' },
+        )
+        .in('forum_id', forumIds);
+
+      // Apply filters
+      if (search) {
+        query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
       }
 
       if (timeFilter && timeFilter !== 'all') {
@@ -666,7 +611,7 @@ export class TopicService {
         query = query.gte('created_at', timeMap[timeFilter].toISOString());
       }
 
-      // Always sort by most recent first for discussions
+      // Apply sorting
       query = query.order('last_activity_at', { ascending: false });
 
       // Apply pagination
@@ -681,17 +626,15 @@ export class TopicService {
         throw new BadRequestException('Failed to fetch recent discussions');
       }
 
-      // Get user reactions if userId provided
+      // Get user reactions in batch
       let userReactions: UserReactionsMap = {};
       if (userId && topics && topics.length > 0) {
+        const topicIds = topics.map((t) => t.id);
         const { data: reactions } = await this.admin
           .from('topic_reactions')
           .select('topic_id, reaction_type')
           .eq('user_id', userId)
-          .in(
-            'topic_id',
-            topics.map((t) => t.id),
-          );
+          .in('topic_id', topicIds);
 
         userReactions = (reactions || []).reduce(
           (acc: UserReactionsMap, reaction: DatabaseTopicReaction) => {
@@ -728,7 +671,7 @@ export class TopicService {
 
         return {
           ...topic,
-          commentCount: topic.forum_comments?.[0]?.count || 0,
+          commentCount: topic.comments_count || 0,
           reactions: {
             seen: topic.reaction_seen_count,
             validated: topic.reaction_validated_count,
@@ -743,9 +686,10 @@ export class TopicService {
 
       logger.info('Recent discussions fetched successfully', {
         count: total,
-        targetCompanyName,
-        appliedFilters: filters,
+        companyName,
+        forumIdsCount: forumIds.length,
       });
+
       return {
         topics: formattedTopics,
         total,

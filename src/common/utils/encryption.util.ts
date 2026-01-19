@@ -10,27 +10,38 @@ export class EncryptionUtil {
 
   constructor(private config: ConfigService) {
     const key = this.config.get<string>('ENCRYPTION_KEY');
-    
+
     // Add debugging
     console.log('ENCRYPTION_KEY value:', key);
     console.log('ENCRYPTION_KEY length:', key?.length);
-    
+
     if (!key || key.length !== 44) {
-      throw new Error(`ENCRYPTION_KEY must be 32-byte base64. Got: ${key} (length: ${key?.length})`);
+      throw new Error(
+        `ENCRYPTION_KEY must be 32-byte base64. Got: ${key} (length: ${key?.length})`,
+      );
     }
-    
+
     this.key = Buffer.from(key, 'base64');
-    
+
     // Verify the key is exactly 32 bytes
     if (this.key.length !== 32) {
-      throw new Error(`Invalid key length: ${this.key.length} bytes. Expected 32 bytes.`);
+      throw new Error(
+        `Invalid key length: ${this.key.length} bytes. Expected 32 bytes.`,
+      );
     }
   }
 
   encrypt(text: string): string {
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv) as crypto.CipherGCM;
-    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const cipher = crypto.createCipheriv(
+      this.algorithm,
+      this.key,
+      iv,
+    ) as crypto.CipherGCM;
+    const encrypted = Buffer.concat([
+      cipher.update(text, 'utf8'),
+      cipher.final(),
+    ]);
     const tag = cipher.getAuthTag();
     return Buffer.concat([iv, tag, encrypted]).toString('base64');
   }
@@ -40,7 +51,11 @@ export class EncryptionUtil {
     const iv = data.slice(0, 12);
     const tag = data.slice(12, 28);
     const text = data.slice(28);
-    const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv) as crypto.DecipherGCM;
+    const decipher = crypto.createDecipheriv(
+      this.algorithm,
+      this.key,
+      iv,
+    ) as crypto.DecipherGCM;
     decipher.setAuthTag(tag);
     return decipher.update(text, undefined, 'utf8') + decipher.final('utf8');
   }

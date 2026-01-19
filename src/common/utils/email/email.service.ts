@@ -144,4 +144,36 @@ export class EmailService {
       },
     );
   }
+
+  async sendConnectionRequestEmail(
+    email: string,
+    username: string,
+    referralId: string,
+  ) {
+    // Implementation
+  }
+
+  async sendConnectionAcceptedEmail(
+    email: string,
+    username: string,
+    referralId: string,
+  ) {
+    // Implementation
+  }
+
+  async sendIdentityRevealRequestEmail(
+    email: string,
+    username: string,
+    connectionId: string,
+  ) {
+    // Implementation
+  }
+
+  async sendIdentityRevealAcceptedEmail(
+    email: string,
+    username: string,
+    connectionId: string,
+  ) {
+    // Implementation
+  }
 }

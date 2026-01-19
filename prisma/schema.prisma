@@ -16,6 +16,12 @@ model user_profiles {
   username                 String   @unique @db.VarChar(50)
   email                    String?  @db.VarChar(254)
   avatar                   String   @default("User")
+  first_name_encrypted     String?   @default("") @db.VarChar(50)
+  last_name_encrypted      String?   @default("") @db.VarChar(50)
+
+
+
+  // SHARED/BASIC PROFILE FIELDS (used by both mentor and mentee)
   bio                      String?
   job_title                String?
   location                 String?
@@ -23,10 +29,6 @@ model user_profiles {
   skills                   String[] @default([])
   linkedin_url             String?
 
-  // Onboarding & Demographics
-  has_completed_onboarding Boolean  @default(false)
-  is_willing_to_mentor     Boolean  @default(false)
-  badges                   String[] @default([])
 
   // Encrypted PII
   race_encrypted           String?
@@ -34,6 +36,46 @@ model user_profiles {
   career_level_encrypted   String?   @db.Text
   company_encrypted        String?   @db.Text
   affinity_tags_encrypted  String?   @db.Text
+
+
+  // Onboarding & Demographics
+  has_completed_onboarding Boolean  @default(false)
+  is_willing_to_mentor     Boolean  @default(false)
+  badges                   String[] @default([])
+
+
+
+ // MENTOR-SPECIFIC FIELDS (only used when user is a mentor)
+  mentor_bio               String?   @db.Text
+  mentor_expertise         String[]  @default([])
+  mentor_industries        String[]  @default([])
+  mentor_availability      String?
+  mentor_response_time     String?
+  mentor_style             String?
+  mentor_languages         String[]  @default([])
+  mentor_hourly_rate       Int?
+  is_active_mentor         Boolean   @default(false)
+  mentor_profile_created_at DateTime? @db.Timestamptz(3)
+    
+    // MENTEE-SPECIFIC FIELDS (only used when user is a mentee)
+  mentee_bio               String?   @db.Text
+  mentee_goals             String?   @db.Text
+  mentee_interests         String[]  @default([])
+  mentee_industries        String[]  @default([])
+  mentee_availability      String?
+  mentee_urgency           String?   @db.VarChar(20)
+  mentee_topic             String?   @db.Text
+  is_active_mentee         Boolean   @default(false)
+  mentored_style           String?
+  mentee_languages         String[]  @default([])
+  mentee_profile_created_at DateTime? @db.Timestamptz(3)
+
+
+  // Company Type (static or other)
+  company_type             String?   @default("static") @db.VarChar(20)
+  communication_method String?   @db.VarChar(50)
+  mentoring_as             String?   @db.VarChar(20) // 'mentor', 'mentee', 'both', null
+
 
   // Privacy
   privacy_level            String   @default("anonymous") @db.VarChar(20)
@@ -58,9 +100,12 @@ model user_profiles {
   forum_topics              forum_topics[]
   forum_comments            forum_comments[]
   topic_reactions           topic_reactions[]
-  comment_reactions         comment_reactions[] // NEW
+  comment_reactions         comment_reactions[]
   mentor_relationships      mentorship_relationships[] @relation("mentor_relationships")
   mentee_relationships      mentorship_relationships[] @relation("mentee_relationships")
+  mentorship_requests       mentorship_requests[] @relation("mentorship_requests")
+  mentorship_bookmarks      mentorship_bookmarks[] @relation("mentorship_bookmarks_user")
+  bookmarked_by             mentorship_bookmarks[] @relation("mentorship_bookmarks_target")
   conversations_user1       conversations[] @relation("conversations_user1")
   conversations_user2       conversations[] @relation("conversations_user2")
   messages                  messages[]
@@ -71,6 +116,16 @@ model user_profiles {
   identity_reveals_requester identity_reveals[] @relation("identity_reveals_requester")
   identity_reveals_responder identity_reveals[] @relation("identity_reveals_responder")
   forum_memberships         forum_members[] @relation("forum_memberships")
+  nooks_created             nooks[] @relation("nook_creator")
+  nook_memberships          nook_members[] @relation("nook_memberships")
+  nook_messages             nook_messages[] @relation("nook_messages")
+  nook_reactions            nook_reactions[] @relation("nook_reactions")
+  nook_message_reactions    nook_message_reactions[] @relation("nook_message_reactions")
+   direct_requests_sent      mentorship_direct_requests[] @relation("direct_request_requester")
+  direct_requests_received  mentorship_direct_requests[] @relation("direct_request_target")
+    referral_likes        referral_likes[]
+  referral_bookmarks    referral_bookmarks[]
+  referral_comments     referral_comments[]
 
   @@map("user_profiles")
 }
@@ -89,6 +144,7 @@ model forums {
   topic_count     Int      @default(0)
   member_count    Int      @default(0)
   last_activity   DateTime @default(now()) @db.Timestamptz(3)
+  created_at      DateTime @default(now()) @db.Timestamptz(3)
   updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   rules           String[]
   moderators      String[]
@@ -175,7 +231,7 @@ model forum_comments {
   user_profile user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
   parent       forum_comments?  @relation("comment_replies", fields: [parent_comment_id], references: [id], onDelete: Cascade)
   replies      forum_comments[] @relation("comment_replies")
-  reactions    comment_reactions[] // NEW
+  reactions    comment_reactions[]
 
   @@map("forum_comments")
 }
@@ -213,6 +269,7 @@ model comment_reactions {
   @@unique([comment_id, user_id, reaction_type])
   @@map("comment_reactions")
 }
+
 //
 // REFERRAL POSTS
 //
@@ -249,6 +306,9 @@ model referral_posts {
   // Relations
   user_profile user_profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade)
   connections  referral_connections[]
+    likes      referral_likes[]
+  bookmarks  referral_bookmarks[]
+  comments   referral_comments[]
 
   @@map("referral_posts")
 }
@@ -310,6 +370,52 @@ model identity_reveals {
   @@map("identity_reveals")
 }
 
+
+model referral_likes {
+  id                String   @id @default(uuid()) @db.Uuid
+  referral_post_id  String   @db.Uuid
+  user_id           String   @db.Uuid
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+  
+  referral_post     referral_posts @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
+  user              user_profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([referral_post_id, user_id])
+  @@index([user_id])
+  @@index([referral_post_id])
+  @@map("referral_likes")
+}
+
+model referral_bookmarks {
+  id                String   @id @default(uuid()) @db.Uuid
+  referral_post_id  String   @db.Uuid
+  user_id           String   @db.Uuid
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+  
+  referral_post     referral_posts @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
+  user              user_profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([referral_post_id, user_id])
+  @@index([user_id])
+  @@index([referral_post_id])
+  @@map("referral_bookmarks")
+}
+
+model referral_comments {
+  id                String   @id @default(uuid()) @db.Uuid
+  referral_post_id  String   @db.Uuid
+  user_id           String   @db.Uuid
+  content           String   @db.Text
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+  updated_at        DateTime @updatedAt @db.Timestamptz(3)
+  
+  referral_post     referral_posts @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
+  user              user_profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([referral_post_id])
+  @@index([user_id])
+  @@map("referral_comments")
+}
 //
 // MENTORSHIP
 //
@@ -317,7 +423,18 @@ model mentorship_relationships {
   id                  String   @id @default(uuid()) @db.Uuid
   mentor_id           String   @db.Uuid
   mentee_id           String   @db.Uuid
-  status              String   @default("pending")
+  
+  // Request details
+  request_topic       String?
+  request_goals_encrypted String?  @db.Text
+  request_background_encrypted String? @db.Text
+  request_availability String?
+  request_communication_method String? @db.VarChar(50)
+  request_urgency     String?   @db.VarChar(20)
+  
+  status              String   @default("pending") @db.VarChar(50)
+  // pending, accepted, active, completed, declined, cancelled
+  
   mentor_skills       String[] @default([])
   mentee_goals_encrypted String?
   meeting_frequency   String?
@@ -325,15 +442,23 @@ model mentorship_relationships {
   completed_sessions  Int      @default(0)
   next_session_at     DateTime? @db.Timestamptz(3)
 
+  // Match score
+  match_score         Int?
+  
+  // Ratings & Feedback
   mentor_rating       Int?
   mentee_rating       Int?
-  mentor_feedback     String?
-  mentee_feedback     String?
+  mentor_feedback_encrypted String? @db.Text
+  mentee_feedback_encrypted String? @db.Text
 
+  // Timestamps
   created_at          DateTime @default(now()) @db.Timestamptz(3)
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
   started_at          DateTime? @db.Timestamptz(3)
   completed_at        DateTime? @db.Timestamptz(3)
+  declined_at         DateTime? @db.Timestamptz(3)
+  cancelled_at        DateTime? @db.Timestamptz(3)
+  last_contact_at     DateTime? @db.Timestamptz(3)
 
   // Relations
   mentor user_profiles @relation("mentor_relationships", fields: [mentor_id], references: [id], onDelete: Cascade)
@@ -341,6 +466,9 @@ model mentorship_relationships {
   sessions mentorship_sessions[]
 
   @@unique([mentor_id, mentee_id])
+  @@index([status])
+  @@index([mentor_id, status])
+  @@index([mentee_id, status])
   @@map("mentorship_relationships")
 }
 
@@ -368,6 +496,98 @@ model mentorship_sessions {
   relationship mentorship_relationships @relation(fields: [relationship_id], references: [id], onDelete: Cascade)
 
   @@map("mentorship_sessions")
+}
+
+model mentorship_requests {
+  id                  String   @id @default(uuid()) @db.Uuid
+  requester_id        String   @db.Uuid
+  target_user_id      String?  @db.Uuid // null for general requests
+  
+  topic               String
+  goals_encrypted     String   @db.Text
+  background_encrypted String? @db.Text
+  availability        String
+  communication_method String  @db.VarChar(50)
+  urgency             String   @db.VarChar(20)
+  
+  request_type        String   @db.VarChar(20) // 'seeking_mentor', 'offering_mentorship'
+  status              String   @default("open") @db.VarChar(50)
+  // open, matched, withdrawn, expired
+  
+  matched_with_id     String?  @db.Uuid
+  matched_at          DateTime? @db.Timestamptz(3)
+  
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  expires_at          DateTime? @db.Timestamptz(3)
+  
+  // Relations
+  requester user_profiles @relation("mentorship_requests", fields: [requester_id], references: [id], onDelete: Cascade)
+  
+  @@index([requester_id])
+  @@index([status])
+  @@index([request_type])
+  @@index([created_at])
+  @@map("mentorship_requests")
+}
+
+
+//
+// MENTORSHIP DIRECT REQUESTS (NEW TABLE)
+//
+model mentorship_direct_requests {
+  id                  String   @id @default(uuid()) @db.Uuid
+  requester_id        String   @db.Uuid
+  target_user_id      String   @db.Uuid
+  request_type        String   @db.VarChar(20) // 'mentor_request', 'mentee_request'
+  message             String   @db.Text
+  
+  // Optional fields for direct requests
+  topic               String?  @db.VarChar(200)
+  goals               String?  @db.Text
+  job_title           String?
+  company             String?
+  years_of_experience String?
+  location            String?
+  career_level        String?
+  bio                 String?  @db.Text
+  is_read_by_requester         Boolean  @default(false)
+  is_read_by_target         Boolean  @default(false)
+  
+  status              String   @default("pending") @db.VarChar(20)
+  // pending, accepted, declined, cancelled
+  
+  response_message    String?  @db.Text
+  responded_at        DateTime? @db.Timestamptz(3)
+  
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  
+  // Relations with explicit names
+  requester user_profiles @relation("direct_request_requester", fields: [requester_id], references: [id], onDelete: Cascade)
+  target_user user_profiles @relation("direct_request_target", fields: [target_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([requester_id, target_user_id], name: "unique_pending_direct_request")
+  @@index([target_user_id, status])
+  @@index([requester_id])
+  @@index([status])
+  @@map("mentorship_direct_requests")
+}
+model mentorship_bookmarks {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+  bookmarked_user_id  String   @db.Uuid
+  notes               String?  @db.Text
+  
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  
+  // Relations
+  user           user_profiles @relation("mentorship_bookmarks_user", fields: [user_id], references: [id], onDelete: Cascade)
+  bookmarked_user user_profiles @relation("mentorship_bookmarks_target", fields: [bookmarked_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id, bookmarked_user_id])
+  @@index([user_id])
+  @@map("mentorship_bookmarks")
 }
 
 //
@@ -464,3 +684,142 @@ model user_follows {
   @@unique([follower_id, following_id])
   @@map("user_follows")
 }
+
+//
+// NOOKS (Anonymous 24-hour safe spaces)
+//
+model nooks {
+  id                  String   @id @default(uuid()) @db.Uuid
+  creator_id          String   @db.Uuid
+  title               String   @db.VarChar(200)
+  description         String
+  urgency             String   @default("medium") @db.VarChar(20) // low, medium, high
+  scope               String   @default("company") @db.VarChar(20) // company, global
+  temperature         String   @default("cool") @db.VarChar(20) // hot, warm, cool
+  hashtags            String[] @default([])
+  
+  // Stats
+  members_count       Int      @default(0)
+  messages_count      Int      @default(0)
+  views_count         Int      @default(0)
+  
+  // Status
+  is_active           Boolean  @default(true)
+  is_locked           Boolean  @default(false)
+  locked_reason       String?
+  
+  // Timestamps
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  last_activity_at    DateTime @default(now()) @db.Timestamptz(3)
+  expires_at          DateTime @db.Timestamptz(3) // Auto-delete after 24 hours
+  
+  // Relations
+  creator             user_profiles      @relation("nook_creator", fields: [creator_id], references: [id], onDelete: Cascade)
+  messages            nook_messages[]
+  members             nook_members[]
+  reactions           nook_reactions[]
+
+  @@index([expires_at])
+  @@index([scope])
+  @@index([is_active])
+  @@index([created_at])
+  @@map("nooks")
+}
+
+model nook_members {
+  id                  String   @id @default(uuid()) @db.Uuid
+  nook_id             String   @db.Uuid
+  user_id             String   @db.Uuid
+  
+  // Member settings
+  is_anonymous        Boolean  @default(true)
+  notifications_enabled Boolean @default(true)
+  
+  // Stats
+  messages_sent       Int      @default(0)
+  
+  joined_at           DateTime @default(now()) @db.Timestamptz(3)
+  last_read_at        DateTime @default(now()) @db.Timestamptz(3)
+  
+  // Relations
+  nook                nooks         @relation(fields: [nook_id], references: [id], onDelete: Cascade)
+  user                user_profiles @relation("nook_memberships", fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([nook_id, user_id])
+  @@index([user_id])
+  @@map("nook_members")
+}
+
+model nook_messages {
+  id                  String   @id @default(uuid()) @db.Uuid
+  nook_id             String   @db.Uuid
+  user_id             String   @db.Uuid
+  parent_message_id   String?  @db.Uuid
+  
+  content             String
+  is_anonymous        Boolean  @default(true)
+  
+  // Moderation
+  is_removed          Boolean  @default(false)
+  removed_reason      String?
+  is_flagged          Boolean  @default(false)
+  flagged_count       Int      @default(0)
+  
+  // Reaction counts
+  heard_count         Int      @default(0)
+  validated_count     Int      @default(0)
+  helpful_count       Int      @default(0)
+  
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  
+  // Relations
+  nook                nooks              @relation(fields: [nook_id], references: [id], onDelete: Cascade)
+  user                user_profiles      @relation("nook_messages", fields: [user_id], references: [id], onDelete: Cascade)
+  parent              nook_messages?     @relation("message_replies", fields: [parent_message_id], references: [id], onDelete: Cascade)
+  replies             nook_messages[]    @relation("message_replies")
+  reactions           nook_message_reactions[]
+  
+  @@index([nook_id])
+  @@index([user_id])
+  @@index([created_at])
+  @@map("nook_messages")
+}
+
+model nook_reactions {
+  id                  String   @id @default(uuid()) @db.Uuid
+  nook_id             String   @db.Uuid
+  user_id             String   @db.Uuid
+  reaction_type       String   @db.VarChar(20) // heard, validated, inspired, etc.
+  
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  
+  // Relations
+  nook                nooks         @relation(fields: [nook_id], references: [id], onDelete: Cascade)
+  user                user_profiles @relation("nook_reactions", fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([nook_id, user_id, reaction_type])
+  @@index([nook_id])
+  @@map("nook_reactions")
+}
+
+model nook_message_reactions {
+  id                  String   @id @default(uuid()) @db.Uuid
+  message_id          String   @db.Uuid
+  user_id             String   @db.Uuid
+  reaction_type       String   @db.VarChar(20) // heard, validated, helpful, supportive
+  
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  
+  // Relations
+  message             nook_messages @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  user                user_profiles @relation("nook_message_reactions", fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([message_id, user_id, reaction_type])
+  @@index([message_id])
+  @@map("nook_message_reactions")
+}
+
+
+

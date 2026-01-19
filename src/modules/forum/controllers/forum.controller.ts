@@ -47,12 +47,31 @@ export class ForumController {
 
   // ========== NEW ENDPOINTS ==========
 
-  @Get('recent-discussions')
+  @Get('metrics/local/:companyName')
+  @ApiOperation({
+    summary: 'Get local scope forum metrics',
+    description:
+      'Fetch metrics for local scope forums based on provided company name',
+  })
+  @ApiParam({ name: 'companyName', description: 'Company Name' })
+  @ApiResponse({
+    status: 200,
+    description: 'Local forum metrics retrieved successfully',
+  })
+  async getLocalForumMetrics(@Param('companyName') companyName: string) {
+    logger.info('Getting local forum metrics for company', {
+      companyName,
+    });
+    return this.forumService.getLocalForumMetrics(companyName);
+  }
+
+  @Get('recent-discussions/:companyName')
   @ApiOperation({
     summary: 'Get recent discussions across all topics',
     description:
-      'Fetch recent discussions across all topics with filtering. Returns global topics and local topics matching user company.',
+      'Fetch recent discussions across all topics with filtering. Returns global topics and local topics matching provided company name.',
   })
+  @ApiParam({ name: 'companyName', description: 'Company Name' })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({
     name: 'sortBy',
@@ -64,7 +83,6 @@ export class ForumController {
     required: false,
     enum: ['all', 'today', 'week', 'month'],
   })
-  @ApiQuery({ name: 'companyName', required: false, type: String })
   @ApiQuery({ name: 'isGlobal', required: false, type: Boolean })
   @ApiQuery({ name: 'category', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -74,11 +92,11 @@ export class ForumController {
     description: 'Recent discussions retrieved successfully',
   })
   async getRecentDiscussions(
+    @Param('companyName') companyName: string,
     @CurrentUser() user: any,
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('timeFilter') timeFilter?: string,
-    @Query('companyName') companyName?: string,
     @Query('isGlobal') isGlobal?: string,
     @Query('category') category?: string,
     @Query('page') page?: string,
@@ -88,39 +106,19 @@ export class ForumController {
       search,
       sortBy: sortBy as any,
       timeFilter: timeFilter as any,
-      companyName, // Use the provided companyName from query params
+      companyName, // Use the provided companyName from path parameter
       isGlobal: isGlobal ? isGlobal === 'true' : undefined,
       category,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 10,
     };
 
-    // FIXED: Pass user.companyName safely (it might be undefined)
     return this.topicService.findRecentDiscussions(
       filters,
       user.userId,
-      user.companyName,
+      companyName, // Pass the companyName from parameter instead of user.companyName
     );
   }
-
-  @Get('metrics/local')
-  @ApiOperation({
-    summary: 'Get local scope forum metrics',
-    description:
-      'Fetch metrics for local scope forums based on user company name',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Local forum metrics retrieved successfully',
-  })
-  async getLocalForumMetrics(@CurrentUser() user: any) {
-    logger.info('Getting local forum metrics for user', {
-      userId: user.userId,
-      companyName: user.companyName,
-    });
-    return this.forumService.getLocalForumMetrics(user.companyName);
-  }
-
   @Get('metrics/global')
   @ApiOperation({
     summary: 'Get global communities forum metrics',
@@ -133,6 +131,30 @@ export class ForumController {
   })
   async getGlobalForumMetrics() {
     return this.forumService.getGlobalForumMetrics();
+  }
+
+  @Get('foundation/:companyName')
+  @ApiOperation({
+    summary: 'Get foundation forums with detailed metrics',
+    description:
+      'Fetch all foundation forums for a company with detailed metrics and analytics',
+  })
+  @ApiParam({ name: 'companyName', description: 'Company Name' })
+  @ApiResponse({
+    status: 200,
+    description: 'Foundation forums with metrics retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No foundation forums found for company',
+  })
+  async getFoundationForumsWithMetrics(
+    @Param('companyName') companyName: string,
+  ) {
+    logger.info('Getting foundation forums with metrics for company', {
+      companyName,
+    });
+    return this.forumService.getFoundationForumsWithMetrics(companyName);
   }
 
   // ========== EXISTING ENDPOINTS (unchanged) ==========

@@ -1,45 +1,120 @@
-// src/common/middleware/rate-limit.middleware.ts
-import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import rateLimit from 'express-rate-limit';
+import { rateLimit } from 'express-rate-limit';
 import logger from '../utils/logger.util';
 
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
   private limiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 100, // 100 requests per IP per window
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req: Request) => {
-      // Use the built-in IP handling that properly supports IPv6
-      const ip = req.ip || 
-                 req.connection.remoteAddress || 
-                 req.socket.remoteAddress ||
-                 (req as any).connection?.socket?.remoteAddress || 
-                 'unknown';
-      
-      // Normalize IPv6 addresses (convert ::ffff:192.168.1.1 to 192.168.1.1)
-      const normalizedIp = ip.includes('::ffff:') ? ip.split('::ffff:')[1] : ip;
-      
-      logger.info('Rate limit key generated', { ip: normalizedIp, path: req.path });
-      return normalizedIp;
+    // Security: Strict limits
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 200, // Max 100 requests per IP per window
+
+    // Security headers compliance
+    standardHeaders: 'draft-7', // RFC compliant headers
+    legacyHeaders: false, // Disable insecure headers
+
+    // Key generator with IPv6 security
+    keyGenerator: (req: Request): string => {
+      // Security: Get real IP behind proxies
+      let ip = this.getSecureClientIp(req);
+
+      // Security: Normalize IPv6 addresses
+      ip = this.normalizeIp(ip);
+
+      // Security: Add user ID if authenticated (prevents IP sharing attacks)
+      const userId = (req as any).user?.userId;
+      if (userId) {
+        return `user:${userId}:ip:${ip}`;
+      }
+
+      return ip;
     },
+
+    // Security: Skip health checks
+    skip: (req: Request): boolean => {
+      // Skip rate limiting for health endpoints
+      const skipPaths = ['/health', '/api/health', '/favicon.ico'];
+      return skipPaths.some((path) => req.path.includes(path));
+    },
+
+    // Security response
     handler: (req: Request, res: Response) => {
-      const ip = req.ip || 'unknown';
-      logger.warn('Rate limit exceeded', {
-        ip,
+      const ip = this.getSecureClientIp(req);
+      const normalizedIp = this.normalizeIp(ip);
+
+      // Security logging
+      logger.warn('RATE_LIMIT_SECURITY_EVENT', {
+        event: 'RATE_LIMIT_EXCEEDED',
+        ip: normalizedIp,
         path: req.path,
         method: req.method,
+        userAgent: req.headers['user-agent'],
+        timestamp: new Date().toISOString(),
+        userId: (req as any).user?.userId || 'anonymous',
       });
-      throw new HttpException(
-        'Too many requests from this IP. Please try again later.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+
+      // Security headers
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+
+      // Security response
+      res.status(429).json({
+        success: false,
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message:
+            'Too many requests from this IP. Please try again in 15 minutes.',
+          retryAfter: '15 minutes',
+        },
+        timestamp: new Date().toISOString(),
+      });
     },
+
+    // Security message
+    message: 'Rate limit exceeded. Please try again later.',
   });
 
   use(req: Request, res: Response, next: NextFunction) {
     this.limiter(req, res, next);
+  }
+
+  // Security: Proper IP extraction
+  private getSecureClientIp(req: Request): string {
+    // Check proxy headers first
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const realIp = req.headers['x-real-ip'];
+
+    if (forwardedFor) {
+      // Get first IP in X-Forwarded-For chain
+      const ips = String(forwardedFor).split(',');
+      return ips[0].trim();
+    }
+
+    if (realIp) {
+      return String(realIp);
+    }
+
+    // Fallback to Express IP
+    return req.ip || req.socket?.remoteAddress || 'unknown';
+  }
+
+  // Security: Normalize IP addresses
+  private normalizeIp(ip: string): string {
+    if (!ip || ip === 'unknown') return 'unknown';
+
+    // Remove IPv6 prefix for IPv4 addresses
+    if (ip.startsWith('::ffff:')) {
+      ip = ip.substring(7);
+    }
+
+    // Remove port
+    const hasPort = ip.includes(':') && !ip.includes('[');
+    if (hasPort) {
+      ip = ip.split(':')[0];
+    }
+
+    return ip;
   }
 }
