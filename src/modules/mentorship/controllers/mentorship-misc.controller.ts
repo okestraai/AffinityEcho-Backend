@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Query,
   Param,
@@ -9,6 +10,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,6 +37,56 @@ export class MentorshipMiscController {
     private readonly profileService: MentorshipProfileService,
     private readonly discoverService: MentorshipDiscoverService,
   ) {}
+
+  @Patch('toggle')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Toggle mentor/mentee active status',
+    description: 'Toggle the active status of mentor or mentee profile section',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['section'],
+      properties: {
+        section: {
+          type: 'string',
+          enum: ['mentor', 'mentee'],
+          example: 'mentor',
+          description: 'Profile section to toggle',
+        },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Profile section toggled successfully',
+    schema: {
+      example: {
+        success: true,
+        message: 'mentor profile activated successfully',
+        data: {
+          isActiveMentor: true,
+          isActiveMentee: false,
+          mentoringAs: 'mentor',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async toggleProfileSection(
+    @CurrentUser() user: any,
+    @Body() body: { section: 'mentor' | 'mentee' },
+  ) {
+    const section = body?.section;
+    if (!section || !['mentor', 'mentee'].includes(section)) {
+      throw new BadRequestException(
+        'section is required and must be "mentor" or "mentee"',
+      );
+    }
+    const userId = user?.userId || user?.sub;
+    return this.profileService.toggleProfileSection(userId, section);
+  }
 
   @Get('notifications')
   @ApiOperation({
@@ -232,5 +284,16 @@ export class MentorshipMiscController {
       goal: goalData.goal,
       userId: user.userId,
     };
+  }
+
+  @Get('profile/:userId')
+  @ApiOperation({ summary: 'Get mentorship profile by user ID' })
+  @ApiParam({ name: 'userId', description: 'User ID' })
+  @ApiOkResponse({ description: 'Profile retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Profile not found' })
+  async getProfileById(
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.profileService.getProfile(userId);
   }
 }

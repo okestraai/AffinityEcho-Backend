@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { RelationshipStatusDto } from '../dto/relationship-status.dto';
 import { RelationshipUpdateDto } from '../dto/relationship-update.dto';
+import { MENTORSHIP_RELATIONSHIP_FIELDS } from '../../../common/constants/select-fields';
 
 @Injectable()
 export class MentorshipRelationshipsService {
@@ -271,7 +272,7 @@ export class MentorshipRelationshipsService {
         .from('mentorship_relationships')
         .update(updatePayload)
         .eq('id', relationshipId)
-        .select()
+        .select(MENTORSHIP_RELATIONSHIP_FIELDS)
         .single();
 
       if (error) {
@@ -327,7 +328,7 @@ export class MentorshipRelationshipsService {
           updated_at: new Date().toISOString(),
         })
         .eq('id', relationshipId)
-        .select()
+        .select(MENTORSHIP_RELATIONSHIP_FIELDS)
         .single();
 
       if (error) {
@@ -397,7 +398,7 @@ export class MentorshipRelationshipsService {
           mentee_feedback_encrypted: reason,
         })
         .eq('id', relationshipId)
-        .select()
+        .select(MENTORSHIP_RELATIONSHIP_FIELDS)
         .single();
 
       if (error) {
@@ -486,7 +487,7 @@ export class MentorshipRelationshipsService {
         .from('mentorship_relationships')
         .update(updateData)
         .eq('id', relationshipId)
-        .select()
+        .select(MENTORSHIP_RELATIONSHIP_FIELDS)
         .single();
 
       if (error) {
@@ -567,7 +568,7 @@ export class MentorshipRelationshipsService {
           mentee_feedback_encrypted: reason,
         })
         .eq('id', relationshipId)
-        .select()
+        .select(MENTORSHIP_RELATIONSHIP_FIELDS)
         .single();
 
       if (error) {

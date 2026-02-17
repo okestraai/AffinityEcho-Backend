@@ -1,3 +1,4 @@
+// messaging.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -103,15 +104,35 @@ export class MessagingService {
         .eq('id', userId)
         .single();
 
+      // Return complete message data for WebSocket broadcast
       return {
         success: true,
         data: {
+          // Message metadata (for backward compatibility)
           message_id: message.id,
           conversation_id: message.conversation_id,
           sent_at: message.created_at,
           recipient_id: recipientId,
           sender_info: senderProfile,
           chat_type: dto.chat_type,
+
+          // Complete message object (for frontend display)
+          message: {
+            id: message.id,
+            conversation_id: message.conversation_id,
+            sender_id: userId,
+            content_encrypted: message.content_encrypted,
+            content_type: message.content_type,
+            file_url: message.file_url,
+            file_name: message.file_name,
+            file_size: message.file_size,
+            file_type: message.file_type,
+            is_delivered: message.is_delivered,
+            is_read: message.is_read,
+            created_at: message.created_at,
+            read_at: message.read_at,
+            sender_info: senderProfile,
+          },
         },
       };
     } catch (error) {
@@ -250,6 +271,122 @@ export class MessagingService {
     } catch (error) {
       logger.error('Failed to get unread count', { error, userId });
       throw new BadRequestException('Failed to get unread count');
+    }
+  }
+
+  // NEW: Set typing status
+  async setTypingStatus(
+    userId: string,
+    conversationId: string,
+    isTyping: boolean,
+  ) {
+    logger.info('Setting typing status', {
+      userId,
+      conversationId,
+      isTyping,
+    });
+
+    try {
+      // Verify conversation exists and user is participant
+      const { data: conversation, error: convError } = await this.admin
+        .from('conversations')
+        .select('id, user1_id, user2_id, is_active')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      if (
+        conversation.user1_id !== userId &&
+        conversation.user2_id !== userId
+      ) {
+        throw new ForbiddenException('Not authorized for this conversation');
+      }
+
+      if (!conversation.is_active) {
+        throw new BadRequestException('Conversation is not active');
+      }
+
+      // Get recipient ID
+      const recipientId =
+        conversation.user1_id === userId
+          ? conversation.user2_id
+          : conversation.user1_id;
+
+      // Get user info for typing notification
+      const { data: userProfile } = await this.admin
+        .from('user_profiles')
+        .select('id, username, avatar')
+        .eq('id', userId)
+        .single();
+
+      return {
+        success: true,
+        data: {
+          user_id: userId,
+          conversation_id: conversationId,
+          is_typing: isTyping,
+          recipient_id: recipientId,
+          user_info: userProfile,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      logger.error('Failed to set typing status', { error, userId });
+      throw new BadRequestException('Failed to set typing status');
+    }
+  }
+
+  // NEW: Get typing status
+  async getTypingStatus(userId: string, conversationId: string) {
+    try {
+      // Verify conversation access
+      const { data: conversation, error: convError } = await this.admin
+        .from('conversations')
+        .select('id, user1_id, user2_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      if (
+        conversation.user1_id !== userId &&
+        conversation.user2_id !== userId
+      ) {
+        throw new ForbiddenException('Not authorized for this conversation');
+      }
+
+      // In a real implementation, this would fetch from Redis or similar
+      // For now, return empty (WebSocket handles real-time typing)
+
+      return {
+        success: true,
+        data: {
+          conversation_id: conversationId,
+          active_typers: [],
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+      logger.error('Failed to get typing status', { error, userId });
+      throw new BadRequestException('Failed to get typing status');
     }
   }
 }

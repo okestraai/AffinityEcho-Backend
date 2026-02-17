@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -520,6 +521,7 @@ export class ReferralController {
     },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: CreateReferralDto })
   async createReferral(
     @CurrentUser() user: any,
     @Body() dto: CreateReferralDto,
@@ -563,6 +565,7 @@ export class ReferralController {
   })
   @ApiResponse({ status: 404, description: 'Referral not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: UpdateReferralDto })
   async updateReferral(
     @CurrentUser() user: any,
     @Param('id') id: string,
@@ -784,6 +787,7 @@ export class ReferralController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: CreateCommentDto })
   async createComment(
     @CurrentUser() user: any,
     @Param('id') id: string,
@@ -815,6 +819,7 @@ export class ReferralController {
   @ApiResponse({ status: 403, description: 'Not authorized' })
   @ApiResponse({ status: 404, description: 'Comment not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: CreateCommentDto })
   async updateComment(
     @CurrentUser() user: any,
     @Param('commentId') commentId: string,
@@ -986,6 +991,7 @@ export class ReferralController {
   })
   @ApiResponse({ status: 404, description: 'Referral not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: SendConnectionRequestDto })
   async sendConnectionRequest(
     @CurrentUser() user: any,
     @Param('referralId') referralId: string,
@@ -1086,6 +1092,7 @@ export class ReferralController {
   @ApiResponse({ status: 403, description: 'Not authorized' })
   @ApiResponse({ status: 404, description: 'Connection not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: UpdateConnectionProgressDto })
   async updateProgress(
     @CurrentUser() user: any,
     @Param('connectionId') connectionId: string,
@@ -1119,6 +1126,7 @@ export class ReferralController {
   @ApiResponse({ status: 403, description: 'Not authorized' })
   @ApiResponse({ status: 404, description: 'Connection not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: AddConnectionNotesDto })
   async addNotes(
     @CurrentUser() user: any,
     @Param('connectionId') connectionId: string,
@@ -1198,6 +1206,7 @@ export class ReferralController {
   @ApiResponse({ status: 403, description: 'Not authorized' })
   @ApiResponse({ status: 404, description: 'Connection not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: RequestIdentityRevealDto })
   async requestIdentityReveal(
     @CurrentUser() user: any,
     @Param('connectionId') connectionId: string,

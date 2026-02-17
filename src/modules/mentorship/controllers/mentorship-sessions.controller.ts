@@ -65,6 +65,7 @@ export class MentorshipSessionsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Relationship not found' })
+  @ApiBody({ type: CreateSessionDto })
   async createSession(
     @Param('relationshipId', ParseUUIDPipe) relationshipId: string,
     @Body() createSessionDto: CreateSessionDto,
@@ -158,6 +159,7 @@ export class MentorshipSessionsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiBody({ type: UpdateSessionDto })
   async updateSession(
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Body() updateSessionDto: UpdateSessionDto,
@@ -188,6 +190,7 @@ export class MentorshipSessionsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiBody({ type: SessionStatusDto })
   async updateSessionStatus(
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @CurrentUser() user: any,

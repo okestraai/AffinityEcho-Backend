@@ -6,19 +6,24 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.b54a90379c1d3bf7d779d5f369e14d2ce361dcf5-audit.json",
     "files": [
         {
-            "date": 1767900914923,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-01-08.log",
-            "hash": "9299c4be92f402b7a455343735eecaef7296984e735916a105de487440c392a9"
+            "date": 1771078960441,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-02-14.log",
+            "hash": "ed47b7d8dffd606afbde89eac40e5ddb2b0a267ba0b089a966612e43ca55fb41"
         },
         {
-            "date": 1768079564480,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-01-10.log",
-            "hash": "2432badf956bddde07c6347e1947607a82adfbcfe0c16d2b2db0a78967db8403"
+            "date": 1771168792160,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-02-15.log",
+            "hash": "85de6426608936dc4ed1bd91aa076c2a97c93967221e749ae6faca1a85b8609f"
         },
         {
-            "date": 1768208582932,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-01-12.log",
-            "hash": "581e239bedf55180c136e450246736c85e2546a1944eaffd82378ca31432a0a5"
+            "date": 1771196742890,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-02-16.log",
+            "hash": "02149b4fba2a01d4ba24996d41477fb469fd67a38a99ee9fff87451457f30306"
+        },
+        {
+            "date": 1771283015960,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-02-17.log",
+            "hash": "a92370e8c343d570ca33cc21919986ed8f6624491bf3876a379d150fcd496dfa"
         }
     ],
     "hashType": "sha256"

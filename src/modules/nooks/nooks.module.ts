@@ -13,9 +13,11 @@ import { ConfigModule } from '@nestjs/config';
 import { NookMemberGuard } from './guards/nook-member.guard';
 import { NookCreatorGuard } from './guards/nook-creator.guard';
 import { NookActiveGuard } from './guards/nook-active.guard';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { EncryptionModule } from '../encryption/encryption.module';
 
 @Module({
-  imports: [JwtModule, ConfigModule],
+  imports: [JwtModule, ConfigModule, NotificationsModule, EncryptionModule],
   controllers: [
     NooksController,
     NookMessagesController,

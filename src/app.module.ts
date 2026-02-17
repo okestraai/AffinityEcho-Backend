@@ -6,7 +6,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ForumModule } from './modules/forum/forum.module';
-import { PrismaModule } from '../prisma/prisma.module';
+
 import { RateLimitMiddleware } from './common/middlewares/rate-limit.middleware';
 import { EncryptionUtil } from './common/utils/encryption.util';
 import configuration from './config/configuration';
@@ -17,6 +17,8 @@ import { NooksModule } from './modules/nooks/nooks.module';
 import { MentorshipModule } from './modules/mentorship/mentorship.module';
 import { ReferralModule } from './modules/referral/referral.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FeedsModule } from './modules/feeds/feeds.module';
 
 @Module({
   imports: [
@@ -27,8 +29,14 @@ import { MessagingModule } from './modules/messaging/messaging.module';
     }),
     ThrottlerModule.forRoot([
       {
+        name: 'default',
         ttl: 60000, // Time to live in milliseconds (1 minute)
-        limit: 10, // Maximum number of requests within TTL
+        limit: 300, // 300 requests per minute
+      },
+      {
+        name: 'messaging',
+        ttl: 10000, // 10 seconds
+        limit: 50, // 50 requests per 10 seconds for messaging endpoints
       },
     ]),
     AuthModule,
@@ -37,9 +45,11 @@ import { MessagingModule } from './modules/messaging/messaging.module';
     NooksModule,
     MentorshipModule,
     ReferralModule,
-    PrismaModule,
+
     EncryptionModule,
     MessagingModule,
+    NotificationsModule,
+    FeedsModule,
   ],
   controllers: [AppController],
   providers: [

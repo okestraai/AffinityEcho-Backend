@@ -4,7 +4,6 @@ import {
   IsString,
   IsArray,
   IsOptional,
-  IsIn,
   IsNumber,
 } from 'class-validator';
 
@@ -89,11 +88,10 @@ export class UpdateMentorProfileDto {
   @IsString()
   company?: string;
 
-  @ApiPropertyOptional({ description: 'Affinity tags', type: [String] })
+  @ApiPropertyOptional({ description: 'Affinity tags', required: false })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  affinityTags?: string[];
+  @IsString()
+  affinityTags?: string; // This is correct for encrypted string
 
   @ApiPropertyOptional({ description: 'Skills', type: [String] })
   @IsOptional()

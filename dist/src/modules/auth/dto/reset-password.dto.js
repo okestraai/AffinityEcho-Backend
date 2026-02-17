@@ -9,18 +9,28 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ResetPasswordDto = void 0;
+exports.ResetPasswordWithOtpDto = void 0;
 const class_validator_1 = require("class-validator");
-class ResetPasswordDto {
+const swagger_1 = require("@nestjs/swagger");
+class ResetPasswordWithOtpDto {
 }
-exports.ResetPasswordDto = ResetPasswordDto;
+exports.ResetPasswordWithOtpDto = ResetPasswordWithOtpDto;
 __decorate([
-    (0, class_validator_1.IsString)(),
+    (0, swagger_1.ApiProperty)({ example: 'user@example.com' }),
+    (0, class_validator_1.IsEmail)(),
     __metadata("design:type", String)
-], ResetPasswordDto.prototype, "token", void 0);
+], ResetPasswordWithOtpDto.prototype, "email", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'newSecurePassword123' }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(6),
     __metadata("design:type", String)
-], ResetPasswordDto.prototype, "password", void 0);
+], ResetPasswordWithOtpDto.prototype, "password", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '123456' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MinLength)(6),
+    (0, class_validator_1.Length)(6, 6),
+    __metadata("design:type", String)
+], ResetPasswordWithOtpDto.prototype, "otp", void 0);
 //# sourceMappingURL=reset-password.dto.js.map

@@ -8,6 +8,7 @@ import { MentorshipDiscoverController } from './controllers/mentorship-discover.
 import { MentorshipBookmarksController } from './controllers/mentorship-bookmarks.controller';
 import { MentorshipMiscController } from './controllers/mentorship-misc.controller';
 import { FollowController } from './controllers/follow.controller';
+import { UserFollowController } from './controllers/user-follow.controller';
 import { MentorshipProfileService } from './services/mentorship-profile.service';
 import { MentorshipDiscoverService } from './services/mentorship-discover.service';
 import { MentorshipRequestsService } from './services/mentorship-requests.service';
@@ -18,9 +19,11 @@ import { FollowService } from './services/follow.service';
 import { MentorshipOwnerGuard } from './guards/mentorship-owner.guard';
 import { MentorRelationshipGuard } from './guards/mentor-relationship.guard';
 import { MentorActiveGuard } from './guards/mentor-active.guard';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { EncryptionModule } from '../encryption/encryption.module';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, NotificationsModule, EncryptionModule],
   controllers: [
     MentorshipProfileController,
     MentorshipRequestsController,
@@ -30,6 +33,7 @@ import { MentorActiveGuard } from './guards/mentor-active.guard';
     MentorshipBookmarksController,
     MentorshipMiscController,
     FollowController,
+    UserFollowController,
   ],
   providers: [
     MentorshipProfileService,

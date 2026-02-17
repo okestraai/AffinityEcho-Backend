@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsString,
@@ -94,8 +94,7 @@ export class CreateMentorProfileDto {
   @IsString({ each: true })
   languages?: string[];
 
-  // OPTIONAL SHARED FIELDS
-  @ApiProperty({ description: 'Affinity tags', required: false })
+  @ApiPropertyOptional({ description: 'Affinity tags' })
   @IsOptional()
   @IsString()
   affinityTags?: string;

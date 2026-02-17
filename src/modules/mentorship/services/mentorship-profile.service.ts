@@ -9,6 +9,7 @@ import { CreateMentorProfileDto } from '../dto/create-mentor-profile.dto';
 import { UpdateMentorProfileDto } from '../dto/update-mentor-profile.dto';
 import { CreateMenteeProfileDto } from '../dto/create-mentee-profile.dto';
 import { UpdateMenteeProfileDto } from '../dto/update-mentee-profile.dto';
+import { USER_PROFILE_MENTORSHIP_FIELDS } from '../../../common/constants/select-fields';
 
 @Injectable()
 export class MentorshipProfileService {
@@ -78,7 +79,7 @@ export class MentorshipProfileService {
         .from('user_profiles')
         .update(updateData)
         .eq('id', userId)
-        .select()
+        .select(USER_PROFILE_MENTORSHIP_FIELDS)
         .single();
 
       if (updateError) {
@@ -159,9 +160,7 @@ export class MentorshipProfileService {
       if (dto.linkedinUrl !== undefined)
         updateData.linkedin_url = dto.linkedinUrl;
       if (dto.affinityTags !== undefined) {
-        updateData.affinity_tags_encrypted = dto.affinityTags?.length
-          ? JSON.stringify(dto.affinityTags)
-          : null;
+        updateData.affinity_tags_encrypted = dto.affinityTags;
       }
 
       // Update user profile
@@ -169,7 +168,7 @@ export class MentorshipProfileService {
         .from('user_profiles')
         .update(updateData)
         .eq('id', userId)
-        .select()
+        .select(USER_PROFILE_MENTORSHIP_FIELDS)
         .single();
 
       if (updateError) {
@@ -253,7 +252,7 @@ export class MentorshipProfileService {
         .from('user_profiles')
         .update(updateData)
         .eq('id', userId)
-        .select()
+        .select(USER_PROFILE_MENTORSHIP_FIELDS)
         .single();
 
       if (updateError) {
@@ -331,9 +330,7 @@ export class MentorshipProfileService {
       if (dto.linkedinUrl !== undefined)
         updateData.linkedin_url = dto.linkedinUrl;
       if (dto.affinityTags !== undefined) {
-        updateData.affinity_tags_encrypted = dto.affinityTags?.length
-          ? JSON.stringify(dto.affinityTags)
-          : null;
+        updateData.affinity_tags_encrypted = dto.affinityTags;
       }
 
       // Update user profile
@@ -341,7 +338,7 @@ export class MentorshipProfileService {
         .from('user_profiles')
         .update(updateData)
         .eq('id', userId)
-        .select()
+        .select(USER_PROFILE_MENTORSHIP_FIELDS)
         .single();
 
       if (updateError) {
@@ -418,7 +415,9 @@ export class MentorshipProfileService {
         helpful_votes_received,
         created_at,
         updated_at,
-        last_active_at
+        last_active_at,
+        is_deleted,
+        is_deactivated
       `,
         )
         .eq('id', userId)
@@ -428,14 +427,9 @@ export class MentorshipProfileService {
         throw new NotFoundException('Profile not found');
       }
 
-      // Parse encrypted fields
-      let affinityTags = [];
-      if (profile.affinity_tags_encrypted) {
-        try {
-          affinityTags = JSON.parse(profile.affinity_tags_encrypted);
-        } catch (e) {
-          affinityTags = [];
-        }
+      // Hide soft-deleted or deactivated profiles
+      if (profile.is_deleted || profile.is_deactivated) {
+        throw new NotFoundException('Profile not found');
       }
 
       // Get follow counts
@@ -469,7 +463,7 @@ export class MentorshipProfileService {
             linkedinUrl: profile.linkedin_url,
             careerLevel: profile.career_level_encrypted,
             company: profile.company_encrypted,
-            affinityTags: affinityTags,
+            affinityTags: profile.affinity_tags_encrypted, // Return encrypted string, not array
           },
 
           // Mentor profile (if active)
@@ -481,6 +475,7 @@ export class MentorshipProfileService {
                 availability: profile.mentor_availability,
                 responseTime: profile.mentor_response_time,
                 style: profile.mentor_style,
+                mentorStyle: profile.mentor_style,
                 languages: profile.mentor_languages || [],
                 hourlyRate: profile.mentor_hourly_rate,
                 isWillingToMentor: profile.is_willing_to_mentor,
@@ -497,6 +492,7 @@ export class MentorshipProfileService {
                 interests: profile.mentee_interests || [],
                 industries: profile.mentee_industries || [],
                 availability: profile.mentee_availability,
+                mentoredStyle: profile.mentored_style,
                 urgency: profile.mentee_urgency,
                 topic: profile.mentee_topic,
                 style: profile.mentored_style,
@@ -514,16 +510,29 @@ export class MentorshipProfileService {
             isActiveMentee: profile.is_active_mentee,
           },
 
-          // Stats
-          stats: {
-            reputationScore: profile.reputation_score,
-            mentorshipSessionsCompleted: profile.mentorship_sessions_completed,
-            totalPosts: profile.total_posts,
-            totalComments: profile.total_comments,
-            helpfulVotesReceived: profile.helpful_votes_received,
-            followersCount: followers?.length || 0,
-            followingCount: following?.length || 0,
-          },
+          // Stats (live counts from actual tables)
+          stats: await (async () => {
+            const [postsResult, commentsResult, topicsResult] = await Promise.all([
+              this.admin.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).eq('is_archived', false),
+              this.admin.from('forum_comments').select('*', { count: 'exact', head: true }).eq('user_id', profile.id),
+              this.admin.from('forum_topics').select('*', { count: 'exact', head: true }).eq('user_id', profile.id),
+            ]);
+            const totalPosts = postsResult.count || 0;
+            const totalComments = commentsResult.count || 0;
+            const totalTopics = topicsResult.count || 0;
+            const mentorshipSessions = profile.mentorship_sessions_completed || 0;
+            const followersCount = followers?.length || 0;
+            const followingCount = following?.length || 0;
+            return {
+              reputationScore: (totalPosts * 5) + (totalComments * 2) + (totalTopics * 5) + (mentorshipSessions * 10) + (followersCount * 2),
+              mentorshipSessionsCompleted: mentorshipSessions,
+              totalPosts,
+              totalComments,
+              totalTopics,
+              followersCount,
+              followingCount,
+            };
+          })(),
 
           // Timestamps
           timestamps: {
@@ -563,12 +572,23 @@ export class MentorshipProfileService {
         .single();
 
       if (profile) {
-        if (section === 'mentor' && profile.is_active_mentee) {
-          updateData.mentoring_as = 'mentee';
-        } else if (section === 'mentee' && profile.is_active_mentor) {
+        const activeMentor = section === 'mentor' ? false : profile.is_active_mentor;
+        const activeMentee = section === 'mentee' ? false : profile.is_active_mentee;
+
+        if (activeMentor && activeMentee) {
+          updateData.mentoring_as = 'both';
+        } else if (activeMentor) {
           updateData.mentoring_as = 'mentor';
+        } else if (activeMentee) {
+          updateData.mentoring_as = 'mentee';
         } else {
           updateData.mentoring_as = null;
+        }
+
+        // If both sections are now inactive, soft-deactivate the entire profile
+        if (!activeMentor && !activeMentee) {
+          updateData.is_deactivated = true;
+          updateData.deactivated_at = new Date().toISOString();
         }
       }
 
@@ -576,7 +596,7 @@ export class MentorshipProfileService {
         .from('user_profiles')
         .update(updateData)
         .eq('id', userId)
-        .select()
+        .select('id, is_active_mentor, is_active_mentee, mentoring_as')
         .single();
 
       if (error) {
@@ -592,6 +612,77 @@ export class MentorshipProfileService {
     } catch (error) {
       console.error('Deactivate profile section error:', error);
       throw new BadRequestException('Failed to deactivate profile section');
+    }
+  }
+
+  async toggleProfileSection(userId: string, section: 'mentor' | 'mentee') {
+    try {
+      const { data: profile, error: fetchError } = await this.admin
+        .from('user_profiles')
+        .select('is_active_mentor, is_active_mentee, is_willing_to_mentor')
+        .eq('id', userId)
+        .single();
+
+      if (fetchError || !profile) {
+        throw new NotFoundException('User not found');
+      }
+
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+
+      let newState: boolean;
+
+      if (section === 'mentor') {
+        newState = !profile.is_active_mentor;
+        updateData.is_active_mentor = newState;
+        updateData.is_willing_to_mentor = newState;
+      } else {
+        newState = !profile.is_active_mentee;
+        updateData.is_active_mentee = newState;
+      }
+
+      // Determine new mentoring_as value
+      const activeMentor = section === 'mentor' ? newState : profile.is_active_mentor;
+      const activeMentee = section === 'mentee' ? newState : profile.is_active_mentee;
+
+      if (activeMentor && activeMentee) {
+        updateData.mentoring_as = 'both';
+      } else if (activeMentor) {
+        updateData.mentoring_as = 'mentor';
+      } else if (activeMentee) {
+        updateData.mentoring_as = 'mentee';
+      } else {
+        updateData.mentoring_as = null;
+      }
+
+      // Reactivate profile if a section is being turned on
+      if (newState) {
+        updateData.is_deactivated = false;
+        updateData.deactivated_at = null;
+      }
+
+      const { data, error } = await this.admin
+        .from('user_profiles')
+        .update(updateData)
+        .eq('id', userId)
+        .select(USER_PROFILE_MENTORSHIP_FIELDS)
+        .single();
+
+      if (error) {
+        throw new BadRequestException(`Failed to toggle ${section} status`);
+      }
+
+      return {
+        success: true,
+        message: `${section} profile ${newState ? 'activated' : 'deactivated'} successfully`,
+        data,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(`Failed to toggle ${section} status`);
     }
   }
 

@@ -8,30 +8,45 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
-const auth_controller_1 = require("./controllers/auth.controller");
-const auth_service_1 = require("./services/auth.service");
 const jwt_1 = require("@nestjs/jwt");
 const config_1 = require("@nestjs/config");
-const encryption_util_1 = require("../../common/utils/encryption.util");
+const auth_controller_1 = require("./controllers/auth.controller");
+const auth_service_1 = require("./services/auth.service");
+const onboarding_service_1 = require("./services/onboarding.service");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
+const jwt_strategy_1 = require("./strategies/jwt.strategy");
+const encryption_util_1 = require("../../common/utils/encryption.util");
+const email_service_1 = require("../../common/utils/email/email.service");
+const passport_1 = require("@nestjs/passport");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
 exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            passport_1.PassportModule,
             jwt_1.JwtModule.registerAsync({
                 imports: [config_1.ConfigModule],
-                useFactory: (config) => ({
-                    secret: config.get('JWT_SECRET'),
-                    signOptions: { expiresIn: '15m' },
+                useFactory: async (configService) => ({
+                    secret: configService.get('JWT_SECRET'),
+                    signOptions: {
+                        expiresIn: configService.get('JWT_EXPIRES_IN', '24h'),
+                    },
                 }),
                 inject: [config_1.ConfigService],
             }),
+            config_1.ConfigModule,
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, encryption_util_1.EncryptionUtil, jwt_auth_guard_1.JwtAuthGuard],
-        exports: [auth_service_1.AuthService, jwt_auth_guard_1.JwtAuthGuard],
+        providers: [
+            auth_service_1.AuthService,
+            jwt_auth_guard_1.JwtAuthGuard,
+            jwt_strategy_1.JwtStrategy,
+            encryption_util_1.EncryptionUtil,
+            email_service_1.EmailService,
+            onboarding_service_1.OnboardingService,
+        ],
+        exports: [auth_service_1.AuthService, jwt_auth_guard_1.JwtAuthGuard, jwt_1.JwtModule],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

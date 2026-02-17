@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
 import {
   CreateReferralDto,
@@ -21,6 +22,7 @@ export class ReferralService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -152,6 +154,7 @@ export class ReferralService {
               ? {
                   id: profile.id,
                   username: profile.username,
+                  display_name: profile.username,
                   avatar: profile.avatar,
                   jobTitle: profile.job_title,
                   company: await this.encryption.decrypt(
@@ -167,6 +170,45 @@ export class ReferralService {
           };
         }),
       );
+
+      // Apply identity reveal to author display names (including own posts)
+      const allAuthorUserIds = transformedPosts
+        .filter((p) => p.author)
+        .map((p) => p.user_id);
+      const otherAuthorUserIds = allAuthorUserIds.filter((id) => id !== userId);
+      const revealedIds = otherAuthorUserIds.length > 0
+        ? await this.identityReveal.getRevealedUserIds(userId, otherAuthorUserIds)
+        : new Set<string>();
+
+      // Collect IDs that need encrypted name lookup (own + revealed)
+      const needNameIds = [...new Set(allAuthorUserIds.filter(
+        (id) => id === userId || revealedIds.has(id),
+      ))];
+
+      if (needNameIds.length > 0) {
+        const { data: profiles } = await this.admin
+          .from('user_profiles')
+          .select('id, first_name_encrypted, last_name_encrypted')
+          .in('id', needNameIds);
+
+        const nameMap = new Map<string, { first: string | null; last: string | null }>();
+        (profiles || []).forEach((p: any) => {
+          nameMap.set(p.id, {
+            first: p.first_name_encrypted,
+            last: p.last_name_encrypted,
+          });
+        });
+
+        transformedPosts.forEach((post) => {
+          if (post.author && (post.user_id === userId || revealedIds.has(post.user_id))) {
+            const names = nameMap.get(post.user_id);
+            if (names) {
+              const realName = this.identityReveal.decryptRealName(names.first, names.last);
+              if (realName) post.author.display_name = realName;
+            }
+          }
+        });
+      }
 
       const result = {
         success: true,
@@ -324,16 +366,29 @@ export class ReferralService {
           lastActivityAt: post.last_activity_at,
           expiresAt: post.expires_at,
           author: profile
-            ? {
-                id: profile.id,
-                username: profile.username,
-                avatar: profile.avatar,
-                jobTitle: profile.job_title,
-                company: this.encryption.decrypt(profile.company_encrypted),
-                bio: profile.bio,
-                skills: profile.skills,
-                yearsExperience: profile.years_experience,
-              }
+            ? await (async () => {
+                let displayName = profile.username;
+                const isOwnPost = profile.id === userId;
+                const revealed = isOwnPost || await this.identityReveal.isRevealed(userId, profile.id);
+                if (revealed) {
+                  const realName = this.identityReveal.decryptRealName(
+                    profile.first_name_encrypted,
+                    profile.last_name_encrypted,
+                  );
+                  if (realName) displayName = realName;
+                }
+                return {
+                  id: profile.id,
+                  username: profile.username,
+                  display_name: displayName,
+                  avatar: profile.avatar,
+                  jobTitle: profile.job_title,
+                  company: this.encryption.decrypt(profile.company_encrypted),
+                  bio: profile.bio,
+                  skills: profile.skills,
+                  yearsExperience: profile.years_experience,
+                };
+              })()
             : null,
           isLiked: Array.isArray(referral_likes) && referral_likes.length > 0,
           isBookmarked:
@@ -691,7 +746,7 @@ export class ReferralService {
       const [profilesResult, interactionsResult] = await Promise.all([
         this.admin
           .from('user_profiles')
-          .select('id, username, avatar, job_title, company_encrypted')
+          .select('id, username, avatar, job_title, company_encrypted, first_name_encrypted, last_name_encrypted')
           .in('id', userIds),
         this.getUserInteractions(userId),
       ]);
@@ -699,6 +754,10 @@ export class ReferralService {
       const profiles = profilesResult.data || [];
       const { likedIds, bookmarkedIds } = interactionsResult;
       const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+      // Get revealed IDs for identity reveal (own posts always get real name)
+      const otherUserIds = userIds.filter((id) => id !== userId);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherUserIds);
 
       // Transform results
       const transformedResults = await Promise.all(
@@ -712,6 +771,16 @@ export class ReferralService {
                 )
               : Promise.resolve(null),
           ]);
+
+          let displayName = profile?.username;
+          const isOwnPost = post.user_id === userId;
+          if (profile && (isOwnPost || revealedIds.has(profile.id))) {
+            const realName = this.identityReveal.decryptRealName(
+              profile.first_name_encrypted,
+              profile.last_name_encrypted,
+            );
+            if (realName) displayName = realName;
+          }
 
           return {
             id: post.id,
@@ -737,6 +806,7 @@ export class ReferralService {
               ? {
                   id: profile.id,
                   username: profile.username,
+                  display_name: displayName,
                   avatar: profile.avatar,
                   jobTitle: profile.job_title,
                   company: this.encryption.decrypt(profile.company_encrypted),

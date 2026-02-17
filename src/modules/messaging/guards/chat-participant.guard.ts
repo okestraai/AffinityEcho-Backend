@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { ConfigService } from '@nestjs/config';
+import logger from '../../../common/utils/logger.util';
 
 @Injectable()
 export class ChatParticipantGuard implements CanActivate {
@@ -18,7 +19,22 @@ export class ChatParticipantGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const conversationId = request.params.id || request.body.conversation_id;
+
+    // Try different possible property names for user ID
+    const userId = user?.id || user?.userId || user?.sub || user?.user_id;
+
+    if (!userId) {
+      logger.warn('No user ID found in request', { module: 'ChatParticipantGuard' });
+      throw new ForbiddenException('User ID not found');
+    }
+
+    // Get conversation ID from different possible locations
+    const conversationId =
+      request.params?.id ||
+      request.params?.conversationId ||
+      request.params?.conversation_id ||
+      request.body?.conversation_id ||
+      request.query?.conversation_id;
 
     if (!conversationId) {
       throw new ForbiddenException('Conversation ID is required');
@@ -35,10 +51,12 @@ export class ChatParticipantGuard implements CanActivate {
         throw new ForbiddenException('Conversation not found');
       }
 
-      if (
-        conversation.user1_id !== user.userId &&
-        conversation.user2_id !== user.userId
-      ) {
+      // Convert both to strings for comparison
+      const user1Id = String(conversation.user1_id);
+      const user2Id = String(conversation.user2_id);
+      const currentUserId = String(userId);
+
+      if (user1Id !== currentUserId && user2Id !== currentUserId) {
         throw new ForbiddenException(
           'You are not a participant in this conversation',
         );
@@ -47,6 +65,7 @@ export class ChatParticipantGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof ForbiddenException) throw error;
+      logger.error('Failed to verify conversation access', { module: 'ChatParticipantGuard', error });
       throw new ForbiddenException('Failed to verify conversation access');
     }
   }

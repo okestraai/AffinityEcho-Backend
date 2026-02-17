@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
   IsOptional,
@@ -67,59 +67,46 @@ export class CreateMenteeProfileDto {
   communicationMethod!: string;
 
   // OPTIONAL MENTEE FIELDS
-  @ApiProperty({ description: 'Mentee bio', required: false })
+  @ApiPropertyOptional({ description: 'Mentee bio' })
   @IsOptional()
   @IsString()
   menteeBio?: string;
 
-  @ApiProperty({ description: 'Mentored style', required: false })
+  @ApiPropertyOptional({ description: 'Mentored style' })
   @IsOptional()
   @IsString()
   mentoredStyle?: string;
 
-  @ApiProperty({
-    description: 'Mentee interests',
-    type: [String],
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Mentee interests', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   interests?: string[];
 
-  @ApiProperty({
-    description: 'Mentee industries',
-    type: [String],
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Mentee industries', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   menteeIndustries?: string[];
 
-  @ApiProperty({
-    description: 'Mentee languages',
-    type: [String],
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Mentee languages', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   menteeLanguages?: string[];
 
-  // OPTIONAL SHARED FIELDS
-  @ApiProperty({ description: 'Affinity tags', required: false })
+  @ApiPropertyOptional({ description: 'Affinity tags' })
   @IsOptional()
   @IsString()
   affinityTags?: string;
 
-  @ApiProperty({ description: 'Skills', type: [String], required: false })
+  @ApiPropertyOptional({ description: 'Skills', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   skills?: string[];
 
-  @ApiProperty({ description: 'LinkedIn URL', required: false })
+  @ApiPropertyOptional({ description: 'LinkedIn URL' })
   @IsOptional()
   @IsString()
   linkedinUrl?: string;

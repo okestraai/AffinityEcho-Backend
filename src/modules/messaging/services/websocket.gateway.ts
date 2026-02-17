@@ -8,27 +8,31 @@ import {
   OnGatewayDisconnect,
   OnGatewayInit,
 } from '@nestjs/websockets';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { WsJwtGuard } from '../../../common/guards/ws-jwt.guard';
 import { MessagingService } from './messaging.service';
-import logger from '../../../common/utils/logger.util';
+import { CORS_CONFIG } from '../../../common/config/cors.config';
 
 interface ConnectedUser {
   socketId: string;
   userId: string;
   username: string;
-  lastActive: Date;
   conversations: string[];
+  lastActive: Date;
 }
 
 @WebSocketGateway({
+  path: '/ws/socket.io',
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
+    origin: CORS_CONFIG.origin,
+    credentials: CORS_CONFIG.credentials,
+    methods: ['GET', 'POST'],
+    allowedHeaders: CORS_CONFIG.allowedHeaders,
   },
-  namespace: 'chat',
   transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
 })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -36,184 +40,351 @@ export class ChatGateway
   @WebSocketServer()
   server!: Server;
 
-  private connectedUsers = new Map<string, ConnectedUser>();
-  private typingUsers = new Map<
-    string,
-    { conversationId: string; timeout: NodeJS.Timeout }
-  >();
+  private readonly logger = new Logger(ChatGateway.name);
+  private users = new Map<string, ConnectedUser>();
 
   constructor(private readonly messagingService: MessagingService) {}
 
   afterInit(server: Server) {
-    logger.info('WebSocket Gateway initialized', {
-      namespace: 'chat',
-    });
+    this.logger.log('🔌 WebSocket Gateway initialized');
+    this.logger.log(`📍 Path: /ws/socket.io`);
+    this.logger.log(`🌐 CORS Origins: ${JSON.stringify(CORS_CONFIG.origin)}`);
   }
 
-  /* ----------------------------- CONNECTION ----------------------------- */
-
-  @UseGuards(WsJwtGuard)
   async handleConnection(client: Socket) {
-    const user = client.data.user;
+    try {
+      this.logger.log(`🔗 Client attempting connection: ${client.id}`);
+      this.logger.log(`📋 Handshake auth:`, client.handshake.auth);
+      this.logger.log(`📋 Handshake headers:`, {
+        authorization:
+          client.handshake.headers?.authorization?.substring(0, 30) + '...',
+        origin: client.handshake.headers?.origin,
+      });
 
-    if (!user) {
+      // Don't validate token here - let WsJwtGuard handle it
+      // Just send initial connection confirmation
+      client.emit('connected', {
+        socketId: client.id,
+        message: 'WebSocket connection established. Please authenticate.',
+        timestamp: new Date().toISOString(),
+      });
+
+      this.logger.log(`✅ Client connected (pending auth): ${client.id}`);
+    } catch (error) {
+      this.logger.error(`❌ Connection error for ${client.id}:`, error);
+      client.emit('error', { message: 'Connection failed' });
       client.disconnect();
-      return;
     }
-
-    this.connectedUsers.set(client.id, {
-      socketId: client.id,
-      userId: user.userId,
-      username: user.username,
-      lastActive: new Date(),
-      conversations: [],
-    });
-
-    client.join(`user:${user.userId}`);
-
-    client.emit('connected', {
-      event: 'connected',
-      payload: {
-        userId: user.userId,
-        username: user.username,
-      },
-    });
-
-    logger.info('Client connected', {
-      userId: user.userId,
-      socketId: client.id,
-    });
   }
 
   handleDisconnect(client: Socket) {
-    const user = this.connectedUsers.get(client.id);
+    const user = this.users.get(client.id);
+
+    if (user) {
+      // Leave all conversation rooms
+      user.conversations.forEach((id) => client.leave(`conversation:${id}`));
+      this.users.delete(client.id);
+
+      // Notify others
+      this.server.emit('user_offline', {
+        userId: user.userId,
+        username: user.username,
+      });
+
+      this.logger.log(`👋 User disconnected: ${user.username} (${client.id})`);
+    } else {
+      this.logger.log(`👋 Client disconnected: ${client.id}`);
+    }
+  }
+
+  /* -------------------- AUTHENTICATION -------------------- */
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('authenticate')
+  async handleAuthenticate(@ConnectedSocket() client: Socket) {
+    try {
+      const user = client.data.user;
+
+      if (!user) {
+        this.logger.error(`❌ No user data after guard: ${client.id}`);
+        client.emit('auth_error', { message: 'Authentication failed' });
+        client.disconnect();
+        return;
+      }
+
+      // Store user in connected users map
+      this.users.set(client.id, {
+        socketId: client.id,
+        userId: user.userId,
+        username: user.username,
+        conversations: [],
+        lastActive: new Date(),
+      });
+
+      // Join user's personal room
+      client.join(`user:${user.userId}`);
+
+      // Send authentication success
+      client.emit('authenticated', {
+        userId: user.userId,
+        username: user.username,
+        email: user.email,
+        socketId: client.id,
+        timestamp: new Date().toISOString(),
+      });
+
+      this.logger.log(`✅ User authenticated: ${user.username} (${client.id})`);
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Authentication failed';
+      this.logger.error(`❌ Authentication error: ${errorMessage}`);
+      client.emit('auth_error', { message: errorMessage });
+      client.disconnect();
+    }
+  }
+
+  /* -------------------- CONVERSATIONS -------------------- */
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('join_conversation')
+  async handleJoin(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() { conversationId }: any,
+  ) {
+    const user = this.users.get(client.id);
+    if (!user) {
+      this.logger.error('❌ join_conversation: User not authenticated');
+      client.emit('error', { message: 'User not authenticated' });
+      return;
+    }
+
+    const room = `conversation:${conversationId}`;
+    client.join(room);
+
+    if (!user.conversations.includes(conversationId)) {
+      user.conversations.push(conversationId);
+    }
+
+    // Get room info for debugging
+    const roomClients = await this.server.in(room).fetchSockets();
+
+    client.emit('joined_conversation', { conversationId });
+    client.to(room).emit('user_joined', {
+      userId: user.userId,
+      username: user.username,
+    });
+
+    this.logger.log(`📥 ${user.username} joined conversation: ${conversationId}`, {
+      room,
+      socketId: client.id,
+      totalClientsInRoom: roomClients.length,
+      clientIds: roomClients.map((s) => s.id),
+    });
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('leave_conversation')
+  handleLeave(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() { conversationId }: any,
+  ) {
+    const user = this.users.get(client.id);
     if (!user) return;
 
-    user.conversations.forEach((convId) =>
-      client.leave(`conversation:${convId}`),
+    client.leave(`conversation:${conversationId}`);
+    user.conversations = user.conversations.filter(
+      (id) => id !== conversationId,
     );
 
-    this.connectedUsers.delete(client.id);
-
-    logger.info('Client disconnected', {
+    client.to(`conversation:${conversationId}`).emit('user_left', {
       userId: user.userId,
-      socketId: client.id,
+      username: user.username,
     });
+
+    this.logger.log(`📤 ${user.username} left conversation: ${conversationId}`);
   }
 
-  /* ----------------------------- CONVERSATIONS ----------------------------- */
+  /* -------------------- MESSAGES -------------------- */
 
-  @SubscribeMessage('join_conversation')
   @UseGuards(WsJwtGuard)
-  handleJoinConversation(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() { conversationId }: { conversationId: string },
-  ) {
-    client.join(`conversation:${conversationId}`);
-
-    const connectedUser = this.connectedUsers.get(client.id);
-    if (
-      connectedUser &&
-      !connectedUser.conversations.includes(conversationId)
-    ) {
-      connectedUser.conversations.push(conversationId);
-    }
-
-    client.to(`conversation:${conversationId}`).emit('user_joined', {
-      payload: { userId: connectedUser?.userId },
-    });
-  }
-
-  @SubscribeMessage('leave_conversation')
-  @UseGuards(WsJwtGuard)
-  handleLeaveConversation(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() { conversationId }: { conversationId: string },
-  ) {
-    client.leave(`conversation:${conversationId}`);
-
-    const connectedUser = this.connectedUsers.get(client.id);
-    if (connectedUser) {
-      connectedUser.conversations = connectedUser.conversations.filter(
-        (id) => id !== conversationId,
-      );
-    }
-  }
-
-  /* ----------------------------- MESSAGES ----------------------------- */
-
   @SubscribeMessage('send_message')
-  @UseGuards(WsJwtGuard)
-  async handleSendMessage(
+  async sendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: any,
+    @MessageBody() payload: any,
   ) {
+    try {
+      const user = client.data.user;
+      if (!user) {
+        this.logger.error('❌ send_message: User not authenticated');
+        client.emit('message_error', { message: 'User not authenticated' });
+        return;
+      }
+
+      this.logger.log(`📨 send_message received from ${user.username}`, {
+        payload,
+        socketId: client.id,
+      });
+
+      const result = await this.messagingService.sendMessage(
+        user.userId,
+        payload,
+      );
+
+      const room = `conversation:${result.data.conversation_id}`;
+      const roomClients = await this.server.in(room).fetchSockets();
+
+      this.logger.log(`🔊 Emitting new_message to room: ${room}`, {
+        messageId: result.data.message_id,
+        conversationId: result.data.conversation_id,
+        sender: user.username,
+        roomSize: roomClients.length,
+        clientsInRoom: roomClients.map((s) => s.id),
+        hasMessageContent: !!result.data.message?.content_encrypted,
+      });
+
+      // Emit complete message data to conversation room
+      this.server.to(room).emit('new_message', {
+        success: true,
+        data: result.data.message, // Send the complete message object
+        metadata: {
+          recipient_id: result.data.recipient_id,
+          chat_type: result.data.chat_type,
+        },
+      });
+
+      // Confirm to sender with message details
+      client.emit('message_sent', {
+        success: true,
+        message_id: result.data.message_id,
+        conversation_id: result.data.conversation_id,
+        created_at: result.data.sent_at,
+      });
+
+      this.logger.log(
+        `✅ Message sent by ${user.username} in conversation ${result.data.conversation_id}`,
+      );
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to send message';
+      this.logger.error('❌ Error sending message:', {
+        error: error.message,
+        stack: error.stack,
+      });
+      client.emit('message_error', {
+        message: errorMessage,
+      });
+    }
+  }
+
+  /* -------------------- READ RECEIPTS -------------------- */
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('mark_as_read')
+  async markRead(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+    try {
+      await this.messagingService.markAsRead(
+        client.data.user.userId,
+        data.messageId,
+        data.conversationId,
+      );
+
+      // Notify conversation participants
+      this.server
+        .to(`conversation:${data.conversationId}`)
+        .emit('message_read', {
+          messageId: data.messageId,
+          userId: client.data.user.userId,
+        });
+    } catch (error: any) {
+      this.logger.error('❌ Error marking as read:', error?.message || error);
+    }
+  }
+
+  /* -------------------- TYPING INDICATORS -------------------- */
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('typing_start')
+  typingStart(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
     const user = client.data.user;
     if (!user) return;
 
-    try {
-      const result = await this.messagingService.sendMessage(user.userId, data);
-
-      if (!result.success) return;
-
-      this.server
-        .to(`conversation:${result.data.conversation_id}`)
-        .emit('new_message', {
-          payload: result.data,
-        });
-
-      client.emit('message_sent', {
-        payload: {
-          message_id: result.data.message_id,
-        },
-      });
-    } catch (error) {
-      logger.error('Send message failed', error);
-      client.emit('message_error', { message: 'SEND_FAILED' });
-    }
+    client.to(`conversation:${data.conversationId}`).emit('typing_start', {
+      userId: user.userId,
+      username: user.username,
+      conversation_id: data.conversationId,
+    });
   }
 
-  /* ----------------------------- TYPING ----------------------------- */
-
-  @SubscribeMessage('typing_start')
   @UseGuards(WsJwtGuard)
-  handleTypingStart(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() { conversationId }: { conversationId: string },
-  ) {
-    const timeout = setTimeout(() => {
-      this.typingUsers.delete(client.id);
-      client.to(`conversation:${conversationId}`).emit('typing_end');
-    }, 3000);
-
-    this.typingUsers.set(client.id, { conversationId, timeout });
-
-    client.to(`conversation:${conversationId}`).emit('typing_start');
-  }
-
   @SubscribeMessage('typing_end')
+  typingEnd(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+    const user = client.data.user;
+    if (!user) return;
+
+    client.to(`conversation:${data.conversationId}`).emit('typing_end', {
+      userId: user.userId,
+      username: user.username,
+      conversation_id: data.conversationId,
+    });
+  }
+
+  /* -------------------- PING/PONG -------------------- */
+
+  @SubscribeMessage('ping')
+  ping(@ConnectedSocket() client: Socket) {
+    client.emit('pong', { timestamp: Date.now() });
+  }
+
+  /* -------------------- DEBUG HELPERS -------------------- */
+
   @UseGuards(WsJwtGuard)
-  handleTypingEnd(@ConnectedSocket() client: Socket) {
-    const entry = this.typingUsers.get(client.id);
-    if (!entry) return;
+  @SubscribeMessage('debug_room_info')
+  async debugRoomInfo(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() { conversationId }: any,
+  ) {
+    const user = this.users.get(client.id);
+    if (!user) return;
 
-    clearTimeout(entry.timeout);
-    this.typingUsers.delete(client.id);
+    const room = `conversation:${conversationId}`;
+    const roomClients = await this.server.in(room).fetchSockets();
+    const userRooms = Array.from(client.rooms);
 
-    client.to(`conversation:${entry.conversationId}`).emit('typing_end');
+    const debugInfo = {
+      conversationId,
+      room,
+      socketId: client.id,
+      username: user.username,
+      userConversations: user.conversations,
+      socketRooms: userRooms,
+      isInRoom: userRooms.includes(room),
+      roomSize: roomClients.length,
+      clientsInRoom: roomClients.map((s) => ({
+        id: s.id,
+        rooms: Array.from(s.rooms),
+      })),
+    };
+
+    this.logger.log(`🐛 Debug Room Info for ${user.username}:`, debugInfo);
+    client.emit('debug_room_info_response', debugInfo);
   }
 
-  /* ----------------------------- HELPERS ----------------------------- */
+  /* -------------------- HELPER METHODS -------------------- */
 
-  getUserSockets(userId: string): string[] {
-    return Array.from(this.connectedUsers.entries())
-      .filter(([_, user]) => user.userId === userId)
-      .map(([socketId]) => socketId);
+  getConnectedUsers(): ConnectedUser[] {
+    return Array.from(this.users.values());
   }
 
-  getOnlineUsers(conversationId: string) {
-    return Array.from(this.connectedUsers.values()).filter((u) =>
-      u.conversations.includes(conversationId),
+  isUserConnected(userId: string): boolean {
+    return Array.from(this.users.values()).some(
+      (user) => user.userId === userId,
     );
+  }
+
+  /**
+   * Emit an event to a specific user's personal room.
+   * Used by NotificationsService to push real-time notifications.
+   */
+  emitToUser(userId: string, event: string, payload: any) {
+    this.server.to(`user:${userId}`).emit(event, payload);
+    this.logger.log(`📡 Emitted '${event}' to user:${userId}`);
   }
 }

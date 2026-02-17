@@ -118,16 +118,7 @@ export class MentorshipChatController {
     summary: 'Schedule mentorship session',
     description: 'Schedule a new mentorship session',
   })
-  @ApiBody({
-    schema: {
-      example: {
-        relationship_id: 'uuid',
-        scheduled_at: '2024-01-15T14:00:00Z',
-        duration_minutes: 60,
-        agenda: 'Career progression discussion',
-      },
-    },
-  })
+  @ApiBody({ schema: { type: 'object', properties: { date: { type: 'string' }, duration: { type: 'number' }, notes: { type: 'string' } } } })
   @ApiResponse({
     status: 201,
     description: 'Session scheduled successfully',

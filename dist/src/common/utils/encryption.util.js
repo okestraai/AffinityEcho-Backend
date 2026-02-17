@@ -51,14 +51,21 @@ let EncryptionUtil = class EncryptionUtil {
         this.config = config;
         this.algorithm = 'aes-256-gcm';
         const key = this.config.get('ENCRYPTION_KEY');
-        if (!key || key.length !== 44)
-            throw new Error('ENCRYPTION_KEY must be 32-byte base64');
+        if (!key || key.length !== 44) {
+            throw new Error('ENCRYPTION_KEY must be a 44-character base64 string (32 bytes)');
+        }
         this.key = Buffer.from(key, 'base64');
+        if (this.key.length !== 32) {
+            throw new Error(`Invalid key length: ${this.key.length} bytes. Expected 32 bytes.`);
+        }
     }
     encrypt(text) {
         const iv = crypto.randomBytes(12);
         const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
-        const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+        const encrypted = Buffer.concat([
+            cipher.update(text, 'utf8'),
+            cipher.final(),
+        ]);
         const tag = cipher.getAuthTag();
         return Buffer.concat([iv, tag, encrypted]).toString('base64');
     }

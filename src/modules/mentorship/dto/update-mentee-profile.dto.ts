@@ -90,11 +90,11 @@ export class UpdateMenteeProfileDto {
   @IsString()
   company?: string;
 
-  @ApiPropertyOptional({ description: 'Affinity tags', type: [String] })
+  // Change to:
+  @ApiPropertyOptional({ description: 'Affinity tags' })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  affinityTags?: string[];
+  @IsString()
+  affinityTags?: string;
 
   @ApiPropertyOptional({ description: 'Skills', type: [String] })
   @IsOptional()

@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import {
   CreateConversationDto,
   GetConversationsDto,
@@ -21,6 +22,7 @@ export class ConversationsService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -32,10 +34,15 @@ export class ConversationsService {
     });
 
     try {
-      // Check if user exists
+      // Prevent self-conversation
+      if (userId === dto.other_user_id) {
+        throw new BadRequestException('Cannot create a conversation with yourself');
+      }
+
+      // Check if user exists and get their messaging preference
       const { data: otherUser, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar')
+        .select('id, username, avatar, allow_messages_from')
         .eq('id', dto.other_user_id)
         .single();
 
@@ -43,23 +50,70 @@ export class ConversationsService {
         throw new NotFoundException('User not found');
       }
 
-      // Check if conversation already exists
-      const { data: existingConv } = await this.admin
+      // Block check — prevent conversations between blocked users
+      const { data: block } = await this.admin
+        .from('user_blocks')
+        .select('id')
+        .or(
+          `and(blocker_id.eq.${userId},blocked_id.eq.${dto.other_user_id}),and(blocker_id.eq.${dto.other_user_id},blocked_id.eq.${userId})`,
+        )
+        .maybeSingle();
+
+      if (block) {
+        throw new ForbiddenException('Cannot message this user');
+      }
+
+      // Enforce allow_messages_from preference
+      const messagePref = otherUser.allow_messages_from || 'everyone';
+
+      if (messagePref === 'no_one') {
+        throw new ForbiddenException('This user does not accept messages');
+      }
+
+      if (messagePref === 'connections') {
+        const { data: followCheck } = await this.admin
+          .from('user_follows')
+          .select('id')
+          .eq('follower_id', userId)
+          .eq('following_id', dto.other_user_id)
+          .maybeSingle();
+
+        if (!followCheck) {
+          throw new ForbiddenException('You must be connected with this user to send messages');
+        }
+      }
+
+      // Check if conversation already exists between these users with same type
+      let existingQuery = this.admin
         .from('conversations')
         .select('id, context_type, context_id')
         .or(
           `and(user1_id.eq.${userId},user2_id.eq.${dto.other_user_id}),and(user1_id.eq.${dto.other_user_id},user2_id.eq.${userId})`,
         )
-        .eq('context_type', dto.context_type)
-        .eq('context_id', dto.context_id || null)
-        .maybeSingle();
+        .eq('context_type', dto.context_type);
+
+      // .eq() doesn't match NULL — use .is() for null context_id
+      if (dto.context_id) {
+        existingQuery = existingQuery.eq('context_id', dto.context_id);
+      } else {
+        existingQuery = existingQuery.is('context_id', null);
+      }
+
+      const { data: existingConv } = await existingQuery.maybeSingle();
 
       if (existingConv) {
         return {
           success: true,
+          message: 'Conversation already exists',
           data: {
             conversation_id: existingConv.id,
             already_exists: true,
+            context_type: existingConv.context_type,
+            other_user: {
+              id: otherUser.id,
+              username: otherUser.username,
+              avatar: otherUser.avatar,
+            },
           },
         };
       }
@@ -118,13 +172,27 @@ export class ConversationsService {
       ) {
         throw error;
       }
-      logger.error('Failed to create conversation', { error, userId });
+
+      if (error instanceof Error) {
+        logger.error('Failed to create conversation', {
+          error: error.message,
+          stack: error.stack,
+          userId,
+        });
+      } else {
+        logger.error('Failed to create conversation', {
+          error: String(error),
+          userId,
+        });
+      }
       throw new BadRequestException('Failed to create conversation');
     }
   }
 
   async getConversations(userId: string, dto: GetConversationsDto) {
     try {
+      logger.info('Getting conversations for user', { userId, ...dto });
+
       // Ensure defaults are applied
       const chatType = dto.chat_type || 'all';
       const limit = dto.limit || 20;
@@ -136,19 +204,19 @@ export class ConversationsService {
         .from('conversations')
         .select(
           `
-          id,
-          user1_id,
-          user2_id,
-          context_type,
-          context_id,
-          is_active,
-          last_message_at,
-          updated_at,
-          user1_cleared_at,
-          user2_cleared_at,
-          user1_identity_revealed,
-          user2_identity_revealed
-        `,
+        id,
+        user1_id,
+        user2_id,
+        context_type,
+        context_id,
+        is_active,
+        last_message_at,
+        updated_at,
+        user1_cleared_at,
+        user2_cleared_at,
+        user1_identity_revealed,
+        user2_identity_revealed
+      `,
         )
         .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
         .eq('is_active', true)
@@ -162,47 +230,148 @@ export class ConversationsService {
 
       const { data: conversations, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        logger.error('Supabase query error in getConversations', {
+          error: error.message || String(error),
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          userId,
+        });
+        throw error;
+      }
 
-      // Get last messages and unread counts
-      const enhancedConversations = await Promise.all(
-        conversations.map(async (conv) => {
+      logger.info(
+        `Found ${conversations?.length || 0} conversations for user ${userId}`,
+      );
+
+      // If no conversations, return empty array
+      if (!conversations || conversations.length === 0) {
+        return {
+          success: true,
+          data: {
+            conversations: [],
+            total: 0,
+            page: Math.floor(offset / limit) + 1,
+            limit: limit,
+            total_pages: 0,
+          },
+        };
+      }
+
+      // Get all other user IDs first
+      const otherUserIds = conversations.map((conv) =>
+        conv.user1_id === userId ? conv.user2_id : conv.user1_id,
+      );
+
+      logger.info(
+        `Fetching ${otherUserIds.length} other users for conversations`,
+      );
+
+      // Batch fetch all other users at once - include encrypted name fields for identity reveal
+      const { data: otherUsers, error: usersError } = await this.admin
+        .from('user_profiles')
+        .select(
+          'id, username, avatar, job_title, company_encrypted, mentoring_as, first_name_encrypted, last_name_encrypted',
+        )
+        .in('id', otherUserIds);
+
+      if (usersError) {
+        logger.error('Supabase query error for user_profiles', {
+          error: usersError.message || String(usersError),
+          details: usersError.details,
+          hint: usersError.hint,
+          code: usersError.code,
+          userId,
+        });
+        throw usersError;
+      }
+
+      logger.info(`Found ${otherUsers?.length || 0} other users`);
+
+      // Create a map for quick lookup
+      const usersMap = new Map();
+      otherUsers?.forEach((user) => {
+        usersMap.set(user.id, user);
+      });
+
+      // Batch-fetch last messages, unread counts, and mentorship contexts
+      // instead of querying per-conversation in a loop (eliminates 3N queries)
+      const conversationIds = conversations.map((c) => c.id);
+
+      // Fetch last messages for ALL conversations in one query using DISTINCT ON
+      // Supabase doesn't support DISTINCT ON, so we fetch recent messages and deduplicate
+      const [lastMessagesResult, unreadCountsResult] = await Promise.all([
+        this.admin
+          .from('messages')
+          .select('conversation_id, content_encrypted, content_type, created_at, sender_id')
+          .in('conversation_id', conversationIds)
+          .order('created_at', { ascending: false }),
+        this.admin
+          .from('messages')
+          .select('conversation_id', { count: 'exact' })
+          .in('conversation_id', conversationIds)
+          .eq('is_read', false)
+          .not('sender_id', 'eq', userId),
+      ]);
+
+      // Build last-message map (keep only the most recent per conversation)
+      const lastMessageMap = new Map<string, any>();
+      (lastMessagesResult.data || []).forEach((msg: any) => {
+        if (!lastMessageMap.has(msg.conversation_id)) {
+          lastMessageMap.set(msg.conversation_id, msg);
+        }
+      });
+
+      // Build unread-count map by counting per conversation client-side
+      // (Supabase count returns total, so we count from the unread messages)
+      const unreadCountMap = new Map<string, number>();
+      // Re-query unread with full data to count per conversation
+      const { data: unreadMessages } = await this.admin
+        .from('messages')
+        .select('conversation_id')
+        .in('conversation_id', conversationIds)
+        .eq('is_read', false)
+        .not('sender_id', 'eq', userId);
+
+      (unreadMessages || []).forEach((msg: any) => {
+        unreadCountMap.set(msg.conversation_id, (unreadCountMap.get(msg.conversation_id) || 0) + 1);
+      });
+
+      // Batch-fetch mentorship relationships for mentorship conversations
+      const mentorshipConvs = conversations.filter((c) => c.context_type === 'mentorship' && c.context_id);
+      const mentorshipContextIds = mentorshipConvs.map((c) => c.context_id);
+      const mentorshipMap = new Map<string, any>();
+
+      if (mentorshipContextIds.length > 0) {
+        const { data: relationships } = await this.admin
+          .from('mentorship_relationships')
+          .select('id, status, mentor_id, mentee_id')
+          .in('id', mentorshipContextIds);
+
+        (relationships || []).forEach((rel: any) => {
+          mentorshipMap.set(rel.id, rel);
+        });
+      }
+
+      // Now build enhanced conversations without any per-conversation queries
+      const enhancedConversations = conversations.map((conv) => {
           const otherUserId =
             conv.user1_id === userId ? conv.user2_id : conv.user1_id;
 
-          // Get other user info
-          const { data: otherUser } = await this.admin
-            .from('user_profiles')
-            .select('username, avatar, job_title, company, mentoring_as')
-            .eq('id', otherUserId)
-            .single();
+          // Get other user info from map
+          const otherUser = usersMap.get(otherUserId);
 
-          // Get last message
-          const { data: lastMessage } = await this.admin
-            .from('messages')
-            .select('content_encrypted, content_type, created_at, sender_id')
-            .eq('conversation_id', conv.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+          // Get last message from batch map
+          const lastMessage = lastMessageMap.get(conv.id) || null;
 
-          // Get unread count
-          const { count: unreadCount } = await this.admin
-            .from('messages')
-            .select('id', { count: 'exact' })
-            .eq('conversation_id', conv.id)
-            .eq('is_read', false)
-            .not('sender_id', 'eq', userId);
+          // Get unread count from batch map
+          const unreadCount = unreadCountMap.get(conv.id) || 0;
 
-          // Get mentorship context if applicable
+          // Get mentorship context from batch map
           let mentorshipContext = null;
           if (conv.context_type === 'mentorship' && conv.context_id) {
-            const { data: relationship } = await this.admin
-              .from('mentorship_relationships')
-              .select('status, mentor_id, mentee_id')
-              .eq('id', conv.context_id)
-              .single();
-
+            const relationship = mentorshipMap.get(conv.context_id);
             if (relationship) {
               mentorshipContext = {
                 relationship_id: conv.context_id,
@@ -212,43 +381,134 @@ export class ConversationsService {
             }
           }
 
-          // Check identity reveal status
+          // Check if the OTHER user's identity is revealed to current user
+          // user1_identity_revealed = user1 revealed their identity (user2 can see it)
+          // user2_identity_revealed = user2 revealed their identity (user1 can see it)
+          const otherUserRevealed =
+            conv.user1_id === userId
+              ? conv.user2_identity_revealed // I'm user1, can I see user2's real name?
+              : conv.user1_identity_revealed; // I'm user2, can I see user1's real name?
+
           const identityRevealed =
             conv.user1_id === userId
               ? conv.user1_identity_revealed
               : conv.user2_identity_revealed;
 
+          // Decrypt company if available
+          let companyDecrypted = null;
+          if (otherUser?.company_encrypted) {
+            try {
+              companyDecrypted = this.encryption.decrypt(
+                otherUser.company_encrypted,
+              );
+            } catch (decryptError) {
+              logger.debug('Failed to decrypt company', {
+                userId: otherUser.id,
+                error:
+                  decryptError instanceof Error
+                    ? decryptError.message
+                    : String(decryptError),
+              });
+            }
+          }
+
+          // Decrypt career level if available
+          let careerLevelDecrypted = null;
+          if (otherUser?.career_level_encrypted) {
+            try {
+              careerLevelDecrypted = this.encryption.decrypt(
+                otherUser.career_level_encrypted,
+              );
+            } catch (decryptError) {
+              logger.debug('Failed to decrypt career level', {
+                userId: otherUser.id,
+                error:
+                  decryptError instanceof Error
+                    ? decryptError.message
+                    : String(decryptError),
+              });
+            }
+          }
+
+          // Decrypt real name if identity is revealed
+          let displayName = otherUser?.username || 'Anonymous';
+          if (otherUserRevealed && otherUser) {
+            const realName = this.identityReveal.decryptRealName(
+              otherUser.first_name_encrypted,
+              otherUser.last_name_encrypted,
+            );
+            if (realName) displayName = realName;
+          }
+
+          // Build conversation object
           return {
             id: conv.id,
             other_user: {
               id: otherUserId,
               username: otherUser?.username || 'Anonymous',
+              display_name: displayName,
               avatar: otherUser?.avatar || '👤',
               job_title: otherUser?.job_title,
-              company: otherUser?.company,
+              company: companyDecrypted || otherUser?.company_encrypted,
+              company_encrypted: otherUser?.company_encrypted,
+              career_level:
+                careerLevelDecrypted || otherUser?.career_level_encrypted,
               mentoring_as: otherUser?.mentoring_as,
+              bio: otherUser?.bio,
             },
             last_message: lastMessage
               ? {
                   content_preview: lastMessage.content_encrypted
-                    ? this.encryption
-                        .decrypt(lastMessage.content_encrypted)
-                        .substring(0, 100)
+                    ? (() => {
+                        try {
+                          // Check if it's likely plain text
+                          const isLikelyPlainText =
+                            /^[A-Za-z0-9\s.,!?'"()\-:;]+$/.test(
+                              lastMessage.content_encrypted,
+                            ) &&
+                            lastMessage.content_encrypted.length < 1000 &&
+                            !lastMessage.content_encrypted.includes('==') &&
+                            !lastMessage.content_encrypted.includes('+/');
+
+                          if (isLikelyPlainText) {
+                            return lastMessage.content_encrypted.substring(
+                              0,
+                              100,
+                            );
+                          }
+
+                          // Try to decrypt
+                          return this.encryption
+                            .decrypt(lastMessage.content_encrypted)
+                            .substring(0, 100);
+                        } catch (decryptError) {
+                          logger.debug('Failed to decrypt message preview', {
+                            conversationId: conv.id,
+                            error:
+                              decryptError instanceof Error
+                                ? decryptError.message
+                                : String(decryptError),
+                          });
+                          return (
+                            lastMessage.content_encrypted?.substring(0, 100) ||
+                            '[Encrypted message]'
+                          );
+                        }
+                      })()
                     : '',
                   sender_id: lastMessage.sender_id,
                   sent_at: lastMessage.created_at,
                   content_type: lastMessage.content_type,
                 }
               : null,
-            unread_count: unreadCount || 0,
+            unread_count: unreadCount,
             chat_type: conv.context_type,
             mentorship_context: mentorshipContext,
             identity_revealed: identityRevealed,
             updated_at: conv.updated_at,
             last_activity_at: conv.last_message_at,
           };
-        }),
-      );
+        });
 
       // Filter by search term if provided
       let filteredConversations = enhancedConversations;
@@ -265,30 +525,77 @@ export class ConversationsService {
       }
 
       // Get total count for pagination
-      let countQuery = this.admin
-        .from('conversations')
-        .select('id', { count: 'exact' })
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-        .eq('is_active', true);
+      let totalCount = 0;
+      try {
+        let countQuery = this.admin
+          .from('conversations')
+          .select('id', { count: 'exact' })
+          .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+          .eq('is_active', true);
 
-      if (chatType !== 'all') {
-        countQuery = countQuery.eq('context_type', chatType);
+        if (chatType !== 'all') {
+          countQuery = countQuery.eq('context_type', chatType);
+        }
+
+        const { count } = await countQuery;
+        totalCount = count || 0;
+      } catch (countError) {
+        logger.warn('Failed to get total conversation count', {
+          error:
+            countError instanceof Error
+              ? countError.message
+              : String(countError),
+          userId,
+        });
+        // Use conversations length as fallback
+        totalCount = conversations.length;
       }
 
-      const { count: totalCount } = await countQuery;
+      logger.info('Successfully processed conversations', {
+        userId,
+        totalCount,
+        filteredCount: filteredConversations.length,
+      });
 
       return {
         success: true,
         data: {
           conversations: filteredConversations,
-          total: totalCount || 0,
+          total: totalCount,
           page: Math.floor(offset / limit) + 1,
           limit: limit,
-          total_pages: Math.ceil((totalCount || 0) / limit),
+          total_pages: Math.ceil(totalCount / limit),
         },
       };
     } catch (error) {
-      logger.error('Failed to get conversations', { error, userId });
+      // More detailed error logging
+      if (error instanceof Error) {
+        logger.error('Failed to get conversations', {
+          error: error.message,
+          stack: error.stack,
+          name: error.name,
+          userId,
+        });
+      } else {
+        // Try to stringify the error object for better logging
+        try {
+          const errorStr = JSON.stringify(
+            error,
+            Object.getOwnPropertyNames(error),
+          );
+          logger.error('Failed to get conversations (non-Error object)', {
+            error: errorStr,
+            errorType: typeof error,
+            userId,
+          });
+        } catch (stringifyError) {
+          logger.error('Failed to get conversations (cannot stringify error)', {
+            error: String(error),
+            errorType: typeof error,
+            userId,
+          });
+        }
+      }
       throw new BadRequestException('Failed to get conversations');
     }
   }
@@ -300,17 +607,44 @@ export class ConversationsService {
     before?: string,
   ) {
     try {
-      // Verify conversation access
-      const { data: conversation } = await this.admin
+      logger.info('Getting messages for conversation', {
+        userId,
+        conversationId,
+        limit,
+        before,
+      });
+
+      // Verify conversation access and get identity reveal flags
+      const { data: conversation, error: convError } = await this.admin
         .from('conversations')
-        .select('user1_id, user2_id')
+        .select('user1_id, user2_id, user1_identity_revealed, user2_identity_revealed')
         .eq('id', conversationId)
         .single();
 
+      if (convError) {
+        logger.error('Supabase conversation query error', {
+          error: convError.message || String(convError),
+          conversationId,
+          userId,
+        });
+        throw new NotFoundException('Conversation not found');
+      }
+
+      if (!conversation) {
+        logger.warn('Conversation not found', { conversationId, userId });
+        throw new NotFoundException('Conversation not found');
+      }
+
       if (
-        !conversation ||
-        (conversation.user1_id !== userId && conversation.user2_id !== userId)
+        conversation.user1_id !== userId &&
+        conversation.user2_id !== userId
       ) {
+        logger.warn('User not authorized for conversation', {
+          conversationId,
+          userId,
+          conversationUser1: conversation.user1_id,
+          conversationUser2: conversation.user2_id,
+        });
         throw new ForbiddenException(
           'Not authorized to view this conversation',
         );
@@ -339,37 +673,66 @@ export class ConversationsService {
 
       const { data: messages, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        logger.error('Supabase messages query error', {
+          error: error.message || String(error),
+          conversationId,
+          userId,
+        });
+        throw error;
+      }
 
-      // Get sender info for each message
-      const enhancedMessages = await Promise.all(
-        messages.map(async (msg) => {
-          const { data: sender } = await this.admin
-            .from('user_profiles')
-            .select('username, avatar')
-            .eq('id', msg.sender_id)
-            .single();
-
-          return {
-            id: msg.id,
-            sender_id: msg.sender_id,
-            content_encrypted: msg.content_encrypted,
-            content_type: msg.content_type,
-            file_url: msg.file_url,
-            file_name: msg.file_name,
-            file_size: msg.file_size,
-            file_type: msg.file_type,
-            is_read: msg.is_read,
-            read_at: msg.read_at,
-            is_delivered: msg.is_delivered,
-            sent_at: msg.created_at,
-            sender_info: {
-              username: sender?.username || 'Anonymous',
-              avatar: sender?.avatar || '👤',
-            },
-          };
-        }),
+      logger.info(
+        `Found ${messages?.length || 0} messages for conversation ${conversationId}`,
       );
+
+      // Determine if identity is revealed (mutual — both flags set together)
+      const isRevealed =
+        conversation.user1_identity_revealed && conversation.user2_identity_revealed;
+
+      // Batch fetch unique sender profiles
+      const senderIds = [...new Set(messages.map((msg: any) => msg.sender_id))];
+      const { data: senderProfiles } = await this.admin
+        .from('user_profiles')
+        .select('id, username, avatar, first_name_encrypted, last_name_encrypted')
+        .in('id', senderIds);
+
+      const sendersMap = new Map<string, any>();
+      (senderProfiles || []).forEach((s: any) => sendersMap.set(s.id, s));
+
+      // Build enhanced messages with display_name
+      const enhancedMessages = messages.map((msg: any) => {
+        const sender = sendersMap.get(msg.sender_id);
+        let displayName = sender?.username || 'Anonymous';
+
+        if (isRevealed && sender) {
+          const realName = this.identityReveal.decryptRealName(
+            sender.first_name_encrypted,
+            sender.last_name_encrypted,
+          );
+          if (realName) displayName = realName;
+        }
+
+        return {
+          id: msg.id,
+          sender_id: msg.sender_id,
+          content_encrypted: msg.content_encrypted,
+          content_type: msg.content_type,
+          file_url: msg.file_url,
+          file_name: msg.file_name,
+          file_size: msg.file_size,
+          file_type: msg.file_type,
+          is_read: msg.is_read,
+          read_at: msg.read_at,
+          is_delivered: msg.is_delivered,
+          sent_at: msg.created_at,
+          sender_info: {
+            username: sender?.username || 'Anonymous',
+            display_name: displayName,
+            avatar: sender?.avatar || '👤',
+          },
+        };
+      });
 
       // Mark messages as delivered if they were sent to this user
       const undeliveredMessages = messages.filter(
@@ -377,22 +740,56 @@ export class ConversationsService {
       );
 
       if (undeliveredMessages.length > 0) {
-        await this.admin
-          .from('messages')
-          .update({ is_delivered: true })
-          .in(
-            'id',
-            undeliveredMessages.map((msg) => msg.id),
+        try {
+          await this.admin
+            .from('messages')
+            .update({ is_delivered: true })
+            .in(
+              'id',
+              undeliveredMessages.map((msg) => msg.id),
+            );
+          logger.info(
+            `Marked ${undeliveredMessages.length} messages as delivered`,
           );
+        } catch (updateError) {
+          logger.warn('Failed to mark messages as delivered', {
+            conversationId,
+            error:
+              updateError instanceof Error
+                ? updateError.message
+                : String(updateError),
+          });
+        }
       }
 
       // Check if there are more messages
-      const { count: totalCount } = await this.admin
-        .from('messages')
-        .select('id', { count: 'exact' })
-        .eq('conversation_id', conversationId);
+      let totalCount = 0;
+      let hasMore = false;
+      try {
+        const { count } = await this.admin
+          .from('messages')
+          .select('id', { count: 'exact' })
+          .eq('conversation_id', conversationId);
 
-      const hasMore = (totalCount || 0) > messages.length;
+        totalCount = count || 0;
+        hasMore = totalCount > messages.length;
+      } catch (countError) {
+        logger.warn('Failed to get total message count', {
+          conversationId,
+          error:
+            countError instanceof Error
+              ? countError.message
+              : String(countError),
+        });
+        hasMore = false;
+      }
+
+      logger.info('Successfully processed messages', {
+        conversationId,
+        totalCount,
+        displayedCount: messages.length,
+        hasMore,
+      });
 
       return {
         success: true,
@@ -400,25 +797,77 @@ export class ConversationsService {
           conversation_id: conversationId,
           messages: enhancedMessages.reverse(), // Reverse to show oldest first
           has_more: hasMore,
-          total_count: totalCount || 0,
+          total_count: totalCount,
         },
       };
     } catch (error) {
-      if (error instanceof ForbiddenException) throw error;
-      logger.error('Failed to get messages', { error, userId });
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      if (error instanceof Error) {
+        logger.error('Failed to get messages', {
+          error: error.message,
+          stack: error.stack,
+          name: error.name,
+          userId,
+          conversationId,
+        });
+      } else {
+        try {
+          const errorStr = JSON.stringify(
+            error,
+            Object.getOwnPropertyNames(error),
+          );
+          logger.error('Failed to get messages (non-Error object)', {
+            error: errorStr,
+            errorType: typeof error,
+            userId,
+            conversationId,
+          });
+        } catch (stringifyError) {
+          logger.error('Failed to get messages (cannot stringify error)', {
+            error: String(error),
+            errorType: typeof error,
+            userId,
+            conversationId,
+          });
+        }
+      }
       throw new BadRequestException('Failed to get messages');
     }
   }
 
   async clearConversation(userId: string, dto: ClearConversationDto) {
     try {
-      const { data: conversation } = await this.admin
+      logger.info('Clearing conversation', {
+        userId,
+        conversationId: dto.conversation_id,
+      });
+
+      const { data: conversation, error: convError } = await this.admin
         .from('conversations')
         .select('user1_id, user2_id')
         .eq('id', dto.conversation_id)
         .single();
 
+      if (convError) {
+        logger.error('Supabase conversation query error in clearConversation', {
+          error: convError.message || String(convError),
+          conversationId: dto.conversation_id,
+          userId,
+        });
+        throw new NotFoundException('Conversation not found');
+      }
+
       if (!conversation) {
+        logger.warn('Conversation not found for clearing', {
+          conversationId: dto.conversation_id,
+          userId,
+        });
         throw new NotFoundException('Conversation not found');
       }
 
@@ -426,6 +875,12 @@ export class ConversationsService {
         conversation.user1_id !== userId &&
         conversation.user2_id !== userId
       ) {
+        logger.warn('User not authorized to clear conversation', {
+          conversationId: dto.conversation_id,
+          userId,
+          conversationUser1: conversation.user1_id,
+          conversationUser2: conversation.user2_id,
+        });
         throw new ForbiddenException('Not authorized');
       }
 
@@ -440,7 +895,21 @@ export class ConversationsService {
         .update({ [updateField]: new Date().toISOString() })
         .eq('id', dto.conversation_id);
 
-      if (error) throw error;
+      if (error) {
+        logger.error('Supabase update error in clearConversation', {
+          error: error.message || String(error),
+          conversationId: dto.conversation_id,
+          userId,
+          updateField,
+        });
+        throw error;
+      }
+
+      logger.info('Successfully cleared conversation', {
+        conversationId: dto.conversation_id,
+        userId,
+        updateField,
+      });
 
       return {
         success: true,
@@ -456,7 +925,39 @@ export class ConversationsService {
       ) {
         throw error;
       }
-      logger.error('Failed to clear conversation', { error, userId });
+
+      if (error instanceof Error) {
+        logger.error('Failed to clear conversation', {
+          error: error.message,
+          stack: error.stack,
+          name: error.name,
+          userId,
+          conversationId: dto.conversation_id,
+        });
+      } else {
+        try {
+          const errorStr = JSON.stringify(
+            error,
+            Object.getOwnPropertyNames(error),
+          );
+          logger.error('Failed to clear conversation (non-Error object)', {
+            error: errorStr,
+            errorType: typeof error,
+            userId,
+            conversationId: dto.conversation_id,
+          });
+        } catch (stringifyError) {
+          logger.error(
+            'Failed to clear conversation (cannot stringify error)',
+            {
+              error: String(error),
+              errorType: typeof error,
+              userId,
+              conversationId: dto.conversation_id,
+            },
+          );
+        }
+      }
       throw new BadRequestException('Failed to clear conversation');
     }
   }

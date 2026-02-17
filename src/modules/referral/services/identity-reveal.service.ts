@@ -10,6 +10,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import logger from '../../../common/utils/logger.util';
 import { RequestIdentityRevealDto } from '../dto/identity-reveal.dto';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class IdentityRevealService {
@@ -19,6 +20,7 @@ export class IdentityRevealService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -156,14 +158,36 @@ export class IdentityRevealService {
 
       if (error) throw error;
 
-      // Send notification
+      // Send in-app notification and email
       try {
-        const { data: responder } = await this.admin
-          .from('user_profiles')
-          .select('email, username')
-          .eq('id', responderId)
-          .single();
+        const [{ data: responder }, { data: requester }] = await Promise.all([
+          this.admin
+            .from('user_profiles')
+            .select('email, username')
+            .eq('id', responderId)
+            .single(),
+          this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single(),
+        ]);
 
+        // Create in-app notification
+        await this.notificationsService.createNotification({
+          user_id: responderId,
+          actor_id: userId,
+          type: 'identity_reveal_request',
+          title: 'Identity Reveal Request',
+          message: `${requester?.username || 'Someone'} requested to reveal identities`,
+          action_url: `/referral/identity-reveals/${data.id}`,
+          reference_id: data.id,
+          reference_type: 'identity_reveal',
+          metadata: { connection_id: connectionId },
+          delivery_method: ['in_app'],
+        });
+
+        // Send email notification
         if (responder?.email) {
           await this.emailService.sendIdentityRevealRequestEmail(
             responder.email,
@@ -234,14 +258,36 @@ export class IdentityRevealService {
 
       if (updateConnError) throw updateConnError;
 
-      // Send notification
+      // Send in-app notification and email
       try {
-        const { data: requester } = await this.admin
-          .from('user_profiles')
-          .select('email, username')
-          .eq('id', reveal.requester_id)
-          .single();
+        const [{ data: requester }, { data: responder }] = await Promise.all([
+          this.admin
+            .from('user_profiles')
+            .select('email, username')
+            .eq('id', reveal.requester_id)
+            .single(),
+          this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single(),
+        ]);
 
+        // Create in-app notification
+        await this.notificationsService.createNotification({
+          user_id: reveal.requester_id,
+          actor_id: userId,
+          type: 'identity_reveal',
+          title: 'Identity Revealed',
+          message: `${responder?.username || 'Someone'} accepted your identity reveal request`,
+          action_url: `/referral/connections/${reveal.connection_id}`,
+          reference_id: revealId,
+          reference_type: 'identity_reveal',
+          metadata: { connection_id: reveal.connection_id },
+          delivery_method: ['in_app'],
+        });
+
+        // Send email notification
         if (requester?.email) {
           await this.emailService.sendIdentityRevealAcceptedEmail(
             requester.email,

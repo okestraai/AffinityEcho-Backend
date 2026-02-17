@@ -2,6 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import { supabaseClient } from '../../../database/supabase.client';
 import { ConfigService } from '@nestjs/config';
+import { USER_PROFILE_OWN_FIELDS } from '../../../common/constants/select-fields';
 
 @Injectable()
 export class UserService {
@@ -14,7 +15,7 @@ export class UserService {
   async getProfile(userId: string) {
     const { data, error } = await this.supabase
       .from('user_profiles')
-      .select('*')
+      .select(USER_PROFILE_OWN_FIELDS)
       .eq('id', userId)
       .single();
 
@@ -27,7 +28,7 @@ export class UserService {
       .from('user_profiles')
       .update(updates)
       .eq('id', userId)
-      .select()
+      .select(USER_PROFILE_OWN_FIELDS)
       .single();
 
     if (error) throw error;

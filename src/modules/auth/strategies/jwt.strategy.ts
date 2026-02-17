@@ -27,9 +27,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    logger.info('🔐 JWT Strategy - Validating payload', {
+    logger.info('JWT Strategy - Validating payload', {
       sub: payload.sub,
-      email: payload.email,
     });
 
     try {
@@ -51,7 +50,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         if (error.code === 'PGRST116') {
           logger.info('Creating user profile automatically in JWT strategy', {
             userId: payload.sub,
-            email: payload.email
           });
           
           const createdUser = await this.createUserProfile(payload.sub, payload.email);
@@ -102,10 +100,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         throw new UnauthorizedException('User not found and could not create profile');
       }
 
-      logger.info('✅ JWT validation successful', {
+      logger.info('JWT validation successful', {
         userId: user.id,
         username: user.username,
-        email: user.email
       });
 
       return {
@@ -162,16 +159,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (error) {
         logger.error('Failed to create user profile in JWT strategy', {
           userId,
-          email,
-          error: error.message
+          error: error.message,
         });
         return null;
       }
 
-      logger.info('✅ User profile created automatically in JWT strategy', {
+      logger.info('User profile created automatically in JWT strategy', {
         userId,
         username,
-        email
       });
 
       return data;

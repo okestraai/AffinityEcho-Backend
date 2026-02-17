@@ -8,31 +8,62 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JwtAuthGuard = void 0;
 const common_1 = require("@nestjs/common");
-const passport_1 = require("@nestjs/passport");
 const supabase_client_1 = require("../../database/supabase.client");
 const config_1 = require("@nestjs/config");
-let JwtAuthGuard = class JwtAuthGuard extends (0, passport_1.AuthGuard)('jwt') {
+const logger_util_1 = __importDefault(require("../utils/logger.util"));
+let JwtAuthGuard = class JwtAuthGuard {
     constructor(config) {
-        super();
         this.config = config;
         this.supabase = (0, supabase_client_1.supabaseClient)(config);
     }
     async canActivate(context) {
         const request = context.switchToHttp().getRequest();
         const token = this.extractToken(request);
-        if (!token)
-            throw new common_1.UnauthorizedException();
-        const { data, error } = await this.supabase.auth.getUser(token);
-        if (error || !data.user)
-            throw new common_1.UnauthorizedException();
-        request.user = data.user;
-        return true;
+        if (!token) {
+            throw new common_1.UnauthorizedException('No token provided');
+        }
+        try {
+            const { data, error } = await this.supabase.auth.getUser(token);
+            if (error) {
+                logger_util_1.default.warn('Token validation failed', {
+                    message: error.message,
+                    status: error.status,
+                });
+                throw new common_1.UnauthorizedException(`Token validation failed: ${error.message}`);
+            }
+            if (!data.user) {
+                throw new common_1.UnauthorizedException('User not found');
+            }
+            request.user = {
+                sub: data.user.id,
+                email: data.user.email,
+                user_metadata: data.user.user_metadata,
+            };
+            return true;
+        }
+        catch (error) {
+            if (error instanceof common_1.UnauthorizedException) {
+                throw error;
+            }
+            throw new common_1.UnauthorizedException('Authentication failed');
+        }
     }
     extractToken(request) {
-        return request.headers.authorization?.split(' ')[1] || null;
+        const authHeader = request.headers.authorization;
+        if (!authHeader) {
+            return null;
+        }
+        const [type, token] = authHeader.split(' ');
+        if (type !== 'Bearer' || !token) {
+            return null;
+        }
+        return token;
     }
 };
 exports.JwtAuthGuard = JwtAuthGuard;

@@ -58,6 +58,7 @@ export class MentorshipBookmarksController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User to bookmark not found' })
+  @ApiBody({ type: BookmarkDto })
   async createBookmark(
     @CurrentUser() user: any,
     @Body() bookmarkDto: BookmarkDto,

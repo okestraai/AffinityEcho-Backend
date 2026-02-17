@@ -3,6 +3,8 @@ export interface UserProfileResponse {
   id: string;
   username: string;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
   avatar: string | null;
   bio: string | null;
   job_title: string | null;

@@ -175,6 +175,7 @@ export class MentorshipRelationshipsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Relationship not found' })
+  @ApiBody({ type: RelationshipStatusDto })
   async updateRelationshipStatus(
     @Param('relationshipId', ParseUUIDPipe) relationshipId: string,
     @CurrentUser() user: any,
@@ -215,6 +216,7 @@ export class MentorshipRelationshipsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Relationship not found' })
+  @ApiBody({ type: RelationshipUpdateDto })
   async updateRelationshipDetails(
     @Param('relationshipId', ParseUUIDPipe) relationshipId: string,
     @CurrentUser() user: any,

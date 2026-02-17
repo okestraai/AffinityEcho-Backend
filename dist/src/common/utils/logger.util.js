@@ -40,13 +40,13 @@ const winston_1 = require("winston");
 const winston_daily_rotate_file_1 = __importDefault(require("winston-daily-rotate-file"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
-const logsDir = path.join(__dirname, '../../logs');
+const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
 }
 const { combine, timestamp, printf, colorize, json, errors } = winston_1.format;
 const consoleFormat = printf(({ level, message, timestamp, stack }) => {
-    return `${timestamp} [${level}]: ${stack || message}`;
+    return `${timestamp} [${level.toUpperCase()}]: ${stack || message}`;
 });
 const fileFormat = combine(timestamp(), errors({ stack: true }), json());
 const logger = (0, winston_1.createLogger)({

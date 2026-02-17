@@ -11,6 +11,7 @@ import { CreateForumDto } from '../dto/create-forum.dto';
 import { UpdateForumDto } from '../dto/update-forum.dto';
 import { ForumFiltersDto } from '../dto/forum-filters.dto';
 import logger from '../../../common/utils/logger.util';
+import { FORUM_FIELDS } from '../../../common/constants/select-fields';
 
 interface Forum {
   id: string;
@@ -83,7 +84,7 @@ export class ForumService {
           rules: createForumDto.rules || [],
           moderators: createForumDto.moderators || [],
         })
-        .select()
+        .select(FORUM_FIELDS)
         .single();
 
       if (error) {
@@ -326,7 +327,7 @@ export class ForumService {
         .from('forums')
         .update(updateData)
         .eq('id', id)
-        .select()
+        .select(FORUM_FIELDS)
         .single();
 
       if (error) {

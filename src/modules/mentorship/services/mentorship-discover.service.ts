@@ -3,6 +3,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { MentorshipQueryDto } from '../dto/mentorship-query.dto';
+import logger from '../../../common/utils/logger.util';
 
 @Injectable()
 export class MentorshipDiscoverService {
@@ -14,10 +15,6 @@ export class MentorshipDiscoverService {
 
   async discoverProfiles(currentUserId: string, query: MentorshipQueryDto) {
     try {
-      console.log('=== DISCOVER PROFILES START ===');
-      console.log('Current user ID:', currentUserId);
-      console.log('Query:', query);
-
       const {
         viewMode = 'all',
         search,
@@ -33,7 +30,7 @@ export class MentorshipDiscoverService {
         sortOrder = 'desc',
       } = query;
 
-      // Build the query
+      // OPTIMIZATION: Select only fields needed for list view (not detail view)
       let supabaseQuery = this.admin.from('user_profiles').select(
         `
       id,
@@ -43,35 +40,23 @@ export class MentorshipDiscoverService {
       job_title,
       location,
       years_experience,
-      skills,
-      mentor_bio,
       mentor_expertise,
       mentor_industries,
       mentor_availability,
       mentor_response_time,
-      mentor_style,
-      mentor_languages,
       is_active_mentor,
-      is_willing_to_mentor,
-      mentee_bio,
-      mentee_goals,
-      mentee_interests,
-      mentee_industries,
-      mentee_availability,
-      mentee_urgency,
-      mentee_topic,
       is_active_mentee,
       mentoring_as,
       career_level_encrypted,
       affinity_tags_encrypted,
-      company_encrypted,
       reputation_score,
-      mentorship_sessions_completed, 
-      created_at,
-      updated_at
+      mentorship_sessions_completed
     `,
         { count: 'exact' },
-      );
+      )
+        .eq('is_deleted', false)
+        .eq('is_deactivated', false)
+        .eq('has_completed_onboarding', true);
 
       // Apply view mode filters
       if (viewMode === 'mentors') {
@@ -85,12 +70,10 @@ export class MentorshipDiscoverService {
       }
 
       // Exclude current user
-      console.log('Excluding current user:', currentUserId);
       supabaseQuery = supabaseQuery.neq('id', currentUserId);
 
       // Search filter
       if (search) {
-        console.log('Search filter:', search);
         supabaseQuery = supabaseQuery.or(
           `username.ilike.%${search}%,bio.ilike.%${search}%,mentor_bio.ilike.%${search}%,job_title.ilike.%${search}%`,
         );
@@ -98,24 +81,20 @@ export class MentorshipDiscoverService {
 
       // Array filters
       if (expertise?.length) {
-        console.log('Expertise filter:', expertise);
         supabaseQuery = supabaseQuery.overlaps('mentor_expertise', expertise);
       }
 
       if (industries?.length) {
-        console.log('Industries filter:', industries);
         supabaseQuery = supabaseQuery.overlaps('mentor_industries', industries);
       }
 
       // Location filter
       if (location) {
-        console.log('Location filter:', location);
         supabaseQuery = supabaseQuery.ilike('location', `%${location}%`);
       }
 
       // Availability filter
       if (availability && availability !== 'all') {
-        console.log('Availability filter:', availability);
         const availabilityMap: Record<string, string> = {
           immediate: 'Immediate',
           within_week: 'Within 1 week',
@@ -132,7 +111,6 @@ export class MentorshipDiscoverService {
       }
 
       // Apply sorting
-      console.log('Sort by:', sortBy, 'Order:', sortOrder);
       if (sortBy === 'experience') {
         supabaseQuery = supabaseQuery.order('years_experience', {
           ascending: sortOrder === 'asc',
@@ -153,37 +131,32 @@ export class MentorshipDiscoverService {
       // Calculate pagination
       const from = (page - 1) * limit;
       const to = from + limit - 1;
-      console.log('Pagination: from', from, 'to', to);
 
       // Apply pagination
       supabaseQuery = supabaseQuery.range(from, to);
 
-      console.log('Executing Supabase query...');
-      const { data: profiles, error, count } = await supabaseQuery;
+      // OPTIMIZATION: Parallel fetch profiles + bookmarks
+      const [profilesResult, bookmarksResult] = await Promise.all([
+        supabaseQuery,
+        this.admin
+          .from('mentorship_bookmarks')
+          .select('bookmarked_user_id')
+          .eq('user_id', currentUserId),
+      ]);
+
+      const { data: profiles, error, count } = profilesResult;
 
       if (error) {
-        console.error('Supabase error:', error);
+        logger.error('Failed to discover profiles', { module: 'MentorshipDiscover', error });
         throw new BadRequestException('Failed to discover profiles');
       }
 
-      console.log('Raw profiles found:', profiles?.length || 0);
-      console.log('Raw profiles:', JSON.stringify(profiles, null, 2));
-
-      // Get bookmarks for current user
-      const { data: bookmarks } = await this.admin
-        .from('mentorship_bookmarks')
-        .select('bookmarked_user_id')
-        .eq('user_id', currentUserId);
-
+      const bookmarks = bookmarksResult.data;
       const bookmarkedIds = bookmarks?.map((b) => b.bookmarked_user_id) || [];
 
       // Apply encrypted field filters and enhance profiles
       const enhancedProfiles = (profiles || [])
         .filter((profile) => {
-          console.log(
-            `Profile ${profile.id} - mentoring_as: ${profile.mentoring_as}, is_willing_to_mentor: ${profile.is_willing_to_mentor}`,
-          );
-
           // Career level filter (in memory since field is encrypted)
           if (careerLevel?.length) {
             if (!profile.career_level_encrypted) return false;
@@ -228,11 +201,6 @@ export class MentorshipDiscoverService {
           };
         });
 
-      console.log(
-        'Enhanced profiles after filtering:',
-        enhancedProfiles.length,
-      );
-
       // Re-sort by match score if requested
       if (sortBy === 'match_score') {
         enhancedProfiles.sort((a, b) => {
@@ -242,22 +210,27 @@ export class MentorshipDiscoverService {
         });
       }
 
-      console.log('=== DISCOVER PROFILES END ===');
-
-      // FIX: Return directly without double nesting
+      // OPTIMIZATION: Fix broken pagination - use DB count, not filtered count
       return {
         success: true,
         profiles: enhancedProfiles,
-        total: enhancedProfiles.length,
+        total: count || 0,
         page,
         limit,
-        totalPages: Math.ceil(enhancedProfiles.length / limit),
+        totalPages: Math.ceil((count || 0) / limit),
+        metadata: {
+          filteredCount: enhancedProfiles.length,
+          note:
+            count !== enhancedProfiles.length
+              ? 'Some results filtered by privacy preferences'
+              : undefined,
+        },
       };
     } catch (error) {
-      console.error('Error in discoverProfiles:', error);
       if (error instanceof BadRequestException) {
         throw error;
       }
+      logger.error('Error in discoverProfiles', { module: 'MentorshipDiscover', error });
       throw new BadRequestException('Failed to discover profiles');
     }
   }
@@ -305,6 +278,9 @@ export class MentorshipDiscoverService {
         `,
         )
         .neq('id', currentUserId)
+        .eq('is_deleted', false)
+        .eq('is_deactivated', false)
+        .eq('has_completed_onboarding', true)
         .limit(limit);
 
       if (type === 'mentors') {
@@ -316,7 +292,7 @@ export class MentorshipDiscoverService {
       const { data: profiles, error } = await query;
 
       if (error) {
-        console.error('Suggestions error:', error);
+        logger.error('Failed to get suggestions', { module: 'MentorshipDiscover', error });
         throw new BadRequestException('Failed to get suggestions');
       }
 
@@ -347,7 +323,8 @@ export class MentorshipDiscoverService {
         data: scoredProfiles,
       };
     } catch (error) {
-      console.error('Error in getSuggestions:', error);
+      if (error instanceof BadRequestException) throw error;
+      logger.error('Error in getSuggestions', { module: 'MentorshipDiscover', error });
       throw new BadRequestException('Failed to get suggestions');
     }
   }
@@ -447,7 +424,6 @@ export class MentorshipDiscoverService {
   ): number {
     let score = 50;
 
-    // Add points for expertise match
     if (query.expertise?.length && profile.mentor_expertise) {
       const matchingExpertise = profile.mentor_expertise.filter((exp: string) =>
         query.expertise?.includes(exp),
@@ -455,7 +431,6 @@ export class MentorshipDiscoverService {
       score += matchingExpertise.length * 10;
     }
 
-    // Add points for industry match
     if (query.industries?.length && profile.mentor_industries) {
       const matchingIndustries = profile.mentor_industries.filter(
         (ind: string) => query.industries?.includes(ind),
@@ -463,17 +438,14 @@ export class MentorshipDiscoverService {
       score += matchingIndustries.length * 8;
     }
 
-    // Add points for reputation
     if (profile.reputation_score) {
       score += Math.min(profile.reputation_score / 10, 20);
     }
 
-    // Add points for experience
     if (profile.years_experience) {
       score += Math.min(profile.years_experience, 20);
     }
 
-    // Add points for response time
     if (profile.mentor_response_time) {
       if (profile.mentor_response_time.includes('24 hours')) score += 15;
       else if (profile.mentor_response_time.includes('48 hours')) score += 10;
@@ -486,7 +458,6 @@ export class MentorshipDiscoverService {
   private calculateSuggestionScore(profile: any, currentUser: any): number {
     let score = 50;
 
-    // Expertise match
     if (currentUser.mentor_expertise && profile.mentor_expertise) {
       const commonExpertise = currentUser.mentor_expertise.filter(
         (exp: string) => profile.mentor_expertise.includes(exp),
@@ -494,7 +465,6 @@ export class MentorshipDiscoverService {
       score += commonExpertise.length * 15;
     }
 
-    // Industry match
     if (currentUser.mentor_industries && profile.mentor_industries) {
       const commonIndustries = currentUser.mentor_industries.filter(
         (ind: string) => profile.mentor_industries.includes(ind),
@@ -502,7 +472,6 @@ export class MentorshipDiscoverService {
       score += commonIndustries.length * 10;
     }
 
-    // Location match
     if (
       currentUser.location &&
       profile.location &&
@@ -511,7 +480,6 @@ export class MentorshipDiscoverService {
       score += 20;
     }
 
-    // Career level compatibility
     if (currentUser.career_level_encrypted && profile.career_level_encrypted) {
       const currentLevel = this.parseCareerLevel(
         currentUser.career_level_encrypted,

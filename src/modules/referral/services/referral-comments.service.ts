@@ -8,12 +8,16 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
 import { CreateCommentDto } from '../dto/comment.dto';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class ReferralCommentsService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private notificationsService: NotificationsService,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -63,6 +67,13 @@ export class ReferralCommentsService {
     logger.info('Creating comment', { userId, referralId });
 
     try {
+      // Get referral post author
+      const { data: referralPost } = await this.admin
+        .from('referral_posts')
+        .select('user_id, title_encrypted')
+        .eq('id', referralId)
+        .single();
+
       const { data, error } = await this.admin
         .from('referral_comments')
         .insert([
@@ -80,6 +91,32 @@ export class ReferralCommentsService {
       await this.admin.rpc('increment_referral_comments', {
         referral_id: referralId,
       });
+
+      // Create notification for referral post author (if not commenting on own post)
+      if (referralPost && referralPost.user_id !== userId) {
+        try {
+          const { data: commenter } = await this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single();
+
+          await this.notificationsService.createNotification({
+            user_id: referralPost.user_id,
+            actor_id: userId,
+            type: 'referral_comment',
+            title: 'New Comment',
+            message: `${commenter?.username || 'Someone'} commented on your referral post`,
+            action_url: `/referral/posts/${referralId}`,
+            reference_id: data.id,
+            reference_type: 'referral_comment',
+            metadata: { referral_post_id: referralId },
+            delivery_method: ['in_app'],
+          });
+        } catch (notifError) {
+          logger.error('Failed to create comment notification:', notifError);
+        }
+      }
 
       return {
         success: true,

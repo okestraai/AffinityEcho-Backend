@@ -21,7 +21,6 @@ import { NookReactionsService } from '../services/nook-reactions.service';
 import { ReactionDto } from '../dto/reaction.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import { NookMemberGuard } from '../guards/nook-member.guard';
 import { NookActiveGuard } from '../guards/nook-active.guard';
 
 @ApiTags('Nook Reactions')
@@ -34,7 +33,7 @@ export class NookReactionsController {
   // ── NOOK REACTIONS ──────────────────────────────────────────────────────
 
   @Post('nooks/:id/reactions')
-  @UseGuards(NookMemberGuard, NookActiveGuard)
+  @UseGuards(NookActiveGuard)
   @ApiOperation({ summary: 'Add reaction to a nook' })
   @ApiParam({ name: 'id', description: 'Nook ID' })
   @ApiBody({ type: ReactionDto })
@@ -47,7 +46,6 @@ export class NookReactionsController {
   }
 
   @Delete('nooks/:id/reactions')
-  @UseGuards(NookMemberGuard)
   @ApiOperation({ summary: 'Remove your reaction from a nook' })
   @ApiParam({ name: 'id', description: 'Nook ID' })
   @ApiQuery({ name: 'reaction_type', required: true })
@@ -66,7 +64,6 @@ export class NookReactionsController {
   // ── MESSAGE REACTIONS (TOGGLE) ──────────────────────────────────────────
 
   @Post('nooks/messages/:id/reactions')
-  @UseGuards(NookMemberGuard)
   @ApiOperation({
     summary: 'Toggle reaction on a message',
     description: 'Add if not present, remove if already exists',

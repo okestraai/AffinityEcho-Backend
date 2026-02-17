@@ -20,7 +20,6 @@ import { NookMembersService } from '../services/nook-members.service';
 import { JoinNookDto } from '../dto/join-nook.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import { NookMemberGuard } from '../guards/nook-member.guard';
 import { NookActiveGuard } from '../guards/nook-active.guard';
 
 @ApiTags('Nook Members')
@@ -55,7 +54,6 @@ export class NookMembersController {
   }
 
   @Post('leave')
-  @UseGuards(NookMemberGuard)
   @ApiOperation({
     summary: 'Leave a nook',
     description: 'Leave a nook you are currently a member of',

@@ -14,6 +14,7 @@ import {
   UpdateConnectionProgressDto,
   AddConnectionNotesDto,
 } from '../dto/connection.dto';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class ReferralConnectionsService {
@@ -23,6 +24,7 @@ export class ReferralConnectionsService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -278,14 +280,36 @@ export class ReferralConnectionsService {
         referral_id: referralId,
       });
 
-      // Send notification email
+      // Create in-app notification and send email
       try {
-        const { data: receiver } = await this.admin
-          .from('user_profiles')
-          .select('email, username')
-          .eq('id', post.user_id)
-          .single();
+        const [{ data: receiver }, { data: sender }] = await Promise.all([
+          this.admin
+            .from('user_profiles')
+            .select('email, username')
+            .eq('id', post.user_id)
+            .single(),
+          this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single(),
+        ]);
 
+        // Create in-app notification
+        await this.notificationsService.createNotification({
+          user_id: post.user_id,
+          actor_id: userId,
+          type: 'referral_connection',
+          title: 'New Connection Request',
+          message: `${sender?.username || 'Someone'} sent you a connection request for your referral`,
+          action_url: `/referral/connections/${data.id}`,
+          reference_id: data.id,
+          reference_type: 'referral_connection',
+          metadata: { referral_post_id: referralId },
+          delivery_method: ['in_app'],
+        });
+
+        // Send email notification
         if (receiver?.email) {
           await this.emailService.sendConnectionRequestEmail(
             receiver.email,
@@ -363,14 +387,36 @@ export class ReferralConnectionsService {
         });
       }
 
-      // Send notification
+      // Send in-app notification and email
       try {
-        const { data: sender } = await this.admin
-          .from('user_profiles')
-          .select('email, username')
-          .eq('id', connection.sender_id)
-          .single();
+        const [{ data: sender }, { data: receiver }] = await Promise.all([
+          this.admin
+            .from('user_profiles')
+            .select('email, username')
+            .eq('id', connection.sender_id)
+            .single(),
+          this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single(),
+        ]);
 
+        // Create in-app notification
+        await this.notificationsService.createNotification({
+          user_id: connection.sender_id,
+          actor_id: userId,
+          type: 'referral_connection',
+          title: 'Connection Accepted',
+          message: `${receiver?.username || 'Someone'} accepted your connection request`,
+          action_url: `/referral/connections/${connectionId}`,
+          reference_id: connectionId,
+          reference_type: 'referral_connection',
+          metadata: { status: 'accepted', referral_post_id: connection.referral_post_id },
+          delivery_method: ['in_app'],
+        });
+
+        // Send email notification
         if (sender?.email) {
           await this.emailService.sendConnectionAcceptedEmail(
             sender.email,

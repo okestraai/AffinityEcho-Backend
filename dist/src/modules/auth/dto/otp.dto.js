@@ -10,11 +10,16 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VerifyOtpDto = exports.SendOtpDto = void 0;
+const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 class SendOtpDto {
 }
 exports.SendOtpDto = SendOtpDto;
 __decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'user@example.com',
+        description: 'Email address to resend OTP to'
+    }),
     (0, class_validator_1.IsEmail)(),
     __metadata("design:type", String)
 ], SendOtpDto.prototype, "email", void 0);
@@ -22,12 +27,17 @@ class VerifyOtpDto {
 }
 exports.VerifyOtpDto = VerifyOtpDto;
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'user@example.com' }),
     (0, class_validator_1.IsEmail)(),
     __metadata("design:type", String)
 ], VerifyOtpDto.prototype, "email", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '123456',
+        description: '6-digit OTP code received via email'
+    }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\d{6}$/, { message: 'OTP must be 6 digits' }),
+    (0, class_validator_1.Length)(6, 6),
     __metadata("design:type", String)
 ], VerifyOtpDto.prototype, "token", void 0);
 //# sourceMappingURL=otp.dto.js.map

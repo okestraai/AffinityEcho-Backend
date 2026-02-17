@@ -28,14 +28,14 @@ export class MentorshipBookmarksService {
         throw new NotFoundException('User not found');
       }
 
-      // Check if bookmarked user exists
+      // Check if bookmarked user exists and is onboarded
       const { data: bookmarkedUser } = await this.admin
         .from('user_profiles')
-        .select('id')
+        .select('id, has_completed_onboarding, is_deleted, is_deactivated')
         .eq('id', dto.bookmarkedUserId)
         .single();
 
-      if (!bookmarkedUser) {
+      if (!bookmarkedUser || bookmarkedUser.is_deleted || bookmarkedUser.is_deactivated || !bookmarkedUser.has_completed_onboarding) {
         throw new NotFoundException('User to bookmark not found');
       }
 
@@ -90,7 +90,7 @@ export class MentorshipBookmarksService {
           id,
           notes,
           created_at,
-          bookmarked_user:user_profiles!mentorship_bookmarks_target(
+          bookmarked_user:user_profiles!mentorship_bookmarks_target!inner(
             id,
             username,
             avatar,
@@ -101,11 +101,17 @@ export class MentorshipBookmarksService {
             mentor_expertise,
             mentor_industries,
             mentoring_as,
-            reputation_score
+            reputation_score,
+            has_completed_onboarding,
+            is_deleted,
+            is_deactivated
           )
         `,
         )
         .eq('user_id', userId)
+        .eq('bookmarked_user.has_completed_onboarding', true)
+        .eq('bookmarked_user.is_deleted', false)
+        .eq('bookmarked_user.is_deactivated', false)
         .order('created_at', { ascending: false });
 
       if (error) {

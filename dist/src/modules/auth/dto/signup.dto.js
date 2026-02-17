@@ -10,22 +10,39 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SignupDto = void 0;
+const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 class SignupDto {
 }
 exports.SignupDto = SignupDto;
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'user@example.com' }),
     (0, class_validator_1.IsEmail)(),
     __metadata("design:type", String)
 ], SignupDto.prototype, "email", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'securePassword123' }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MinLength)(6),
+    (0, class_validator_1.MinLength)(8),
     __metadata("design:type", String)
 ], SignupDto.prototype, "password", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'BraveLeader42' }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^(?!.* )/, { message: 'Username cannot contain spaces' }),
+    (0, class_validator_1.MinLength)(3),
+    (0, class_validator_1.Matches)(/^[a-zA-Z0-9_]+$/, {
+        message: 'Username can only contain letters, numbers and underscores'
+    }),
     __metadata("design:type", String)
 ], SignupDto.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'https://example.com/avatar.jpg',
+        required: false,
+        description: 'Avatar URL or base64 encoded image string'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SignupDto.prototype, "avatar", void 0);
 //# sourceMappingURL=signup.dto.js.map

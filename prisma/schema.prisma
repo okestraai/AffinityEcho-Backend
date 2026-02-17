@@ -1,11 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
 }
 
 //
@@ -16,8 +15,8 @@ model user_profiles {
   username                 String   @unique @db.VarChar(50)
   email                    String?  @db.VarChar(254)
   avatar                   String   @default("User")
-  first_name_encrypted     String?   @default("") @db.VarChar(50)
-  last_name_encrypted      String?   @default("") @db.VarChar(50)
+  first_name_encrypted     String?   @default("") @db.Text
+  last_name_encrypted      String?   @default("") @db.Text
 
 
 
@@ -79,6 +78,32 @@ model user_profiles {
 
   // Privacy
   privacy_level            String   @default("anonymous") @db.VarChar(20)
+  profile_visibility       String   @default("public") @db.VarChar(20) // 'public', 'connections', 'private'
+  show_email               Boolean  @default(false)
+  show_company             Boolean  @default(true)
+  show_location            Boolean  @default(true)
+  allow_messages_from      String   @default("everyone") @db.VarChar(20) // 'everyone', 'connections', 'no_one'
+  show_activity            Boolean  @default(true)
+  show_connections         Boolean  @default(true)
+
+  // Notification Settings
+  email_notifications      Boolean  @default(true)
+  push_notifications       Boolean  @default(true)
+  notify_on_comment        Boolean  @default(true)
+  notify_on_like           Boolean  @default(true)
+  notify_on_follow         Boolean  @default(true)
+  notify_on_mention        Boolean  @default(true)
+  notify_on_message        Boolean  @default(true)
+  notify_on_connection_request Boolean @default(true)
+  digest_frequency         String   @default("daily") @db.VarChar(20) // 'daily', 'weekly', 'never'
+
+  // Account Management
+  is_deactivated           Boolean  @default(false)
+  deactivated_at           DateTime? @db.Timestamptz(3)
+  deactivation_reason      String?  @db.Text
+  is_deleted               Boolean  @default(false)
+  deleted_at               DateTime? @db.Timestamptz(3)
+  deletion_reason          String?  @db.Text
 
   // Stats
   reputation_score         Int      @default(0)
@@ -113,6 +138,8 @@ model user_profiles {
   notification_actors       notifications[] @relation("notification_actor")
   followers                 user_follows[] @relation("user_followers")
   following                 user_follows[] @relation("user_following")
+  blocked_users             user_blocks[] @relation("user_blocker")
+  blocked_by                user_blocks[] @relation("user_blocked")
   identity_reveals_requester identity_reveals[] @relation("identity_reveals_requester")
   identity_reveals_responder identity_reveals[] @relation("identity_reveals_responder")
   forum_memberships         forum_members[] @relation("forum_memberships")
@@ -126,6 +153,13 @@ model user_profiles {
     referral_likes        referral_likes[]
   referral_bookmarks    referral_bookmarks[]
   referral_comments     referral_comments[]
+  feed_posts            feed_posts[] @relation("feed_posts")
+  feed_likes            feed_likes[] @relation("feed_likes")
+  feed_comments         feed_comments[] @relation("feed_comments")
+  feed_shares           feed_shares[] @relation("feed_shares")
+  feed_views            feed_views[] @relation("feed_views")
+  feed_bookmarks        feed_bookmarks[] @relation("feed_bookmarks")
+  harassment_reports     harassment_reports[] @relation("harassment_reports")
 
   @@map("user_profiles")
 }
@@ -351,7 +385,7 @@ model referral_connections {
 //
 model identity_reveals {
   id              String   @id @default(uuid()) @db.Uuid
-  connection_id   String   @db.Uuid
+  connection_id   String?  @db.Uuid
   requester_id    String   @db.Uuid
   responder_id    String   @db.Uuid
   status          String   @default("pending")
@@ -362,9 +396,9 @@ model identity_reveals {
   responded_at    DateTime? @db.Timestamptz(3)
 
   // Relations
-  connection referral_connections @relation(fields: [connection_id], references: [id], onDelete: Cascade)
-  requester  user_profiles        @relation("identity_reveals_requester", fields: [requester_id], references: [id], onDelete: Cascade)
-  responder  user_profiles        @relation("identity_reveals_responder", fields: [responder_id], references: [id], onDelete: Cascade)
+  connection referral_connections? @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  requester  user_profiles         @relation("identity_reveals_requester", fields: [requester_id], references: [id], onDelete: Cascade)
+  responder  user_profiles         @relation("identity_reveals_responder", fields: [responder_id], references: [id], onDelete: Cascade)
 
   @@unique([connection_id, requester_id, responder_id])
   @@map("identity_reveals")
@@ -636,7 +670,7 @@ model messages {
   flagged_reason      String?
 
   created_at          DateTime @default(now()) @db.Timestamptz(3)
-
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
   // Relations
   conversation conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
   sender       user_profiles @relation(fields: [sender_id], references: [id], onDelete: Cascade)
@@ -683,6 +717,21 @@ model user_follows {
 
   @@unique([follower_id, following_id])
   @@map("user_follows")
+}
+
+model user_blocks {
+  id          String   @id @default(uuid()) @db.Uuid
+  blocker_id  String   @db.Uuid
+  blocked_id  String   @db.Uuid
+  reason      String?  @db.Text
+  created_at  DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  blocker user_profiles @relation("user_blocker", fields: [blocker_id], references: [id], onDelete: Cascade)
+  blocked user_profiles @relation("user_blocked", fields: [blocked_id], references: [id], onDelete: Cascade)
+
+  @@unique([blocker_id, blocked_id])
+  @@map("user_blocks")
 }
 
 //
@@ -821,5 +870,183 @@ model nook_message_reactions {
   @@map("nook_message_reactions")
 }
 
+//
+// FEEDS MODULE (Unified timeline aggregating forum topics, nook messages, and standalone posts)
+//
+model feed_posts {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+  content             String   @db.Text
+  visibility          String   @default("global") @db.VarChar(20) // global, company, connections
+  is_anonymous        Boolean  @default(false)
+  tags                String[] @default([])
 
+  // Engagement counters (denormalized for performance)
+  likes_count         Int      @default(0)
+  comments_count      Int      @default(0)
+  shares_count        Int      @default(0)
+  views_count         Int      @default(0)
 
+  // Metadata
+  is_pinned           Boolean  @default(false)
+  is_archived         Boolean  @default(false)
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+
+  // Relations
+  user                user_profiles @relation("feed_posts", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([visibility])
+  @@index([created_at(sort: Desc)])
+  @@index([likes_count(sort: Desc)])
+  @@map("feed_posts")
+}
+
+model feed_likes {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+
+  // Polymorphic reference to content
+  content_type        String   @db.VarChar(20) // post, topic, nook_message
+  content_id          String   @db.Uuid
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user                user_profiles @relation("feed_likes", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@index([user_id])
+  @@index([content_type, content_id])
+  @@index([created_at(sort: Desc)])
+  @@map("feed_likes")
+}
+
+model feed_comments {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+
+  // Polymorphic reference to content
+  content_type        String   @db.VarChar(20) // post, topic, nook_message
+  content_id          String   @db.Uuid
+
+  content             String   @db.Text
+  is_anonymous        Boolean  @default(false)
+
+  // For threaded comments
+  parent_comment_id   String?  @db.Uuid
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+
+  // Relations
+  user                user_profiles   @relation("feed_comments", fields: [user_id], references: [id], onDelete: Cascade)
+  parent              feed_comments?  @relation("comment_replies", fields: [parent_comment_id], references: [id], onDelete: Cascade)
+  replies             feed_comments[] @relation("comment_replies")
+
+  @@index([user_id])
+  @@index([content_type, content_id])
+  @@index([parent_comment_id])
+  @@index([created_at(sort: Desc)])
+  @@map("feed_comments")
+}
+
+model feed_shares {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+
+  // Polymorphic reference to content
+  content_type        String   @db.VarChar(20) // post, topic, nook_message
+  content_id          String   @db.Uuid
+
+  // Optional share message
+  share_message       String?  @db.Text
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user                user_profiles @relation("feed_shares", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@index([user_id])
+  @@index([content_type, content_id])
+  @@index([created_at(sort: Desc)])
+  @@map("feed_shares")
+}
+
+model feed_views {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+
+  // Polymorphic reference to content
+  content_type        String   @db.VarChar(20) // post, topic, nook_message
+  content_id          String   @db.Uuid
+
+  viewed_at           DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user                user_profiles @relation("feed_views", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@index([user_id])
+  @@index([content_type, content_id])
+  @@index([viewed_at(sort: Desc)])
+  @@map("feed_views")
+}
+
+model feed_bookmarks {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+
+  // Polymorphic reference to content
+  content_type        String   @db.VarChar(20) // post, topic, nook_message
+  content_id          String   @db.Uuid
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  user                user_profiles @relation("feed_bookmarks", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@index([user_id])
+  @@index([content_type, content_id])
+  @@map("feed_bookmarks")
+}
+
+//
+// HARASSMENT REPORTS
+//
+model harassment_reports {
+  id                  String   @id @default(uuid()) @db.Uuid
+  reporter_id         String   @db.Uuid
+  reference_number    String   @unique @db.VarChar(20)
+
+  incident_type       String   @db.VarChar(50) // verbal, written, physical, sexual, discriminatory, cyber, retaliation, other
+  description         String   @db.Text
+  date                String?  @db.VarChar(20)
+  location            String?
+  witnesses           String?  @db.Text
+  evidence            String?  @db.Text
+  reporter_type       String   @db.VarChar(20) // victim, witness, other
+  contact_email       String?  @db.VarChar(254)
+  immediate_risk      Boolean  @default(false)
+
+  // Status tracking
+  status              String   @default("submitted") @db.VarChar(20) // submitted, under_review, investigating, resolved, dismissed
+  admin_notes         String?  @db.Text
+  resolved_at         DateTime? @db.Timestamptz(3)
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+
+  // Relations
+  reporter            user_profiles @relation("harassment_reports", fields: [reporter_id], references: [id], onDelete: Cascade)
+
+  @@index([reporter_id])
+  @@index([status])
+  @@index([reference_number])
+  @@index([created_at(sort: Desc)])
+  @@map("harassment_reports")
+}

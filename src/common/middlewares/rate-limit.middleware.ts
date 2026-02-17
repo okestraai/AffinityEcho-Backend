@@ -6,9 +6,8 @@ import logger from '../utils/logger.util';
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
   private limiter = rateLimit({
-    // Security: Strict limits
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 200, // Max 100 requests per IP per window
+    limit: 500, // Max 500 requests per IP per window
 
     // Security headers compliance
     standardHeaders: 'draft-7', // RFC compliant headers
@@ -31,10 +30,17 @@ export class RateLimitMiddleware implements NestMiddleware {
       return ip;
     },
 
-    // Security: Skip health checks
+    // Security: Skip health checks and messaging endpoints
     skip: (req: Request): boolean => {
-      // Skip rate limiting for health endpoints
-      const skipPaths = ['/health', '/api/health', '/favicon.ico'];
+      // Skip rate limiting for health endpoints and messaging
+      const skipPaths = [
+        '/health',
+        '/api/health',
+        '/favicon.ico',
+        '/api/v1/messaging/typing', // Skip typing status updates
+        '/api/v1/notifications/unread-count', // Skip notification polling
+        '/ws/socket.io', // Skip WebSocket connections
+      ];
       return skipPaths.some((path) => req.path.includes(path));
     },
 

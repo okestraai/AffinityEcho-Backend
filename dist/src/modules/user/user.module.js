@@ -10,14 +10,30 @@ exports.UserModule = void 0;
 const common_1 = require("@nestjs/common");
 const user_controller_1 = require("./controllers/user.controller");
 const user_service_1 = require("./services/user.service");
+const user_profile_service_1 = require("./services/user-profile.service");
+const user_settings_service_1 = require("./services/user-settings.service");
+const user_account_service_1 = require("./services/user-account.service");
+const user_blocking_service_1 = require("./services/user-blocking.service");
+const user_resources_service_1 = require("./services/user-resources.service");
+const harassment_report_service_1 = require("./services/harassment-report.service");
+const encryption_module_1 = require("../encryption/encryption.module");
 let UserModule = class UserModule {
 };
 exports.UserModule = UserModule;
 exports.UserModule = UserModule = __decorate([
     (0, common_1.Module)({
+        imports: [encryption_module_1.EncryptionModule],
         controllers: [user_controller_1.UserController],
-        providers: [user_service_1.UserService],
-        exports: [user_service_1.UserService],
+        providers: [
+            user_service_1.UserService,
+            user_profile_service_1.UserProfileService,
+            user_settings_service_1.UserSettingsService,
+            user_account_service_1.UserAccountService,
+            user_blocking_service_1.UserBlockingService,
+            user_resources_service_1.UserResourcesService,
+            harassment_report_service_1.HarassmentReportService,
+        ],
+        exports: [user_service_1.UserService, user_profile_service_1.UserProfileService],
     })
 ], UserModule);
 //# sourceMappingURL=user.module.js.map

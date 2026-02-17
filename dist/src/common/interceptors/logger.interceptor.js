@@ -15,10 +15,10 @@ const operators_1 = require("rxjs/operators");
 const logger_util_1 = __importDefault(require("../utils/logger.util"));
 let LoggingInterceptor = class LoggingInterceptor {
     intercept(context, next) {
-        const request = context.switchToHttp().getRequest();
-        const { method, url, body, headers, ip, user } = request;
+        const req = context.switchToHttp().getRequest();
+        const { method, url, ip, headers, user } = req;
         const now = Date.now();
-        const safeBody = { ...body };
+        const safeBody = { ...req.body };
         if (safeBody.password)
             safeBody.password = '***';
         if (safeBody.token)
@@ -32,16 +32,14 @@ let LoggingInterceptor = class LoggingInterceptor {
             body: method !== 'GET' ? safeBody : undefined,
         });
         return next.handle().pipe((0, operators_1.tap)(() => {
-            const response = context.switchToHttp().getResponse();
+            const res = context.switchToHttp().getResponse();
             const delay = Date.now() - now;
-            const statusCode = response.statusCode;
             logger_util_1.default.info('Request completed', {
                 method,
                 url,
-                statusCode,
+                statusCode: res.statusCode,
                 duration: `${delay}ms`,
                 ip,
-                userId: user?.sub || null,
             });
         }));
     }

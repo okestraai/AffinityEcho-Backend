@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsNumber,
   IsBoolean,
+  IsNotEmpty,
 } from 'class-validator';
 
 export enum ChatType {
@@ -99,4 +100,22 @@ export class GetMessagesDto {
   @IsOptional()
   @IsUUID()
   before?: string;
+}
+
+export class TypingStatusDto {
+  @ApiProperty({
+    description: 'Conversation ID',
+    example: 'uuid',
+  })
+  @IsNotEmpty()
+  @IsString()
+  conversation_id!: string;
+
+  @ApiProperty({
+    description: 'Whether the user is typing',
+    example: true,
+  })
+  @IsNotEmpty()
+  @IsBoolean()
+  is_typing!: boolean;
 }

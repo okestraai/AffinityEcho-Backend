@@ -11,13 +11,9 @@ export class EncryptionUtil {
   constructor(private config: ConfigService) {
     const key = this.config.get<string>('ENCRYPTION_KEY');
 
-    // Add debugging
-    console.log('ENCRYPTION_KEY value:', key);
-    console.log('ENCRYPTION_KEY length:', key?.length);
-
     if (!key || key.length !== 44) {
       throw new Error(
-        `ENCRYPTION_KEY must be 32-byte base64. Got: ${key} (length: ${key?.length})`,
+        'ENCRYPTION_KEY must be a 44-character base64 string (32 bytes)',
       );
     }
 

@@ -512,6 +512,9 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { CreateCommentDto } from '../dto/create-comment.dto';
 import logger from '../../../common/utils/logger.util';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 
 interface UserReactionMap {
   [commentId: string]: { helpful: boolean; supportive: boolean };
@@ -521,7 +524,12 @@ interface UserReactionMap {
 export class CommentService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private notificationsService: NotificationsService,
+    private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -534,10 +542,10 @@ export class CommentService {
     try {
       const { topicId, parentCommentId } = createCommentDto;
 
-      // Check topic existence + get forum_id
+      // Check topic existence + get forum_id and creator
       const { data: topic, error: topicError } = await this.admin
         .from('forum_topics')
-        .select('id, forum_id, comments_count')
+        .select('id, forum_id, comments_count, user_id, title')
         .eq('id', topicId)
         .single();
 
@@ -578,7 +586,9 @@ export class CommentService {
           user_profile:user_id(
             id,
             username,
-            avatar
+            avatar,
+            first_name_encrypted,
+            last_name_encrypted
           )
         `,
         )
@@ -627,6 +637,71 @@ export class CommentService {
           .eq('id', topic.forum_id);
       }
 
+      // Create notification for topic creator (if not commenting on own topic)
+      if (topic.user_id !== userId) {
+        try {
+          const { data: commenter } = await this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single();
+
+          await this.notificationsService.createNotification({
+            user_id: topic.user_id,
+            actor_id: userId,
+            type: 'forum_comment',
+            title: 'New Comment',
+            message: `${commenter?.username || 'Someone'} commented on your topic: ${topic.title}`,
+            action_url: `/forum/topics/${topicId}`,
+            reference_id: comment.id,
+            reference_type: 'forum_comment',
+            metadata: { topic_id: topicId },
+            delivery_method: ['in_app'],
+          });
+        } catch (notifError) {
+          logger.error('Failed to create comment notification:', notifError);
+        }
+      }
+
+      // If it's a reply to a comment, notify the parent comment author
+      if (parentCommentId) {
+        try {
+          const { data: parentComment } = await this.admin
+            .from('forum_comments')
+            .select('user_id')
+            .eq('id', parentCommentId)
+            .single();
+
+          // Notify parent comment author if different from current user and topic creator
+          if (
+            parentComment &&
+            parentComment.user_id !== userId &&
+            parentComment.user_id !== topic.user_id
+          ) {
+            const { data: commenter } = await this.admin
+              .from('user_profiles')
+              .select('username')
+              .eq('id', userId)
+              .single();
+
+            await this.notificationsService.createNotification({
+              user_id: parentComment.user_id,
+              actor_id: userId,
+              type: 'forum_comment',
+              title: 'New Reply',
+              message: `${commenter?.username || 'Someone'} replied to your comment`,
+              action_url: `/forum/topics/${topicId}#comment-${comment.id}`,
+              reference_id: comment.id,
+              reference_type: 'forum_comment',
+              metadata: { parent_comment_id: parentCommentId, topic_id: topicId },
+              delivery_method: ['in_app'],
+            });
+          }
+        } catch (notifError) {
+          logger.error('Failed to create reply notification:', notifError);
+        }
+      }
+
       logger.info('Comment created', { commentId: comment.id });
       return comment;
     } catch (error) {
@@ -667,7 +742,7 @@ export class CommentService {
         helpful_count,
         supportive_count,
         user_id,
-        user_profile:user_id(id, username, avatar)
+        user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted)
       `,
       )
       .eq('topic_id', topicId)
@@ -724,6 +799,12 @@ export class CommentService {
       }
     });
 
+    // Apply identity reveal — show real name for revealed users
+    if (userId) {
+      const allEnriched = Array.from(commentMap.values());
+      await this.applyIdentityReveals(userId, allEnriched);
+    }
+
     return rootComments;
   }
 
@@ -760,17 +841,17 @@ export class CommentService {
 
       const { data: comment } = await this.admin
         .from('forum_comments')
-        .select('*, user_profile:user_id(id, username, avatar)')
+        .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted)')
         .eq('id', commentId)
         .single();
 
       return { action: 'removed', comment };
     }
 
-    // Add reaction
+    // Add reaction - get comment details including author
     const { data: commentCheck } = await this.admin
       .from('forum_comments')
-      .select('id')
+      .select('id, user_id, topic_id')
       .eq('id', commentId)
       .single();
 
@@ -781,6 +862,32 @@ export class CommentService {
       user_id: userId,
       reaction_type: reactionType,
     });
+
+    // Create notification for comment author (if not reacting to own comment)
+    if (commentCheck.user_id !== userId) {
+      try {
+        const { data: reactor } = await this.admin
+          .from('user_profiles')
+          .select('username')
+          .eq('id', userId)
+          .single();
+
+        await this.notificationsService.createNotification({
+          user_id: commentCheck.user_id,
+          actor_id: userId,
+          type: 'forum_like',
+          title: 'Comment Reaction',
+          message: `${reactor?.username || 'Someone'} reacted with ${reactionType} to your comment`,
+          action_url: `/forum/topics/${commentCheck.topic_id}#comment-${commentId}`,
+          reference_id: commentId,
+          reference_type: 'forum_comment',
+          metadata: { reaction_type: reactionType },
+          delivery_method: ['in_app'],
+        });
+      } catch (notifError) {
+        logger.error('Failed to create comment reaction notification:', notifError);
+      }
+    }
 
     const { error } = await this.admin.rpc('increment_comment_reaction', {
       comment_id: commentId,
@@ -795,7 +902,7 @@ export class CommentService {
 
     const { data: comment } = await this.admin
       .from('forum_comments')
-      .select('*, user_profile:user_id(id, username, avatar)')
+      .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted)')
       .eq('id', commentId)
       .single();
 
@@ -827,5 +934,37 @@ export class CommentService {
     }
 
     return { success: true, message: 'Comment deleted' };
+  }
+
+  private async applyIdentityReveals(userId: string, items: any[]): Promise<void> {
+    const otherAuthorIds = [...new Set(
+      items
+        .filter((item) => item.user_profile?.id && item.user_profile.id !== userId)
+        .map((item) => item.user_profile.id),
+    )];
+
+    // Get revealed IDs using shared utility
+    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+
+    items.forEach((item) => {
+      if (!item.user_profile) return;
+
+      const isOwnContent = item.user_profile.id === userId;
+      const isRevealed = revealedIds.has(item.user_profile.id);
+
+      let displayName = item.is_anonymous ? 'Anonymous User' : item.user_profile.username;
+
+      if (isOwnContent || isRevealed) {
+        const realName = this.identityReveal.decryptRealName(
+          item.user_profile.first_name_encrypted,
+          item.user_profile.last_name_encrypted,
+        );
+        if (realName) displayName = realName;
+      }
+
+      item.user_profile.display_name = displayName;
+      delete item.user_profile.first_name_encrypted;
+      delete item.user_profile.last_name_encrypted;
+    });
   }
 }

@@ -5,57 +5,24 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
-
-interface FollowWithUser {
-  id: string;
-  created_at: string;
-  following: Array<{
-    id: string;
-    username: string;
-    avatar: string;
-    job_title: string | null;
-    company_type: string | null;
-    mentoring_as: string | null;
-    is_willing_to_mentor: boolean;
-    mentor_bio: string | null;
-    location: string | null;
-    years_experience: number | null;
-    career_level_encrypted: string | null;
-  }>;
-}
-
-interface FollowerWithUser {
-  id: string;
-  created_at: string;
-  follower: Array<{
-    id: string;
-    username: string;
-    avatar: string;
-    job_title: string | null;
-    company_type: string | null;
-    mentoring_as: string | null;
-    is_willing_to_mentor: boolean;
-    mentor_bio: string | null;
-    location: string | null;
-    years_experience: number | null;
-    career_level_encrypted: string | null;
-  }>;
-}
+import { NotificationsService } from '../../notifications/notifications.service';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import logger from '../../../common/utils/logger.util';
 
 @Injectable()
 export class FollowService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private notificationsService: NotificationsService,
+    private identityReveal: IdentityRevealUtil,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
   async followUser(followerId: string, followingId: string) {
     try {
-      console.log(
-        `Attempting to follow: follower=${followerId}, following=${followingId}`,
-      );
-
       // Check if users exist
       const [
         { data: follower, error: followerError },
@@ -73,21 +40,22 @@ export class FollowService {
           .single(),
       ]);
 
-      // Log errors for debugging
-      if (followerError) {
-        console.error('Follower query error:', followerError);
-      }
-      if (followingError) {
-        console.error('Following query error:', followingError);
-      }
-
       if (!follower) {
-        console.error(`Follower not found: ${followerId}`);
         throw new NotFoundException('Follower user not found');
       }
 
       if (!following) {
-        console.error(`Following user not found: ${followingId}`);
+        throw new NotFoundException('User to follow not found');
+      }
+
+      // Check if the target user is deleted or deactivated
+      const { data: targetProfile } = await this.admin
+        .from('user_profiles')
+        .select('is_deleted, is_deactivated')
+        .eq('id', followingId)
+        .single();
+
+      if (targetProfile?.is_deleted || targetProfile?.is_deactivated) {
         throw new NotFoundException('User to follow not found');
       }
 
@@ -96,7 +64,7 @@ export class FollowService {
       }
 
       // Check if already following - use maybeSingle to avoid throwing error if not found
-      const { data: existingFollow, error: existingFollowError } =
+      const { data: existingFollow } =
         await this.admin
           .from('user_follows')
           .select('id')
@@ -104,14 +72,7 @@ export class FollowService {
           .eq('following_id', followingId)
           .maybeSingle();
 
-      if (existingFollowError) {
-        console.error('Existing follow check error:', existingFollowError);
-      }
-
       if (existingFollow) {
-        console.log(
-          `Already following: follower=${followerId}, following=${followingId}`,
-        );
         throw new BadRequestException('Already following this user');
       }
 
@@ -122,7 +83,7 @@ export class FollowService {
       const { data: follow, error: followError } = await this.admin
         .from('user_follows')
         .insert({
-          id: followId, // Add the generated UUID
+          id: followId,
           follower_id: followerId,
           following_id: followingId,
           created_at: new Date().toISOString(),
@@ -131,13 +92,11 @@ export class FollowService {
         .single();
 
       if (followError) {
-        console.error('Follow creation error:', followError);
+        logger.error('Follow creation failed', { module: 'FollowService', error: followError });
         throw new BadRequestException(
           `Failed to follow user: ${followError.message}`,
         );
       }
-
-      console.log(`Successfully followed: ${follow.id}`);
 
       // Create notification for the followed user
       await this.createNotification(
@@ -159,7 +118,6 @@ export class FollowService {
         },
       };
     } catch (error: any) {
-      console.error('Follow user error:', error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
@@ -175,24 +133,18 @@ export class FollowService {
 
   async unfollowUser(followerId: string, followingId: string) {
     try {
-      console.log(
-        `Attempting to unfollow: follower=${followerId}, following=${followingId}`,
-      );
-
-      const { error, count } = await this.admin
+      const { error } = await this.admin
         .from('user_follows')
         .delete()
         .eq('follower_id', followerId)
         .eq('following_id', followingId);
 
       if (error) {
-        console.error('Unfollow error:', error);
+        logger.error('Unfollow failed', { module: 'FollowService', error });
         throw new BadRequestException(
           `Failed to unfollow user: ${error.message}`,
         );
       }
-
-      console.log(`Successfully unfollowed, rows affected: ${count}`);
 
       return {
         success: true,
@@ -200,15 +152,14 @@ export class FollowService {
         data: {},
       };
     } catch (error: any) {
-      console.error('Unfollow user error:', error);
-
+      if (error instanceof BadRequestException) throw error;
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       throw new BadRequestException(`Failed to unfollow user: ${errorMessage}`);
     }
   }
 
-  async getFollowing(userId: string, type?: string) {
+  async getFollowing(userId: string, type?: string, currentUserId?: string) {
     try {
       let query = this.admin
         .from('user_follows')
@@ -227,7 +178,12 @@ export class FollowService {
             mentor_bio,
             location,
             years_experience,
-            career_level_encrypted
+            career_level_encrypted,
+            first_name_encrypted,
+            last_name_encrypted,
+            has_completed_onboarding,
+            is_deleted,
+            is_deactivated
           )
         `,
         )
@@ -237,31 +193,38 @@ export class FollowService {
       const { data: follows, error } = await query;
 
       if (error) {
-        console.error('Get following error:', error);
+        logger.error('Failed to get following list', { module: 'FollowService', error });
         throw new BadRequestException('Failed to get following list');
       }
 
-      // Process follows - extract the user from the array
-      const processedFollows = (follows || []).map((follow: any) => {
-        const user = follow.following?.[0] || follow.following || {};
-        return {
-          id: follow.id,
-          created_at: follow.created_at,
-          user: {
-            id: user.id,
-            username: user.username,
-            avatar: user.avatar,
-            job_title: user.job_title,
-            company_type: user.company_type,
-            mentoring_as: user.mentoring_as,
-            is_willing_to_mentor: user.is_willing_to_mentor,
-            mentor_bio: user.mentor_bio,
-            location: user.location,
-            years_experience: user.years_experience,
-            career_level: user.career_level_encrypted,
-          },
-        };
-      });
+      // Process follows - extract the user from the array and filter out deleted/deactivated
+      const processedFollows = (follows || [])
+        .map((follow: any) => {
+          const user = follow.following?.[0] || follow.following || {};
+          return {
+            id: follow.id,
+            created_at: follow.created_at,
+            user: {
+              id: user.id,
+              username: user.username,
+              avatar: user.avatar,
+              job_title: user.job_title,
+              company_type: user.company_type,
+              mentoring_as: user.mentoring_as,
+              is_willing_to_mentor: user.is_willing_to_mentor,
+              mentor_bio: user.mentor_bio,
+              location: user.location,
+              years_experience: user.years_experience,
+              career_level: user.career_level_encrypted,
+              first_name_encrypted: user.first_name_encrypted,
+              last_name_encrypted: user.last_name_encrypted,
+              has_completed_onboarding: user.has_completed_onboarding,
+              is_deleted: user.is_deleted,
+              is_deactivated: user.is_deactivated,
+            },
+          };
+        })
+        .filter((f) => !f.user.is_deleted && !f.user.is_deactivated && f.user.has_completed_onboarding !== false);
 
       // Filter by type if specified
       let filteredFollows = processedFollows;
@@ -281,25 +244,47 @@ export class FollowService {
         });
       }
 
+      // Apply identity reveal — show real name for revealed users and self
+      const viewerId = currentUserId || userId;
+      const otherUserIds = filteredFollows
+        .filter((f) => f.user.id && f.user.id !== viewerId)
+        .map((f) => f.user.id);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, otherUserIds);
+
       return {
         success: true,
         message: 'Following list retrieved successfully',
         data: {
-          following: filteredFollows.map((f) => ({
-            ...f.user,
-            followId: f.id,
-            followedAt: f.created_at,
-          })),
+          following: filteredFollows.map((f) => {
+            const isOwnEntry = f.user.id === viewerId;
+            const isRevealed = revealedIds.has(f.user.id);
+            let displayName = f.user.username;
+            if (isOwnEntry || isRevealed) {
+              const realName = this.identityReveal.decryptRealName(
+                f.user.first_name_encrypted,
+                f.user.last_name_encrypted,
+              );
+              if (realName) displayName = realName;
+            }
+            const { first_name_encrypted, last_name_encrypted, ...userWithout } = f.user;
+            return {
+              ...userWithout,
+              display_name: displayName,
+              followId: f.id,
+              followedAt: f.created_at,
+            };
+          }),
           total: filteredFollows.length,
         },
       };
     } catch (error: any) {
-      console.error('Get following error:', error);
+      if (error instanceof BadRequestException) throw error;
+      logger.error('Failed to get following list', { module: 'FollowService', error });
       throw new BadRequestException('Failed to get following list');
     }
   }
 
-  async getFollowers(userId: string, type?: string) {
+  async getFollowers(userId: string, type?: string, currentUserId?: string) {
     try {
       let query = this.admin
         .from('user_follows')
@@ -318,7 +303,12 @@ export class FollowService {
             mentor_bio,
             location,
             years_experience,
-            career_level_encrypted
+            career_level_encrypted,
+            first_name_encrypted,
+            last_name_encrypted,
+            has_completed_onboarding,
+            is_deleted,
+            is_deactivated
           )
         `,
         )
@@ -328,31 +318,38 @@ export class FollowService {
       const { data: follows, error } = await query;
 
       if (error) {
-        console.error('Get followers error:', error);
+        logger.error('Failed to get followers list', { module: 'FollowService', error });
         throw new BadRequestException('Failed to get followers list');
       }
 
-      // Process follows - extract the user from the array
-      const processedFollows = (follows || []).map((follow: any) => {
-        const user = follow.follower?.[0] || follow.follower || {};
-        return {
-          id: follow.id,
-          created_at: follow.created_at,
-          user: {
-            id: user.id,
-            username: user.username,
-            avatar: user.avatar,
-            job_title: user.job_title,
-            company_type: user.company_type,
-            mentoring_as: user.mentoring_as,
-            is_willing_to_mentor: user.is_willing_to_mentor,
-            mentor_bio: user.mentor_bio,
-            location: user.location,
-            years_experience: user.years_experience,
-            career_level: user.career_level_encrypted,
-          },
-        };
-      });
+      // Process follows - extract the user from the array and filter out deleted/deactivated
+      const processedFollows = (follows || [])
+        .map((follow: any) => {
+          const user = follow.follower?.[0] || follow.follower || {};
+          return {
+            id: follow.id,
+            created_at: follow.created_at,
+            user: {
+              id: user.id,
+              username: user.username,
+              avatar: user.avatar,
+              job_title: user.job_title,
+              company_type: user.company_type,
+              mentoring_as: user.mentoring_as,
+              is_willing_to_mentor: user.is_willing_to_mentor,
+              mentor_bio: user.mentor_bio,
+              location: user.location,
+              years_experience: user.years_experience,
+              career_level: user.career_level_encrypted,
+              first_name_encrypted: user.first_name_encrypted,
+              last_name_encrypted: user.last_name_encrypted,
+              has_completed_onboarding: user.has_completed_onboarding,
+              is_deleted: user.is_deleted,
+              is_deactivated: user.is_deactivated,
+            },
+          };
+        })
+        .filter((f) => !f.user.is_deleted && !f.user.is_deactivated && f.user.has_completed_onboarding !== false);
 
       // Filter by type if specified
       let filteredFollows = processedFollows;
@@ -372,47 +369,74 @@ export class FollowService {
         });
       }
 
+      // Apply identity reveal — show real name for revealed users and self
+      const viewerId = currentUserId || userId;
+      const otherUserIds = filteredFollows
+        .filter((f) => f.user.id && f.user.id !== viewerId)
+        .map((f) => f.user.id);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, otherUserIds);
+
       return {
         success: true,
         message: 'Followers list retrieved successfully',
         data: {
-          followers: filteredFollows.map((f) => ({
-            ...f.user,
-            followId: f.id,
-            followedAt: f.created_at,
-          })),
+          followers: filteredFollows.map((f) => {
+            const isOwnEntry = f.user.id === viewerId;
+            const isRevealed = revealedIds.has(f.user.id);
+            let displayName = f.user.username;
+            if (isOwnEntry || isRevealed) {
+              const realName = this.identityReveal.decryptRealName(
+                f.user.first_name_encrypted,
+                f.user.last_name_encrypted,
+              );
+              if (realName) displayName = realName;
+            }
+            const { first_name_encrypted, last_name_encrypted, ...userWithout } = f.user;
+            return {
+              ...userWithout,
+              display_name: displayName,
+              followId: f.id,
+              followedAt: f.created_at,
+            };
+          }),
           total: filteredFollows.length,
         },
       };
     } catch (error: any) {
-      console.error('Get followers error:', error);
+      if (error instanceof BadRequestException) throw error;
+      logger.error('Failed to get followers list', { module: 'FollowService', error });
       throw new BadRequestException('Failed to get followers list');
     }
   }
 
   async checkFollowStatus(followerId: string, followingId: string) {
     try {
-      console.log(
-        `Checking follow status: follower=${followerId}, following=${followingId}`,
-      );
+      // Check both directions in parallel
+      const [
+        { data: iFollow, error: iFollowError },
+        { data: theyFollowMe, error: theyFollowError },
+      ] = await Promise.all([
+        this.admin
+          .from('user_follows')
+          .select('id, created_at')
+          .eq('follower_id', followerId)
+          .eq('following_id', followingId)
+          .maybeSingle(),
+        this.admin
+          .from('user_follows')
+          .select('id, created_at')
+          .eq('follower_id', followingId)
+          .eq('following_id', followerId)
+          .maybeSingle(),
+      ]);
 
-      const { data: follow, error } = await this.admin
-        .from('user_follows')
-        .select('id, created_at')
-        .eq('follower_id', followerId)
-        .eq('following_id', followingId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Follow status check error:', error);
-        // Don't throw, just return false
+      if (iFollowError || theyFollowError) {
         return {
           success: true,
           message: 'Follow status retrieved',
           data: {
             isFollowing: false,
-            followId: null,
-            followedAt: null,
+            isFollowedBy: false,
           },
         };
       }
@@ -421,22 +445,21 @@ export class FollowService {
         success: true,
         message: 'Follow status retrieved',
         data: {
-          isFollowing: !!follow,
-          followId: follow?.id,
-          followedAt: follow?.created_at,
+          isFollowing: !!iFollow,
+          followId: iFollow?.id,
+          followedAt: iFollow?.created_at,
+          isFollowedBy: !!theyFollowMe,
+          followedByAt: theyFollowMe?.created_at,
         },
       };
     } catch (error: any) {
-      console.error('Check follow status error:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      logger.error('Failed to check follow status', { module: 'FollowService', error });
       return {
         success: false,
-        message: `Failed to check follow status: ${errorMessage}`,
+        message: 'Failed to check follow status',
         data: {
           isFollowing: false,
-          followId: null,
-          followedAt: null,
+          isFollowedBy: false,
         },
       };
     }
@@ -453,11 +476,7 @@ export class FollowService {
     referenceType: string,
   ) {
     try {
-      const { v4: uuidv4 } = require('uuid');
-      const notificationId = uuidv4();
-
-      const { error } = await this.admin.from('notifications').insert({
-        id: notificationId,
+      await this.notificationsService.createNotification({
         user_id: userId,
         actor_id: actorId,
         type,
@@ -467,17 +486,10 @@ export class FollowService {
         reference_id: referenceId,
         reference_type: referenceType,
         metadata: {},
-        created_at: new Date().toISOString(),
-        read: false,
+        delivery_method: ['in_app'],
       });
-
-      if (error) {
-        console.error('Failed to create notification:', error);
-      } else {
-        console.log('Notification created successfully');
-      }
     } catch (error: any) {
-      console.error('Failed to create notification:', error);
+      logger.error('Failed to create follow notification', { module: 'FollowService', error });
     }
   }
 }

@@ -13,6 +13,7 @@ exports.UserService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_client_1 = require("../../../database/supabase.client");
 const config_1 = require("@nestjs/config");
+const select_fields_1 = require("../../../common/constants/select-fields");
 let UserService = class UserService {
     constructor(config) {
         this.config = config;
@@ -21,7 +22,7 @@ let UserService = class UserService {
     async getProfile(userId) {
         const { data, error } = await this.supabase
             .from('user_profiles')
-            .select('*')
+            .select(select_fields_1.USER_PROFILE_OWN_FIELDS)
             .eq('id', userId)
             .single();
         if (error)
@@ -33,7 +34,7 @@ let UserService = class UserService {
             .from('user_profiles')
             .update(updates)
             .eq('id', userId)
-            .select()
+            .select(select_fields_1.USER_PROFILE_OWN_FIELDS)
             .single();
         if (error)
             throw error;

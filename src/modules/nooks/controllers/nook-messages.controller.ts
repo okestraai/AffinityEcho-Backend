@@ -23,7 +23,6 @@ import { CreateMessageDto } from '../dto/create-message.dto';
 import { MessageQueryDto } from '../dto/message-query.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import { NookMemberGuard } from '../guards/nook-member.guard';
 import { NookActiveGuard } from '../guards/nook-active.guard';
 
 @ApiTags('Nook Messages')
@@ -34,7 +33,6 @@ export class NookMessagesController {
   constructor(private readonly messagesService: NookMessagesService) {}
 
   @Get()
-  @UseGuards(NookMemberGuard)
   @ApiOperation({
     summary: 'Get messages for a nook',
     description: 'Get paginated messages for a specific nook',
@@ -56,7 +54,7 @@ export class NookMessagesController {
   }
 
   @Post()
-  @UseGuards(NookMemberGuard, NookActiveGuard)
+  @UseGuards(NookActiveGuard)
   @ApiOperation({
     summary: 'Post a message to a nook',
     description: 'Create a new message in a nook (replies allowed)',
@@ -84,7 +82,6 @@ export class NookMessagesController {
   }
 
   @Delete(':messageId')
-  @UseGuards(NookMemberGuard)
   @ApiOperation({
     summary: 'Delete a message',
     description: 'Delete a message (author or admin only)',

@@ -2,12 +2,16 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class ReferralLikesService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private notificationsService: NotificationsService,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -27,9 +31,35 @@ export class ReferralLikesService {
 
       const { data } = await this.admin
         .from('referral_posts')
-        .select('likes_count')
+        .select('likes_count, user_id')
         .eq('id', referralId)
         .single();
+
+      // Create notification for referral post author (if not liking own post)
+      if (data && data.user_id !== userId) {
+        try {
+          const { data: liker } = await this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single();
+
+          await this.notificationsService.createNotification({
+            user_id: data.user_id,
+            actor_id: userId,
+            type: 'referral_like',
+            title: 'New Like',
+            message: `${liker?.username || 'Someone'} liked your referral post`,
+            action_url: `/referral/posts/${referralId}`,
+            reference_id: referralId,
+            reference_type: 'referral_post',
+            metadata: {},
+            delivery_method: ['in_app'],
+          });
+        } catch (notifError) {
+          logger.error('Failed to create like notification:', notifError);
+        }
+      }
 
       if (!data) {
         return { success: true, data: { liked: true, likesCount: 0 } };

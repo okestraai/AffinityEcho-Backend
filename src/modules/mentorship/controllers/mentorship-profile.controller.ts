@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { MentorshipProfileService } from '../services/mentorship-profile.service';
@@ -64,6 +65,7 @@ export class MentorshipProfileController {
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiBody({ type: CreateMentorProfileDto })
   async setupMentorProfile(
     @Request() req: AuthenticatedRequest,
     @Body() createMentorProfileDto: CreateMentorProfileDto,
@@ -98,6 +100,7 @@ export class MentorshipProfileController {
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 404, description: 'User not found or not a mentor' })
+  @ApiBody({ type: UpdateMentorProfileDto })
   async updateMentorProfile(
     @Request() req: AuthenticatedRequest,
     @Body() updateMentorProfileDto: UpdateMentorProfileDto,
@@ -132,6 +135,7 @@ export class MentorshipProfileController {
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiBody({ type: CreateMenteeProfileDto })
   async setupMenteeProfile(
     @Request() req: AuthenticatedRequest,
     @Body() createMenteeProfileDto: CreateMenteeProfileDto,
@@ -166,6 +170,7 @@ export class MentorshipProfileController {
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 404, description: 'User not found or not a mentee' })
+  @ApiBody({ type: UpdateMenteeProfileDto })
   async updateMenteeProfile(
     @Request() req: AuthenticatedRequest,
     @Body() updateMenteeProfileDto: UpdateMenteeProfileDto,
@@ -278,7 +283,7 @@ export class MentorshipProfileController {
     return this.mentorshipProfileService.checkProfileExists(userId);
   }
 
-  @Get('check-requirements')
+  @Get('check-requirement')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Check profile requirements for mentorship' })
   @ApiResponse({
@@ -366,6 +371,7 @@ export class MentorshipProfileController {
     },
   })
   @ApiResponse({ status: 400, description: 'Failed to submit feedback' })
+  @ApiBody({ schema: { type: 'object', properties: { rating: { type: 'number' }, feedback: { type: 'string' } }, required: ['rating'] } })
   async submitFeedback(
     @Request() req: AuthenticatedRequest,
     @Body() feedbackData: any,

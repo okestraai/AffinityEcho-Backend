@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { EncryptionModule } from '../encryption/encryption.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 // Controllers
 import { MessagingController } from './controllers/messaging.controller';
@@ -22,14 +23,22 @@ import { MentorshipChatGuard } from './guards/mentorship-chat.guard';
 
 // Common Utils
 import { EmailService } from '../../common/utils/email/email.service';
+import { UserDiscoveryService } from './services/user-discovery.service';
+import { UserDiscoveryController } from './controllers/user-discovery.controller';
 
 @Module({
-  imports: [ConfigModule, forwardRef(() => AuthModule), EncryptionModule],
+  imports: [
+    ConfigModule,
+    forwardRef(() => AuthModule),
+    EncryptionModule,
+    forwardRef(() => NotificationsModule),
+  ],
   controllers: [
     MessagingController,
     ConversationsController,
     IdentityRevealController,
     MentorshipChatController,
+    UserDiscoveryController,
   ],
   providers: [
     // Services
@@ -37,6 +46,7 @@ import { EmailService } from '../../common/utils/email/email.service';
     ConversationsService,
     IdentityRevealService,
     MentorshipChatService,
+    UserDiscoveryService,
     ChatGateway,
 
     // Guards

@@ -76,6 +76,7 @@ export class MentorshipRequestsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Target user not found' })
   @ApiResponse({ status: 409, description: 'Request already exists' })
+  @ApiBody({ type: CreateDirectRequestDto })
   async sendDirectRequest(
     @CurrentUser() user: any,
     @Body() createDirectRequestDto: CreateDirectRequestDto,

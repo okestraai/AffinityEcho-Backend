@@ -1,3 +1,4 @@
+// messaging.controller.ts
 import {
   Controller,
   Post,
@@ -19,6 +20,7 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ChatParticipantGuard } from '../guards/chat-participant.guard';
@@ -28,12 +30,14 @@ import {
   MarkAsReadDto,
   GetMessagesDto,
   ChatType,
+  TypingStatusDto,
 } from '../dto/messaging.dto';
 
 @ApiTags('Messaging')
 @Controller('messaging')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { limit: 100, ttl: 60000 } }) // 100 requests per minute for messaging
 export class MessagingController {
   constructor(private readonly messagingService: MessagingService) {}
 
@@ -131,16 +135,54 @@ export class MessagingController {
     return this.messagingService.getUnreadCount(user.userId, chatType);
   }
 
+  // NEW: Typing status endpoints
+  @Post('typing')
+  @SkipThrottle() // Skip rate limiting for typing status (high frequency)
+  @UseGuards(ChatParticipantGuard)
+  @ApiOperation({
+    summary: 'Set typing status',
+    description: 'Set user typing status in a conversation',
+  })
+  @ApiBody({ type: TypingStatusDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Typing status updated',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          user_id: 'uuid',
+          conversation_id: 'uuid',
+          is_typing: true,
+          recipient_id: 'uuid',
+          timestamp: '2024-01-01T12:00:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  async setTypingStatus(
+    @CurrentUser() user: any,
+    @Body() dto: TypingStatusDto,
+  ) {
+    return this.messagingService.setTypingStatus(
+      user.userId,
+      dto.conversation_id,
+      dto.is_typing,
+    );
+  }
+
   @Get('typing/:conversationId')
   @ApiOperation({
     summary: 'Get typing status',
-    description: 'Get typing status for a conversation',
+    description: 'Get current typing status for a conversation',
   })
   @ApiParam({
     name: 'conversationId',
     description: 'Conversation ID',
   })
-  @UseGuards(ChatParticipantGuard)
   @ApiResponse({
     status: 200,
     description: 'Typing status retrieved',
@@ -148,9 +190,16 @@ export class MessagingController {
       example: {
         success: true,
         data: {
-          is_typing: true,
-          user_id: 'uuid',
-          last_typing_at: '2024-01-01T12:00:00Z',
+          conversation_id: 'uuid',
+          active_typers: [
+            {
+              user_id: 'uuid',
+              username: 'user123',
+              avatar: '👤',
+              is_typing: true,
+            },
+          ],
+          timestamp: '2024-01-01T12:00:00Z',
         },
       },
     },
@@ -159,15 +208,6 @@ export class MessagingController {
     @CurrentUser() user: any,
     @Param('conversationId') conversationId: string,
   ) {
-    // This would typically be handled via WebSocket
-    // This endpoint is for initial state or fallback
-    return {
-      success: true,
-      data: {
-        is_typing: false,
-        user_id: null,
-        last_typing_at: null,
-      },
-    };
+    return this.messagingService.getTypingStatus(user.userId, conversationId);
   }
 }

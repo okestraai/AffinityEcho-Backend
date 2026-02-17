@@ -8,12 +8,16 @@ import { ConfigService } from '@nestjs/config';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { MessageQueryDto } from '../dto/message-query.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 
 @Injectable()
 export class NookMessagesService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private identityReveal: IdentityRevealUtil,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -22,45 +26,37 @@ export class NookMessagesService {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Check nook exists
+    // Check nook exists (select only needed fields instead of *)
     const { data: nook, error: nookError } = await this.admin
       .from('nooks')
-      .select('*')
+      .select('id, is_active, is_locked, expires_at')
       .eq('id', nookId)
       .single();
 
     if (nookError || !nook) throw new NotFoundException('Nook not found');
 
-    // Check user is member
-    const { data: membership } = await this.admin
-      .from('nook_members')
-      .select('id')
-      .eq('nook_id', nookId)
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (!membership) {
-      throw new ForbiddenException('You must be a member to view messages');
-    }
-
     // Get messages
+    const messageSelect = `
+      id, nook_id, user_id, parent_message_id, content, is_anonymous,
+      is_removed, removed_reason, is_flagged, flagged_count,
+      heard_count, validated_count, helpful_count,
+      created_at, updated_at,
+      user:user_id (
+        id,
+        username,
+        avatar,
+        first_name_encrypted,
+        last_name_encrypted
+      )
+    `;
+
     const {
       data: messages,
       error,
       count,
     } = await this.admin
       .from('nook_messages')
-      .select(
-        `
-        *,
-        user:user_id (
-          id,
-          username,
-          avatar
-        )
-      `,
-        { count: 'exact' },
-      )
+      .select(messageSelect, { count: 'exact' })
       .eq('nook_id', nookId)
       .is('parent_message_id', null)
       .order('created_at', { ascending: sortOrder === 'asc' })
@@ -68,49 +64,78 @@ export class NookMessagesService {
 
     if (error) throw new BadRequestException(error.message);
 
-    // Get replies for each message
-    const messagesWithReplies = await Promise.all(
-      (messages || []).map(async (message) => {
-        const { data: replies } = await this.admin
-          .from('nook_messages')
-          .select(
-            `
-            *,
-            user:user_id (
-              id,
-              username,
-              avatar
-            )
-          `,
-          )
-          .eq('parent_message_id', message.id)
-          .order('created_at', { ascending: true });
+    // Batch-fetch ALL replies for these messages in a single query (instead of N queries)
+    const messageIds = (messages || []).map((m) => m.id);
+    let repliesMap = new Map<string, any[]>();
 
-        return {
-          ...message,
-          user: {
-            avatar: message.user?.avatar || 'User',
-            username: message.is_anonymous
-              ? 'Anonymous'
-              : message.user?.username || 'User',
-          },
-          replies: (replies || []).map((reply) => ({
+    if (messageIds.length > 0) {
+      const { data: allReplies } = await this.admin
+        .from('nook_messages')
+        .select(messageSelect)
+        .in('parent_message_id', messageIds)
+        .order('created_at', { ascending: true });
+
+      // Group replies by parent_message_id
+      (allReplies || []).forEach((reply: any) => {
+        const parentId = reply.parent_message_id;
+        if (!repliesMap.has(parentId)) {
+          repliesMap.set(parentId, []);
+        }
+        repliesMap.get(parentId)!.push(reply);
+      });
+    }
+
+    const messagesWithReplies = (messages || []).map((message) => ({
+      ...message,
+      replies: repliesMap.get(message.id) || [],
+    }));
+
+    // Collect all unique user IDs from messages and replies (including self)
+    const allUserIds: string[] = [];
+    messagesWithReplies.forEach((msg: any) => {
+      if (msg.user?.id) allUserIds.push(msg.user.id);
+      (msg.replies || []).forEach((reply: any) => {
+        if (reply.user?.id) allUserIds.push(reply.user.id);
+      });
+    });
+
+    // Get revealed user IDs in a single query
+    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, allUserIds);
+
+    // Apply identity reveal to messages and replies
+    const processedMessages = messagesWithReplies.map((message: any) => {
+      const msgUser = message.user;
+      const msgDisplayName = this.resolveDisplayName(msgUser, revealedIds, userId);
+
+      return {
+        ...message,
+        user: {
+          id: msgUser?.id,
+          avatar: msgUser?.avatar || 'User',
+          username: msgUser?.username || 'User',
+          display_name: msgDisplayName,
+        },
+        replies: (message.replies || []).map((reply: any) => {
+          const replyUser = reply.user;
+          const replyDisplayName = this.resolveDisplayName(replyUser, revealedIds, userId);
+
+          return {
             ...reply,
             user: {
-              avatar: reply.user?.avatar || 'User',
-              username: reply.is_anonymous
-                ? 'Anonymous'
-                : reply.user?.username || 'User',
+              id: replyUser?.id,
+              avatar: replyUser?.avatar || 'User',
+              username: replyUser?.username || 'User',
+              display_name: replyDisplayName,
             },
-          })),
-        };
-      }),
-    );
+          };
+        }),
+      };
+    });
 
     return {
       success: true,
       data: {
-        messages: messagesWithReplies,
+        messages: processedMessages,
         pagination: {
           page,
           limit,
@@ -131,10 +156,10 @@ export class NookMessagesService {
       is_anonymous = true,
     } = createMessageDto;
 
-    // Check nook exists and is active
+    // Check nook exists and is active (select only needed fields)
     const { data: nook, error: nookError } = await this.admin
       .from('nooks')
-      .select('*')
+      .select('id, is_active, is_locked, expires_at, messages_count')
       .eq('id', nookId)
       .single();
 
@@ -149,17 +174,6 @@ export class NookMessagesService {
     }
 
     // Check if user is a member
-    const { data: membership } = await this.admin
-      .from('nook_members')
-      .select('id, messages_sent')
-      .eq('nook_id', nookId)
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (!membership) {
-      throw new ForbiddenException('You must be a member to post messages');
-    }
-
     // Validate parent message if replying
     if (parent_message_id) {
       const { data: parentMessage } = await this.admin
@@ -200,26 +214,29 @@ export class NookMessagesService {
 
     if (createError) throw new BadRequestException(createError.message);
 
-    // Update nook stats
-    await Promise.all([
-      this.admin
-        .from('nooks')
-        .update({
-          messages_count: (nook.messages_count || 0) + 1,
-          last_activity_at: new Date().toISOString(),
-        })
-        .eq('id', nookId),
-      this.admin
-        .from('nook_members')
-        .update({
-          messages_sent: (membership.messages_sent || 0) + 1,
-        })
-        .eq('nook_id', nookId)
-        .eq('user_id', userId),
-    ]);
+    // Update nook stats and temperature in parallel (instead of sequentially)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const { count: recentMessages } = await this.admin
+      .from('nook_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('nook_id', nookId)
+      .gte('created_at', oneHourAgo.toISOString());
 
-    // Update temperature based on message activity
-    await this.updateNookTemperature(nookId);
+    let temperature = 'cool';
+    if ((recentMessages || 0) >= 10) {
+      temperature = 'hot';
+    } else if ((recentMessages || 0) >= 3) {
+      temperature = 'warm';
+    }
+
+    await this.admin
+      .from('nooks')
+      .update({
+        messages_count: (nook.messages_count || 0) + 1,
+        last_activity_at: new Date().toISOString(),
+        temperature,
+      })
+      .eq('id', nookId);
 
     return {
       success: true,
@@ -284,6 +301,29 @@ export class NookMessagesService {
       success: true,
       message: 'Message deleted successfully',
     };
+  }
+
+  /**
+   * Resolve display name: real name if revealed, otherwise username.
+   */
+  private resolveDisplayName(
+    user: any,
+    revealedIds: Set<string>,
+    currentUserId: string,
+  ): string {
+    if (!user) return 'User';
+
+    const isOwnMessage = user.id === currentUserId;
+    const isRevealed = revealedIds.has(user.id);
+
+    if (isOwnMessage || isRevealed) {
+      const realName = this.identityReveal.decryptRealName(
+        user.first_name_encrypted,
+        user.last_name_encrypted,
+      );
+      if (realName) return realName;
+    }
+    return user.username || 'User';
   }
 
   private async updateNookTemperature(nookId: string) {

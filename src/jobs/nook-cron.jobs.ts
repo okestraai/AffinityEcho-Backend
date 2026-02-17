@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../database/supabase.client';
+import logger from '../common/utils/logger.util';
 
 @Injectable()
 export class NookCronJobs {
@@ -21,7 +22,7 @@ export class NookCronJobs {
       .lt('expires_at', now);
 
     if (error) {
-      console.error('Error fetching expired nooks:', error.message);
+      logger.error('Error fetching expired nooks', { module: 'NookCron', error: error.message });
       return;
     }
 
@@ -32,9 +33,9 @@ export class NookCronJobs {
         .lt('expires_at', now);
 
       if (deleteError) {
-        console.error('Error deleting expired nooks:', deleteError.message);
+        logger.error('Error deleting expired nooks', { module: 'NookCron', error: deleteError.message });
       } else {
-        console.log(`Deleted ${expiredNooks.length} expired nooks`);
+        logger.info(`Deleted ${expiredNooks.length} expired nooks`, { module: 'NookCron' });
       }
     }
   }
@@ -50,7 +51,7 @@ export class NookCronJobs {
       .gt('expires_at', now);
 
     if (error) {
-      console.error('Error fetching nooks:', error.message);
+      logger.error('Error fetching nooks for temperature update', { module: 'NookCron', error: error.message });
       return;
     }
 
@@ -71,9 +72,9 @@ export class NookCronJobs {
       .gte('created_at', oneHourAgo.toISOString());
 
     let temperature = 'cool';
-    if (recentMessages >= 10) {
+    if ((recentMessages ?? 0) >= 10) {
       temperature = 'hot';
-    } else if (recentMessages >= 3) {
+    } else if ((recentMessages ?? 0) >= 3) {
       temperature = 'warm';
     }
 

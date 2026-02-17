@@ -10,6 +10,9 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { CreateTopicDto } from '../dto/create-topic.dto';
 import { ForumFiltersDto } from '../dto/forum-filters.dto';
 import logger from '../../../common/utils/logger.util';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 
 interface UserReaction {
   seen: boolean;
@@ -38,7 +41,12 @@ interface TopicReactionCounts {
 export class TopicService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private notificationsService: NotificationsService,
+    private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -115,7 +123,7 @@ export class TopicService {
         .select(
           `
           *,
-          user_profile:user_id(id, username, avatar),
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
           forum:forum_id(id, name, icon)
         `,
         )
@@ -160,7 +168,7 @@ export class TopicService {
     let query = this.admin.from('forum_topics').select(
       `
       *,
-      user_profile:user_id(id, username, avatar),
+      user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
       forum:forum_id(id, name, icon, is_global),
       topic_reactions!topic_id(count)
     `,
@@ -254,6 +262,11 @@ export class TopicService {
       });
     }
 
+    // Apply identity reveal — show real name for revealed users
+    if (userId) {
+      await this.applyIdentityReveals(userId, topicsWithReactions);
+    }
+
     return {
       data: topicsWithReactions,
       pagination: {
@@ -304,11 +317,11 @@ export class TopicService {
         .select(
           `
           *,
-          user_profile:user_id(id, username, avatar),
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
           forum:forum_id(id, name, description, icon),
           forum_comments(
             id, content, created_at,
-            user_profile:user_id(id, username, avatar),
+            user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
             helpful_count, supportive_count, parent_comment_id
           )
         `,
@@ -343,10 +356,16 @@ export class TopicService {
         });
       }
 
+      // Apply identity reveal to topic author and comment authors
+      if (userId) {
+        const allItems = [topic, ...(topic.forum_comments || [])];
+        await this.applyIdentityReveals(userId, allItems);
+      }
+
       // Return with updated view count
       return {
         ...topic,
-        views_count: newViewCount, // Use the new count we just set
+        views_count: newViewCount,
         reactions: {
           seen: topic.reaction_seen_count,
           validated: topic.reaction_validated_count,
@@ -416,14 +435,14 @@ export class TopicService {
         return { action: 'removed' as const, reactionType };
       }
 
-      // Check if topic exists
-      const { error: topicError } = await this.admin
+      // Check if topic exists and get creator info
+      const { data: topic, error: topicError } = await this.admin
         .from('forum_topics')
-        .select('id')
+        .select('id, user_id, title')
         .eq('id', topicId)
         .single();
 
-      if (topicError) throw new NotFoundException('Topic not found');
+      if (topicError || !topic) throw new NotFoundException('Topic not found');
 
       // Add reaction
       await this.admin.from('topic_reactions').insert({
@@ -431,6 +450,32 @@ export class TopicService {
         user_id: userId,
         reaction_type: reactionType,
       });
+
+      // Create notification for topic creator (only if not reacting to own topic)
+      if (topic.user_id !== userId) {
+        try {
+          const { data: reactor } = await this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single();
+
+          await this.notificationsService.createNotification({
+            user_id: topic.user_id,
+            actor_id: userId,
+            type: 'forum_like',
+            title: 'New Reaction',
+            message: `${reactor?.username || 'Someone'} reacted with ${reactionType} to your topic`,
+            action_url: `/forum/topics/${topicId}`,
+            reference_id: topicId,
+            reference_type: 'forum_topic',
+            metadata: { reaction_type: reactionType },
+            delivery_method: ['in_app'],
+          });
+        } catch (notifError) {
+          console.error('Failed to create reaction notification:', notifError);
+        }
+      }
 
       // Get current count - FIXED: Proper type casting
       const { data: currentTopic } = await this.admin
@@ -582,7 +627,9 @@ export class TopicService {
         user_profile:user_id(
           id,
           username,
-          avatar
+          avatar,
+          first_name_encrypted,
+          last_name_encrypted
         ),
         forum:forum_id(
           id,
@@ -684,6 +731,11 @@ export class TopicService {
 
       const total = count || 0;
 
+      // Apply identity reveal
+      if (userId) {
+        await this.applyIdentityReveals(userId, formattedTopics);
+      }
+
       logger.info('Recent discussions fetched successfully', {
         count: total,
         companyName,
@@ -707,5 +759,42 @@ export class TopicService {
         'Failed to fetch recent discussions',
       );
     }
+  }
+
+  /**
+   * Check identity reveals and add display_name to user_profile objects.
+   * Items must have a user_profile object with id, username, first_name_encrypted, last_name_encrypted.
+   */
+  private async applyIdentityReveals(userId: string, items: any[]): Promise<void> {
+    // Collect all other author IDs (self always gets real name)
+    const otherAuthorIds = [...new Set(
+      items
+        .filter((item) => item.user_profile?.id && item.user_profile.id !== userId)
+        .map((item) => item.user_profile.id),
+    )];
+
+    // Get revealed IDs using shared utility
+    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+
+    items.forEach((item) => {
+      if (!item.user_profile) return;
+
+      const isOwnContent = item.user_profile.id === userId;
+      const isRevealed = revealedIds.has(item.user_profile.id);
+
+      let displayName = item.is_anonymous ? 'Anonymous User' : item.user_profile.username;
+
+      if (isOwnContent || isRevealed) {
+        const realName = this.identityReveal.decryptRealName(
+          item.user_profile.first_name_encrypted,
+          item.user_profile.last_name_encrypted,
+        );
+        if (realName) displayName = realName;
+      }
+
+      item.user_profile.display_name = displayName;
+      delete item.user_profile.first_name_encrypted;
+      delete item.user_profile.last_name_encrypted;
+    });
   }
 }

@@ -63,6 +63,7 @@ export class NooksController {
     status: 400,
     description: 'Invalid input data',
   })
+  @ApiBody({ type: CreateNookDto })
   async create(@CurrentUser() user: any, @Body() createNookDto: CreateNookDto) {
     return this.nooksService.create(createNookDto, user.userId);
   }
@@ -160,6 +161,16 @@ export class NooksController {
   @ApiResponse({
     status: 200,
     description: 'Message flagged successfully',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        messageId: { type: 'string', description: 'Message ID to flag' },
+        reason: { type: 'string', description: 'Reason for flagging' },
+      },
+      required: ['messageId', 'reason'],
+    },
   })
   async flagMessage(
     @Param('id', ParseUUIDPipe) nookId: string,

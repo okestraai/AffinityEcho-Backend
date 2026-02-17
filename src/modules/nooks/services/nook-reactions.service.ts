@@ -139,22 +139,6 @@ export class NookReactionsService {
       .eq('reaction_type', reaction_type)
       .maybeSingle();
 
-    // 3. Permission: only check membership when ADDING
-    if (!existingReaction && !isCreator) {
-      const { data: membership } = await this.admin
-        .from('nook_members')
-        .select('id')
-        .eq('nook_id', message.nook_id)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (!membership) {
-        throw new ForbiddenException(
-          'You must be a member of this nook to react',
-        );
-      }
-    }
-
     // 4. Get current counts
     const { data: fullMessage, error: countErr } = await this.admin
       .from('nook_messages')

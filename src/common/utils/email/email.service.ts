@@ -7,52 +7,129 @@ import logger from '../logger.util';
 
 @Injectable()
 export class EmailService {
-  private transporter;
+  private transporter!: nodemailer.Transporter;
+  private isConnected = false;
+  private isInitializing = false;
 
   constructor(private config: ConfigService) {
-    this.transporter = nodemailer.createTransport({
-      host: this.config.get('SMTP_HOST'),
-      port: Number(this.config.get('SMTP_PORT')),
-      secure: false,
-      auth: {
-        user: this.config.get('SMTP_USER'),
-        pass: this.config.get('SMTP_PASS'),
-      },
+    this.initializeTransporter().catch((error) => {
+      logger.error('Failed to initialize EmailService:', error);
     });
+  }
+
+  private async initializeTransporter() {
+    if (this.isInitializing) return;
+
+    this.isInitializing = true;
+
+    try {
+      const host = this.config.get('SMTP_HOST');
+      const port = this.config.get('SMTP_PORT');
+      const user = this.config.get('SMTP_USER');
+      const pass = this.config.get('SMTP_PASS');
+      const fromEmail = this.config.get('FROM_EMAIL');
+
+      // Validate configuration
+      if (!host || !port || !user || !pass || !fromEmail) {
+        throw new Error('Email service configuration is incomplete');
+      }
+
+      await this.setupTransporter(host, port, user, pass);
+    } finally {
+      this.isInitializing = false;
+    }
+  }
+
+  private async setupTransporter(
+    host: string,
+    port: string | number,
+    user: string,
+    pass: string,
+  ) {
+    const config = {
+      host,
+      port: Number(port),
+      secure: false,
+      requireTLS: true,
+      auth: {
+        user: user.trim(),
+        pass: pass.trim(),
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    };
+
+    try {
+      this.transporter = nodemailer.createTransport(config);
+      await this.transporter.verify();
+      this.isConnected = true;
+      logger.info('SMTP connection successful');
+    } catch (error: any) {
+      logger.error('SMTP connection failed:', error.message);
+
+      this.transporter = nodemailer.createTransport(config);
+      this.isConnected = false;
+      throw error;
+    }
   }
 
   private async renderTemplate(
     templateName: string,
     data: any,
   ): Promise<string> {
-    const templatePath = path.join(
-      __dirname,
-      '../../templates/emails',
-      `${templateName}.ejs`,
-    );
-    return await ejs.renderFile(templatePath, data);
+    try {
+      const templatePath = path.join(
+        __dirname,
+        '../../templates/emails',
+        `${templateName}.ejs`,
+      );
+
+      return await ejs.renderFile(templatePath, data);
+    } catch (error: any) {
+      logger.error(`Template render failed: ${templateName}`, error);
+      // Fallback HTML
+      return `
+        <html>
+          <body>
+            <h2>${data.subject || 'Notification'}</h2>
+            <p>Hello ${data.username || 'User'},</p>
+            ${data.otp ? `<p>Your verification code: <strong>${data.otp}</strong></p>` : ''}
+            <p>If you didn't request this, please ignore this email.</p>
+          </body>
+        </html>
+      `;
+    }
   }
 
   async sendEmail(to: string, subject: string, template: string, data: any) {
+    // Ensure connection
+    if (!this.isConnected) {
+      try {
+        await this.transporter.verify();
+        this.isConnected = true;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Email service not available: ${message}`);
+      }
+    }
+
     try {
       const html = await this.renderTemplate(template, data);
 
       const mailOptions = {
-        from: `"Affinity Echo" <${this.config.get('FROM_EMAIL')}>`,
+        from: `"Affinity Echo" <${this.config.get('FROM_EMAIL') || 'noreply@affinityecho.com'}>`,
         to,
         subject,
         html,
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info('Email sent successfully', {
-        to,
-        subject,
-        messageId: result.messageId,
-      });
+
+      logger.info(`Email sent successfully to ${to}`);
       return result;
     } catch (error: any) {
-      logger.error('Failed to send email', {
+      logger.error('Email send failed:', {
         to,
         subject,
         error: error.message,
@@ -70,41 +147,18 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string, username: string) {
-    try {
-      const resetUrl = `${this.config.get('FRONTEND_URL')}/reset-password?token=${token}`;
+    const resetUrl = `${this.config.get('FRONTEND_URL')}/reset-password?token=${token}`;
 
-      logger.info('Sending password reset email', {
-        email,
+    return this.sendEmail(
+      email,
+      'Reset Your Password - Affinity Echo',
+      'reset-password',
+      {
         username,
-        frontendUrl: this.config.get('FRONTEND_URL'),
-        hasToken: !!token,
-      });
-
-      const result = await this.sendEmail(
-        email,
-        'Reset Your Password - Affinity Echo',
-        'reset-password',
-        {
-          username,
-          resetUrl,
-          supportEmail: this.config.get('SUPPORT_EMAIL'),
-        },
-      );
-
-      logger.info('Password reset email sent successfully', {
-        email,
-        messageId: result.messageId,
-      });
-
-      return result;
-    } catch (error) {
-      logger.error('Failed to send password reset email', {
-        email,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
-    }
+        resetUrl,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
+    );
   }
 
   async sendWelcomeEmail(email: string, username: string) {
@@ -114,7 +168,7 @@ export class EmailService {
       supportEmail: this.config.get('SUPPORT_EMAIL'),
     });
   }
-  // Add to your EmailService
+
   async sendPasswordResetOtpEmail(
     email: string,
     otp: string,
@@ -150,7 +204,8 @@ export class EmailService {
     username: string,
     referralId: string,
   ) {
-    // Implementation
+    logger.info(`Connection request email to ${email} for user ${username}`);
+    // TODO: Implement template and send logic
   }
 
   async sendConnectionAcceptedEmail(
@@ -158,7 +213,8 @@ export class EmailService {
     username: string,
     referralId: string,
   ) {
-    // Implementation
+    logger.info(`Connection accepted email to ${email} for user ${username}`);
+    // TODO: Implement template and send logic
   }
 
   async sendIdentityRevealRequestEmail(
@@ -166,7 +222,10 @@ export class EmailService {
     username: string,
     connectionId: string,
   ) {
-    // Implementation
+    logger.info(
+      `Identity reveal request email to ${email} for connection ${connectionId}`,
+    );
+    // TODO: Implement template and send logic
   }
 
   async sendIdentityRevealAcceptedEmail(
@@ -174,6 +233,9 @@ export class EmailService {
     username: string,
     connectionId: string,
   ) {
-    // Implementation
+    logger.info(
+      `Identity reveal accepted email to ${email} for connection ${connectionId}`,
+    );
+    // TODO: Implement template and send logic
   }
 }

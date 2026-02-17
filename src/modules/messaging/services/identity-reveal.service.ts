@@ -14,6 +14,7 @@ import {
   GetIdentityRevealsDto,
 } from '../dto/identity-reveal.dto';
 import logger from '../../../common/utils/logger.util';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class IdentityRevealService {
@@ -23,6 +24,7 @@ export class IdentityRevealService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -72,12 +74,13 @@ export class IdentityRevealService {
         );
       }
 
-      // Check for existing pending request
+      // Check for existing pending request (BOTH directions)
       const { data: existingRequest } = await this.admin
         .from('identity_reveals')
-        .select('id, status')
-        .eq('requester_id', userId)
-        .eq('responder_id', otherUserId)
+        .select('id, status, requester_id')
+        .or(
+          `and(requester_id.eq.${userId},responder_id.eq.${otherUserId}),and(requester_id.eq.${otherUserId},responder_id.eq.${userId})`,
+        )
         .eq('status', 'pending')
         .maybeSingle();
 
@@ -88,8 +91,7 @@ export class IdentityRevealService {
       }
 
       // Create identity reveal request
-      const revealData = {
-        connection_id: dto.connection_id,
+      const revealData: any = {
         requester_id: userId,
         responder_id: otherUserId,
         status: 'pending',
@@ -98,22 +100,49 @@ export class IdentityRevealService {
           : null,
       };
 
+      // Only add connection_id if it exists
+      if (dto.connection_id) {
+        revealData.connection_id = dto.connection_id;
+      }
+
       const { data: reveal, error: revealError } = await this.admin
         .from('identity_reveals')
-        .insert([revealData])
+        .insert(revealData)
         .select()
         .single();
 
       if (revealError) throw revealError;
 
-      // Send notification email
+      // Send in-app notification and email
       try {
-        const { data: responder } = await this.admin
-          .from('user_profiles')
-          .select('email, username')
-          .eq('id', otherUserId)
-          .single();
+        const [{ data: responder }, { data: requester }] = await Promise.all([
+          this.admin
+            .from('user_profiles')
+            .select('email, username')
+            .eq('id', otherUserId)
+            .single(),
+          this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single(),
+        ]);
 
+        // Create in-app notification
+        await this.notificationsService.createNotification({
+          user_id: otherUserId,
+          actor_id: userId,
+          type: 'identity_reveal_request',
+          title: 'Identity Reveal Request',
+          message: `${requester?.username || 'Someone'} requested to reveal identities`,
+          action_url: `/messages/identity-reveals/${reveal.id}`,
+          reference_id: reveal.id,
+          reference_type: 'identity_reveal',
+          metadata: { conversation_id: conversation.id },
+          delivery_method: ['in_app'],
+        });
+
+        // Send email notification
         if (responder?.email) {
           await this.emailService.sendIdentityRevealRequestEmail(
             responder.email,
@@ -121,8 +150,8 @@ export class IdentityRevealService {
             conversation.id,
           );
         }
-      } catch (emailError) {
-        logger.warn('Failed to send identity reveal email', { emailError });
+      } catch (notifyError) {
+        logger.warn('Failed to send identity reveal notification', { notifyError });
       }
 
       return {
@@ -149,16 +178,21 @@ export class IdentityRevealService {
   }
 
   async respondToReveal(userId: string, dto: RespondIdentityRevealDto) {
+    // Normalize action: accept "accepted"/"rejected" as aliases
+    const normalizedAction = dto.action.replace(/ed$/, '');
+    dto.action = normalizedAction === 'accept' || normalizedAction === 'reject' ? normalizedAction : dto.action;
+
     logger.info('Responding to identity reveal', {
       userId,
       revealId: dto.reveal_id,
+      action: dto.action,
     });
 
     try {
       // Get reveal request
       const { data: reveal, error: revealError } = await this.admin
         .from('identity_reveals')
-        .select('*, connection:referral_connections(conversation_id)')
+        .select('*')
         .eq('id', dto.reveal_id)
         .single();
 
@@ -191,62 +225,96 @@ export class IdentityRevealService {
 
       if (updateError) throw updateError;
 
-      // If accepted, update conversation identity revealed status
+      // If accepted, update ALL conversations between the two users
       if (dto.action === 'accept') {
-        // Get conversation from connection or create one
-        let conversationId = reveal.connection?.conversation_id;
+        // First find all conversations between the two users
+        const { data: conversations, error: findError } = await this.admin
+          .from('conversations')
+          .select('id')
+          .or(
+            `and(user1_id.eq.${reveal.requester_id},user2_id.eq.${reveal.responder_id}),and(user1_id.eq.${reveal.responder_id},user2_id.eq.${reveal.requester_id})`,
+          );
 
-        if (!conversationId) {
-          // Find or create conversation between users
-          const { data: conversation } = await this.admin
+        if (findError) {
+          logger.error('Failed to find conversations for identity reveal', {
+            error: findError,
+            requesterId: reveal.requester_id,
+            responderId: reveal.responder_id,
+          });
+        } else if (conversations && conversations.length > 0) {
+          const conversationIds = conversations.map((c: any) => c.id);
+          const { error: convUpdateError } = await this.admin
             .from('conversations')
-            .select('id')
-            .or(
-              `and(user1_id.eq.${reveal.requester_id},user2_id.eq.${reveal.responder_id}),and(user1_id.eq.${reveal.responder_id},user2_id.eq.${reveal.requester_id})`,
-            )
-            .maybeSingle();
+            .update({
+              user1_identity_revealed: true,
+              user2_identity_revealed: true,
+            })
+            .in('id', conversationIds);
 
-          if (conversation) {
-            conversationId = conversation.id;
-
-            // Update conversation identity revealed flags
-            await this.admin
-              .from('conversations')
-              .update({
-                user1_identity_revealed: true,
-                user2_identity_revealed: true,
-              })
-              .eq('id', conversationId);
+          if (convUpdateError) {
+            logger.error('Failed to update conversation identity flags', {
+              error: convUpdateError,
+              conversationIds,
+              requesterId: reveal.requester_id,
+              responderId: reveal.responder_id,
+            });
+          } else {
+            logger.info('Updated identity flags on conversations', {
+              conversationCount: conversationIds.length,
+              conversationIds,
+              requesterId: reveal.requester_id,
+              responderId: reveal.responder_id,
+            });
           }
+        } else {
+          logger.warn('No conversations found between users for identity reveal', {
+            requesterId: reveal.requester_id,
+            responderId: reveal.responder_id,
+          });
         }
       }
 
-      // Send notification email
+      // Send in-app notification and email
       try {
-        const { data: requester } = await this.admin
-          .from('user_profiles')
-          .select('email, username')
-          .eq('id', reveal.requester_id)
-          .single();
+        const [{ data: requester }, { data: responder }] = await Promise.all([
+          this.admin
+            .from('user_profiles')
+            .select('email, username')
+            .eq('id', reveal.requester_id)
+            .single(),
+          this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single(),
+        ]);
 
-        if (requester?.email) {
-          if (dto.action === 'accept') {
-            await this.emailService.sendIdentityRevealAcceptedEmail(
-              requester.email,
-              requester.username,
-              reveal.id || '', // Pass reveal ID as connectionId
-            );
-          } else {
-            // Create a simple notification method for rejection
-            await this.sendRejectionNotification(
-              requester.email,
-              requester.username,
-              dto.reason,
-            );
-          }
+        // Create in-app notification
+        const isAccepted = dto.action === 'accept';
+        await this.notificationsService.createNotification({
+          user_id: reveal.requester_id,
+          actor_id: userId,
+          type: isAccepted ? 'identity_reveal' : 'identity_reveal_rejected',
+          title: isAccepted ? 'Identity Revealed' : 'Identity Reveal Declined',
+          message: isAccepted
+            ? `${responder?.username || 'Someone'} accepted your identity reveal request`
+            : `${responder?.username || 'Someone'} declined your identity reveal request`,
+          action_url: `/messages/identity-reveals/${dto.reveal_id}`,
+          reference_id: dto.reveal_id,
+          reference_type: 'identity_reveal',
+          delivery_method: ['in_app'],
+        });
+
+        // Send email notification for acceptance
+        if (isAccepted && requester?.email) {
+          await this.emailService.sendIdentityRevealAcceptedEmail(
+            requester.email,
+            requester.username,
+            reveal.id || '',
+          );
         }
-      } catch (emailError) {
-        logger.warn('Failed to send response email', { emailError });
+      } catch (notifyError) {
+        logger.warn('Failed to send response notification', { notifyError });
       }
 
       return {
@@ -366,12 +434,13 @@ export class IdentityRevealService {
           ? conversation.user2_id
           : conversation.user1_id;
 
-      // Get any pending reveal requests
+      // Get any pending reveal requests (check BOTH directions)
       const { data: pendingReveal } = await this.admin
         .from('identity_reveals')
-        .select('id, status')
-        .eq('requester_id', userId)
-        .eq('responder_id', otherUserId)
+        .select('id, status, requester_id, responder_id')
+        .or(
+          `and(requester_id.eq.${userId},responder_id.eq.${otherUserId}),and(requester_id.eq.${otherUserId},responder_id.eq.${userId})`,
+        )
         .eq('status', 'pending')
         .maybeSingle();
 
@@ -388,6 +457,7 @@ export class IdentityRevealService {
             ? {
                 id: pendingReveal.id,
                 status: pendingReveal.status,
+                direction: pendingReveal.requester_id === userId ? 'sent' : 'received',
               }
             : null,
           can_request: !isRevealed && !pendingReveal,
@@ -403,28 +473,5 @@ export class IdentityRevealService {
       logger.error('Failed to get reveal status', { error, userId });
       throw new BadRequestException('Failed to get reveal status');
     }
-  }
-
-  // Helper method for sending rejection notifications
-  private async sendRejectionNotification(
-    email: string,
-    username: string,
-    reason?: string,
-  ) {
-    // Implement your own notification logic here
-    // For now, just log it
-    logger.info('Sending rejection notification', {
-      email,
-      username,
-      reason,
-    });
-
-    // You can implement email sending or other notification methods here
-    // Example using a generic email method:
-    // await this.emailService.sendGenericEmail(
-    //   email,
-    //   'Identity Reveal Request Rejected',
-    //   `Your identity reveal request was rejected.${reason ? ` Reason: ${reason}` : ''}`
-    // );
   }
 }

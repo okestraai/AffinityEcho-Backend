@@ -6,10 +6,12 @@ import { ReferralBookmarksService } from './services/referral-bookmarks.service'
 import { ReferralCommentsService } from './services/referral-comments.service';
 import { ReferralConnectionsService } from './services/referral-connections.service';
 import { IdentityRevealService } from './services/identity-reveal.service';
-import { EncryptionUtil } from '../../common/utils/encryption.util';
 import { EmailService } from '../../common/utils/email/email.service';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { EncryptionModule } from '../encryption/encryption.module';
 
 @Module({
+  imports: [NotificationsModule, EncryptionModule],
   controllers: [ReferralController],
   providers: [
     ReferralService,
@@ -18,7 +20,6 @@ import { EmailService } from '../../common/utils/email/email.service';
     ReferralCommentsService,
     ReferralConnectionsService,
     IdentityRevealService,
-    EncryptionUtil,
     EmailService,
   ],
   exports: [ReferralService],
