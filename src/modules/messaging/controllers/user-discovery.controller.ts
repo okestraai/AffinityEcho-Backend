@@ -26,6 +26,35 @@ import { UserDiscoveryService } from '../services/user-discovery.service';
 export class UserDiscoveryController {
   constructor(private userDiscoveryService: UserDiscoveryService) {}
 
+  @Get('search')
+  @ApiOperation({
+    summary: 'Search users for @mention autocomplete',
+    description: 'Search users by username prefix. Returns anonymous display names.',
+  })
+  @ApiQuery({ name: 'search', required: true, description: 'Username prefix to search for' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default: 5)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Users matching search',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          users: [
+            { id: 'uuid', username: 'quietstorm', display_name: 'Anonymous User', avatar_emoji: 'User' },
+          ],
+        },
+      },
+    },
+  })
+  async searchUsers(
+    @CurrentUser() user: any,
+    @Query('search') search: string,
+    @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit?: number,
+  ) {
+    return this.userDiscoveryService.search(user.userId, search, limit);
+  }
+
   @Get('connectable-users')
   @ApiOperation({
     summary: 'Get users to connect with',

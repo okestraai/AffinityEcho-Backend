@@ -1,5 +1,6 @@
-import { Injectable, Inject, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../../database/supabase.client';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { QueryNotificationDto } from './dto/query-notification.dto';
@@ -17,11 +18,17 @@ export class NotificationsService {
     forum_like: 'notify_on_like',
     feed_like: 'notify_on_like',
     referral_like: 'notify_on_like',
+    post_reaction: 'notify_on_like',
     forum_comment: 'notify_on_comment',
     referral_comment: 'notify_on_comment',
+    topic_comment: 'notify_on_comment',
     user_followed: 'notify_on_follow',
     referral_connection: 'notify_on_connection_request',
     mentorship_request: 'notify_on_connection_request',
+    message_received: 'notify_on_message',
+    mention: 'notify_on_mention',
+    followed_user_post: 'notify_on_follow',
+    // nook_reply, report_status_update — NOT in map, always send
   };
 
   constructor(
@@ -42,7 +49,7 @@ export class NotificationsService {
     try {
       const { data } = await this.admin
         .from('user_profiles')
-        .select('push_notifications, notify_on_like, notify_on_comment, notify_on_follow, notify_on_connection_request')
+        .select('push_notifications, notify_on_like, notify_on_comment, notify_on_follow, notify_on_connection_request, notify_on_message, notify_on_mention')
         .eq('id', userId)
         .single();
 
@@ -71,6 +78,7 @@ export class NotificationsService {
       }
 
       const notificationData = {
+        id: randomUUID(),
         user_id: dto.user_id,
         actor_id: dto.actor_id || null,
         type: dto.type,
@@ -124,6 +132,7 @@ export class NotificationsService {
   async createBulkNotifications(notifications: CreateNotificationDto[]) {
     try {
       const notificationData = notifications.map((dto) => ({
+        id: randomUUID(),
         user_id: dto.user_id,
         actor_id: dto.actor_id || null,
         type: dto.type,
@@ -389,6 +398,27 @@ export class NotificationsService {
       this.logger.error('Error deleting notification:', error);
       throw error;
     }
+  }
+
+  /**
+   * Delete all notifications (read and unread) for a user
+   */
+  async deleteAll(userId: string) {
+    const { error, count } = await this.admin
+      .from('notifications')
+      .delete({ count: 'exact' })
+      .eq('user_id', userId);
+
+    if (error) {
+      this.logger.error('Failed to delete all notifications', { error, userId });
+      throw new BadRequestException('Failed to clear all notifications');
+    }
+
+    return {
+      success: true,
+      message: 'All notifications cleared',
+      data: { deleted_count: count || 0 },
+    };
   }
 
   /**

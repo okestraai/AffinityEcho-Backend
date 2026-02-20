@@ -19,6 +19,7 @@ import { UserAccountService } from '../services/user-account.service';
 import { UserBlockingService } from '../services/user-blocking.service';
 import { UserResourcesService } from '../services/user-resources.service';
 import { HarassmentReportService } from '../services/harassment-report.service';
+import { FeedEngagementService } from '../../feeds/services/feed-engagement.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
@@ -50,6 +51,7 @@ export class UserController {
     private userBlockingService: UserBlockingService,
     private userResourcesService: UserResourcesService,
     private harassmentReportService: HarassmentReportService,
+    private feedEngagementService: FeedEngagementService,
   ) {}
 
   // ============ STATIC ROUTES FIRST (must come before :userId) ============
@@ -202,6 +204,42 @@ export class UserController {
     return this.userResourcesService.getCommunityGuidelines();
   }
 
+  // ============ MY ACTIVITY & BOOKMARKS ============
+
+  @Get('me/activity')
+  @ApiOperation({
+    summary: 'Get current user activity',
+    description: 'Get aggregated activity (posts, topics, nook messages) for the current user',
+  })
+  @ApiQuery({ name: 'type', required: false, enum: ['posts', 'topics', 'nooks', 'all'] })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getMyActivity(
+    @Req() req: any,
+    @Query('type') type?: 'posts' | 'topics' | 'nooks' | 'all',
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const userId = req.user.sub;
+    return this.userProfileService.getUserActivity(userId, type || 'all', page || 1, limit || 20, userId);
+  }
+
+  @Get('me/bookmarks')
+  @ApiOperation({
+    summary: 'Get current user bookmarks',
+    description: 'Get bookmarked content for the current user',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getMyBookmarks(
+    @Req() req: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const userId = req.user.sub;
+    return this.feedEngagementService.getUserBookmarks(userId, page || 1, limit || 20);
+  }
+
   // ============ HARASSMENT REPORTS ============
 
   @Post('reports/harassment')
@@ -221,17 +259,19 @@ export class UserController {
   @Get('reports/harassment')
   @ApiOperation({
     summary: 'Get my harassment reports',
-    description: 'Get list of harassment reports submitted by the current user',
+    description: 'Get list of harassment reports submitted by the current user, optionally filtered by status',
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, enum: ['submitted', 'under_review', 'investigating', 'resolved', 'dismissed', 'all'] })
   getMyHarassmentReports(
     @Req() req: any,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('status') status?: string,
   ) {
     const userId = req.user.sub;
-    return this.harassmentReportService.getUserReports(userId, page, limit);
+    return this.harassmentReportService.getUserReports(userId, page, limit, status);
   }
 
   @Get('reports/harassment/reference/:referenceNumber')
@@ -289,16 +329,18 @@ export class UserController {
   @Get(':userId/activity')
   @ApiOperation({ summary: 'Get user activity' })
   @ApiParam({ name: 'userId', description: 'User ID' })
-  @ApiQuery({ name: 'type', required: false, enum: ['posts', 'comments', 'topics', 'nooks', 'all'] })
+  @ApiQuery({ name: 'type', required: false, enum: ['posts', 'topics', 'nooks', 'all'] })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getUserActivity(
+    @Req() req: any,
     @Param('userId') userId: string,
-    @Query('type') type?: 'posts' | 'comments' | 'topics' | 'nooks' | 'all',
+    @Query('type') type?: 'posts' | 'topics' | 'nooks' | 'all',
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.userProfileService.getUserActivity(userId, type, page, limit);
+    const currentUserId = req.user.sub;
+    return this.userProfileService.getUserActivity(userId, type, page, limit, currentUserId);
   }
 
   @Post(':userId/block')

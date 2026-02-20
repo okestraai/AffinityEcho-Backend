@@ -20,10 +20,7 @@ export class MentorshipRelationshipsService {
 
   async getRelationships(userId: string, role?: string, status?: string) {
     try {
-      let mentorQuery = this.admin
-        .from('mentorship_relationships')
-        .select(
-          `
+      const relationshipSelect = `
           *,
           mentor:user_profiles!mentor_relationships(
             id,
@@ -32,7 +29,8 @@ export class MentorshipRelationshipsService {
             job_title,
             company_type,
             mentor_bio,
-            mentor_expertise
+            mentor_expertise,
+            affinity_tags_encrypted
           ),
           mentee:user_profiles!mentee_relationships(
             id,
@@ -41,37 +39,19 @@ export class MentorshipRelationshipsService {
             job_title,
             company_type,
             mentee_goals,
-            mentee_interests
+            mentee_interests,
+            affinity_tags_encrypted
           )
-        `,
-        )
+        `;
+
+      let mentorQuery = this.admin
+        .from('mentorship_relationships')
+        .select(relationshipSelect)
         .eq('mentor_id', userId);
 
       let menteeQuery = this.admin
         .from('mentorship_relationships')
-        .select(
-          `
-          *,
-          mentor:user_profiles!mentor_relationships(
-            id,
-            username,
-            avatar,
-            job_title,
-            company_type,
-            mentor_bio,
-            mentor_expertise
-          ),
-          mentee:user_profiles!mentee_relationships(
-            id,
-            username,
-            avatar,
-            job_title,
-            company_type,
-            mentee_goals,
-            mentee_interests
-          )
-        `,
-        )
+        .select(relationshipSelect)
         .eq('mentee_id', userId);
 
       // Apply status filter if specified
@@ -85,16 +65,39 @@ export class MentorshipRelationshipsService {
         menteeQuery,
       ]);
 
+      // Parse affinity tags on mentor/mentee profiles
+      const parseAffinityTags = (relationships: any[]) => {
+        return (relationships || []).map((rel: any) => {
+          const processUser = (user: any) => {
+            if (!user) return user;
+            let affinityTags: string[] = [];
+            if (user.affinity_tags_encrypted) {
+              try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+            }
+            const { affinity_tags_encrypted, ...rest } = user;
+            return { ...rest, affinity_tags: affinityTags };
+          };
+          return {
+            ...rel,
+            mentor: processUser(rel.mentor),
+            mentee: processUser(rel.mentee),
+          };
+        });
+      };
+
+      const processedMentor = parseAffinityTags(asMentor || []);
+      const processedMentee = parseAffinityTags(asMentee || []);
+
       // Filter by role if specified
       if (role === 'mentor') {
-        return { asMentor: asMentor || [], asMentee: [] };
+        return { asMentor: processedMentor, asMentee: [] };
       } else if (role === 'mentee') {
-        return { asMentor: [], asMentee: asMentee || [] };
+        return { asMentor: [], asMentee: processedMentee };
       }
 
       return {
-        asMentor: asMentor || [],
-        asMentee: asMentee || [],
+        asMentor: processedMentor,
+        asMentee: processedMentee,
       };
     } catch (error) {
       throw new BadRequestException('Failed to retrieve relationships');
@@ -120,7 +123,8 @@ export class MentorshipRelationshipsService {
             mentor_availability,
             mentor_response_time,
             mentor_style,
-            mentor_languages
+            mentor_languages,
+            affinity_tags_encrypted
           ),
           mentee:user_profiles!mentee_relationships(
             id,
@@ -131,7 +135,8 @@ export class MentorshipRelationshipsService {
             mentee_goals,
             mentee_interests,
             years_experience,
-            skills
+            skills,
+            affinity_tags_encrypted
           ),
           sessions:mentorship_sessions(
             id,
@@ -156,7 +161,22 @@ export class MentorshipRelationshipsService {
         throw new NotFoundException('Relationship not found');
       }
 
-      return relationship;
+      // Parse affinity tags
+      const processUser = (user: any) => {
+        if (!user) return user;
+        let affinityTags: string[] = [];
+        if (user.affinity_tags_encrypted) {
+          try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+        }
+        const { affinity_tags_encrypted, ...rest } = user;
+        return { ...rest, affinity_tags: affinityTags };
+      };
+
+      return {
+        ...relationship,
+        mentor: processUser(relationship.mentor),
+        mentee: processUser(relationship.mentee),
+      };
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;

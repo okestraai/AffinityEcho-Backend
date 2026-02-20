@@ -13,6 +13,7 @@ interface MessageReactionCounts {
   validated_count?: number;
   helpful_count?: number;
   supportive_count?: number;
+  inspired_count?: number;
   [key: string]: any;
 }
 
@@ -104,7 +105,7 @@ export class NookReactionsService {
   ) {
     const { reaction_type } = reactionDto;
 
-    const validReactions = ['heard', 'validated', 'helpful', 'supportive'];
+    const validReactions = ['heard', 'validated', 'helpful', 'supportive', 'inspired'];
     if (!validReactions.includes(reaction_type)) {
       throw new BadRequestException(
         `Invalid reaction type. Valid: ${validReactions.join(', ')}`,

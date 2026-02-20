@@ -8,16 +8,26 @@ import { ConfigService } from '@nestjs/config';
 import { CreateNookDto } from '../dto/create-nook.dto';
 import { NookQueryDto } from '../dto/nook-query.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { RedisService } from '../../../common/services/redis.service';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 
 @Injectable()
 export class NooksService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private redis: RedisService,
+    private identityReveal: IdentityRevealUtil,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
-  async findAll(query: NookQueryDto) {
+  async findAll(query: NookQueryDto, userId: string) {
+    const cacheKey = `nooks:list:${JSON.stringify(query)}`;
+    const cached = await this.redis.get<any>(cacheKey);
+    if (cached) return cached;
+
     const { page = 1, limit = 8, ...filters } = query;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -25,9 +35,10 @@ export class NooksService {
     // Build query
     let supabaseQuery = this.admin
       .from('nooks')
-      .select('*', { count: 'exact' })
+      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`, { count: 'exact' })
       .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString());
+      .gt('expires_at', new Date().toISOString())
+      .neq('creator_id', userId);
 
     // Apply filters
     if (filters.urgency && filters.urgency !== 'all') {
@@ -47,7 +58,13 @@ export class NooksService {
     }
 
     // Apply sorting
-    if (query.sortBy) {
+    if (query.sortBy === 'trending') {
+      // Trending: only show nooks from last 7 days, sorted by activity
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      supabaseQuery = supabaseQuery
+        .gte('created_at', sevenDaysAgo)
+        .order('messages_count', { ascending: false });
+    } else if (query.sortBy) {
       const order = query.sortOrder === 'asc' ? true : false;
       supabaseQuery = supabaseQuery.order(query.sortBy, { ascending: order });
     } else {
@@ -66,7 +83,9 @@ export class NooksService {
       timeLeft: this.calculateTimeLeft(new Date(nook.expires_at)),
     }));
 
-    return {
+    await this.applyIdentityReveals(userId, formattedNooks, 'creator_id');
+
+    const result = {
       success: true,
       data: {
         nooks: formattedNooks,
@@ -78,6 +97,10 @@ export class NooksService {
         },
       },
     };
+
+    await this.redis.set(cacheKey, result, 120000);
+
+    return result;
   }
 
   async create(createNookDto: CreateNookDto, userId: string) {
@@ -120,6 +143,8 @@ export class NooksService {
         is_anonymous: false,
       },
     ]);
+
+    await this.redis.delPattern('nooks:*');
 
     return {
       success: true,
@@ -192,6 +217,8 @@ export class NooksService {
 
     if (error) throw new BadRequestException(error.message);
 
+    await this.redis.delPattern('nooks:*');
+
     return {
       success: true,
       message: 'Nook deleted successfully',
@@ -209,6 +236,8 @@ export class NooksService {
 
     if (error) throw new BadRequestException(error.message);
 
+    await this.redis.delPattern('nooks:*');
+
     return {
       success: true,
       message: 'Nook locked successfully',
@@ -216,6 +245,10 @@ export class NooksService {
   }
 
   async getGlobalStats() {
+    const cacheKey = 'nooks:stats';
+    const cached = await this.redis.get<any>(cacheKey);
+    if (cached) return cached;
+
     const now = new Date().toISOString();
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -288,7 +321,7 @@ export class NooksService {
       ) || [],
     ).size;
 
-    return {
+    const result = {
       success: true,
       data: {
         activeNooks: activeNooksResult.count || 0,
@@ -299,6 +332,10 @@ export class NooksService {
         totalMessageParticipants: uniqueMessageSenders,
       },
     };
+
+    await this.redis.set(cacheKey, result, 300000);
+
+    return result;
   }
 
   async flagMessage(
@@ -333,6 +370,165 @@ export class NooksService {
       success: true,
       message: 'Message flagged for moderation',
     };
+  }
+
+  async getMyNooks(userId: string, page: number = 1, limit: number = 8) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data: nooks, error, count } = await this.admin
+      .from('nooks')
+      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`, { count: 'exact' })
+      .eq('creator_id', userId)
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new BadRequestException('Failed to fetch your nooks');
+
+    const formattedNooks = (nooks || []).map((nook: any) => ({
+      ...nook,
+      timeLeft: this.calculateTimeLeft(new Date(nook.expires_at)),
+    }));
+
+    await this.applyIdentityReveals(userId, formattedNooks, 'creator_id');
+
+    return {
+      success: true,
+      data: {
+        nooks: formattedNooks,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasMore: (count || 0) > from + limit,
+        },
+      },
+    };
+  }
+
+  async getBookmarkedNooks(userId: string, page: number = 1, limit: number = 8) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    // Get bookmarked nook IDs
+    const { data: bookmarks, error: bmError } = await this.admin
+      .from('feed_bookmarks')
+      .select('content_id')
+      .eq('user_id', userId)
+      .eq('content_type', 'nook_message')
+      .order('created_at', { ascending: false });
+
+    if (bmError) throw new BadRequestException('Failed to fetch bookmarked nooks');
+
+    const nookIds = (bookmarks || []).map((b: any) => b.content_id);
+    if (nookIds.length === 0) {
+      return {
+        success: true,
+        data: {
+          nooks: [],
+          pagination: { page, limit, total: 0, totalPages: 0, hasMore: false },
+        },
+      };
+    }
+
+    const { data: nooks, error, count } = await this.admin
+      .from('nooks')
+      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`, { count: 'exact' })
+      .in('id', nookIds)
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString())
+      .range(from, to);
+
+    if (error) throw new BadRequestException('Failed to fetch bookmarked nooks');
+
+    const formattedNooks = (nooks || []).map((nook: any) => ({
+      ...nook,
+      timeLeft: this.calculateTimeLeft(new Date(nook.expires_at)),
+    }));
+
+    await this.applyIdentityReveals(userId, formattedNooks, 'creator_id');
+
+    return {
+      success: true,
+      data: {
+        nooks: formattedNooks,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasMore: (count || 0) > from + limit,
+        },
+      },
+    };
+  }
+
+  async toggleNookBookmark(nookId: string, userId: string) {
+    // Check if nook exists
+    const { data: nook, error: nookErr } = await this.admin
+      .from('nooks')
+      .select('id')
+      .eq('id', nookId)
+      .single();
+
+    if (nookErr || !nook) throw new NotFoundException('Nook not found');
+
+    // Check if already bookmarked
+    const { data: existing } = await this.admin
+      .from('feed_bookmarks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('content_type', 'nook_message')
+      .eq('content_id', nookId)
+      .maybeSingle();
+
+    if (existing) {
+      await this.admin.from('feed_bookmarks').delete().eq('id', existing.id);
+      return { success: true, data: { bookmarked: false }, message: 'Bookmark removed' };
+    } else {
+      await this.admin.from('feed_bookmarks').insert({
+        user_id: userId,
+        content_type: 'nook_message',
+        content_id: nookId,
+      });
+      return { success: true, data: { bookmarked: true }, message: 'Nook bookmarked' };
+    }
+  }
+
+  private async applyIdentityReveals(userId: string, items: any[], ownerField: string = 'creator_id'): Promise<void> {
+    const otherAuthorIds = [...new Set(
+      items
+        .filter((item) => item.user_profile?.id && item.user_profile.id !== userId)
+        .map((item) => item.user_profile.id),
+    )];
+
+    const revealedIds = otherAuthorIds.length > 0
+      ? await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds)
+      : new Set<string>();
+
+    items.forEach((item) => {
+      if (!item.user_profile) return;
+
+      const isOwnContent = item[ownerField] === userId;
+      const isRevealed = revealedIds.has(item.user_profile.id);
+
+      let displayName = item.user_profile.username || 'Unknown';
+
+      if (isOwnContent || isRevealed) {
+        const realName = this.identityReveal.decryptRealName(
+          item.user_profile.first_name_encrypted,
+          item.user_profile.last_name_encrypted,
+        );
+        if (realName) displayName = realName;
+      }
+
+      item.user_profile.display_name = displayName;
+      delete item.user_profile.first_name_encrypted;
+      delete item.user_profile.last_name_encrypted;
+    });
   }
 
   private calculateTimeLeft(expiresAt: Date): string {

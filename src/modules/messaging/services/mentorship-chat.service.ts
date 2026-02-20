@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class MentorshipChatService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -34,6 +36,8 @@ export class MentorshipChatService {
           id,
           username,
           avatar,
+          first_name_encrypted,
+          last_name_encrypted,
           mentor_bio,
           mentor_expertise,
           mentor_industries,
@@ -154,10 +158,10 @@ export class MentorshipChatService {
           status: session.status,
         })) || [];
 
-      // Check if identity can be revealed
+      // Check identity reveal status
       let canRevealIdentity = false;
+      let identityRevealed = false;
       if (relationshipId) {
-        // Check if there's a conversation between these users
         const { data: conversation } = await this.admin
           .from('conversations')
           .select(
@@ -171,12 +175,33 @@ export class MentorshipChatService {
           .maybeSingle();
 
         if (conversation) {
-          const isRevealed =
+          const myRevealed =
             conversation.user1_id === userId
               ? conversation.user1_identity_revealed
               : conversation.user2_identity_revealed;
-          canRevealIdentity = !isRevealed;
+          const otherRevealed =
+            conversation.user1_id === userId
+              ? conversation.user2_identity_revealed
+              : conversation.user1_identity_revealed;
+          canRevealIdentity = !myRevealed;
+          identityRevealed = !!otherRevealed;
         }
+      }
+
+      // Also check identity_reveals table for mutual reveal
+      if (!identityRevealed) {
+        const revealedIds = await this.identityReveal.getRevealedUserIds(userId, [targetUserId]);
+        identityRevealed = revealedIds.has(targetUserId);
+      }
+
+      // Resolve display name
+      let displayName = profile.username;
+      if (identityRevealed) {
+        const realName = this.identityReveal.decryptRealName(
+          profile.first_name_encrypted,
+          profile.last_name_encrypted,
+        );
+        if (realName) displayName = realName;
       }
 
       return {
@@ -185,6 +210,7 @@ export class MentorshipChatService {
           profile: {
             id: profile.id,
             username: profile.username,
+            display_name: displayName,
             avatar: profile.avatar,
             mentor_bio: profile.mentor_bio,
             mentor_expertise: profile.mentor_expertise,

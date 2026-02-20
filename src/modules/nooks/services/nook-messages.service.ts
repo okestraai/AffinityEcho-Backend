@@ -9,6 +9,9 @@ import { CreateMessageDto } from '../dto/create-message.dto';
 import { MessageQueryDto } from '../dto/message-query.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { MentionService } from '../../mentions/mention.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import logger from '../../../common/utils/logger.util';
 
 @Injectable()
 export class NookMessagesService {
@@ -17,6 +20,8 @@ export class NookMessagesService {
   constructor(
     private config: ConfigService,
     private identityReveal: IdentityRevealUtil,
+    private mentionService: MentionService,
+    private notificationsService: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -105,26 +110,30 @@ export class NookMessagesService {
     // Apply identity reveal to messages and replies
     const processedMessages = messagesWithReplies.map((message: any) => {
       const msgUser = message.user;
-      const msgDisplayName = this.resolveDisplayName(msgUser, revealedIds, userId);
+      const msgDisplayName = message.is_anonymous
+        ? 'Anonymous'
+        : this.resolveDisplayName(msgUser, revealedIds, userId);
 
       return {
         ...message,
         user: {
           id: msgUser?.id,
           avatar: msgUser?.avatar || 'User',
-          username: msgUser?.username || 'User',
+          username: message.is_anonymous ? 'Anonymous' : (msgUser?.username || 'User'),
           display_name: msgDisplayName,
         },
         replies: (message.replies || []).map((reply: any) => {
           const replyUser = reply.user;
-          const replyDisplayName = this.resolveDisplayName(replyUser, revealedIds, userId);
+          const replyDisplayName = reply.is_anonymous
+            ? 'Anonymous'
+            : this.resolveDisplayName(replyUser, revealedIds, userId);
 
           return {
             ...reply,
             user: {
               id: replyUser?.id,
               avatar: replyUser?.avatar || 'User',
-              username: replyUser?.username || 'User',
+              username: reply.is_anonymous ? 'Anonymous' : (replyUser?.username || 'User'),
               display_name: replyDisplayName,
             },
           };
@@ -237,6 +246,45 @@ export class NookMessagesService {
         temperature,
       })
       .eq('id', nookId);
+
+    // Process @mentions in message content
+    const usernames = this.mentionService.parseMentions(content);
+    if (usernames.length > 0) {
+      this.mentionService.processMentions(userId, usernames, 'nook_message', message.id, nookId);
+    }
+
+    // Send nook reply notification when replying to another user's message
+    if (parent_message_id) {
+      try {
+        const { data: parentMsg } = await this.admin
+          .from('nook_messages')
+          .select('user_id')
+          .eq('id', parent_message_id)
+          .single();
+
+        if (parentMsg && parentMsg.user_id !== userId) {
+          const { data: replier } = await this.admin
+            .from('user_profiles')
+            .select('username')
+            .eq('id', userId)
+            .single();
+
+          await this.notificationsService.createNotification({
+            user_id: parentMsg.user_id,
+            actor_id: userId,
+            type: 'nook_reply',
+            title: 'New Reply',
+            message: `${replier?.username || 'Someone'} replied to your message in a nook`,
+            action_url: `/nooks/${nookId}`,
+            reference_id: message.id,
+            reference_type: 'nook_message',
+            metadata: { nook_id: nookId, parent_message_id },
+          });
+        }
+      } catch (notifError) {
+        logger.warn('Failed to send nook reply notification', { notifError });
+      }
+    }
 
     return {
       success: true,

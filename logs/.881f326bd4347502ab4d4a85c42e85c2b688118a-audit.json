@@ -24,6 +24,21 @@
             "date": 1771283015986,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\error-2026-02-17.log",
             "hash": "12d0934cf82a79e77d0483602afb25acc84059e71b65802dd45a15afa586e56a"
+        },
+        {
+            "date": 1771369460298,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\error-2026-02-18.log",
+            "hash": "e3f974f3941fbb16c48deb7ca73668c7a64f69c4b20ce29151c5453081a88916"
+        },
+        {
+            "date": 1771462207567,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\error-2026-02-19.log",
+            "hash": "dcc350e56137a2526b2364962caa43b7bfd7383acfcfebebe29670b4539dd089"
+        },
+        {
+            "date": 1771542409847,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\error-2026-02-20.log",
+            "hash": "b95a99049a6fdc70ecaa76a4d52688d0de661d3913cbb49a7d58423864654852"
         }
     ],
     "hashType": "sha256"

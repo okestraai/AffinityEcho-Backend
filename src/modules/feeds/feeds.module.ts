@@ -7,9 +7,10 @@ import { FeedEngagementService } from './services/feed-engagement.service';
 import { FeedRankingService } from './services/feed-ranking.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EncryptionModule } from '../encryption/encryption.module';
+import { MentionsModule } from '../mentions/mentions.module';
 
 @Module({
-  imports: [ConfigModule, NotificationsModule, EncryptionModule],
+  imports: [ConfigModule, NotificationsModule, EncryptionModule, MentionsModule],
   controllers: [FeedsController],
   providers: [FeedsService, FeedPostsService, FeedEngagementService, FeedRankingService],
   exports: [FeedsService, FeedPostsService, FeedEngagementService, FeedRankingService],

@@ -30,7 +30,7 @@ interface Forum {
   updated_at: string;
 }
 
-interface ForumWithMembership extends Forum {
+export interface ForumWithMembership extends Forum {
   isJoined: boolean;
   topicCount: number;
 }

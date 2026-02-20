@@ -70,6 +70,13 @@ export class NotificationsController {
     return this.notificationsService.deleteAllRead(userId);
   }
 
+  @Delete('all')
+  @ApiOperation({ summary: 'Clear all notifications (read and unread)' })
+  async deleteAll(@Req() req: any) {
+    const userId = req.user.sub;
+    return this.notificationsService.deleteAll(userId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get notification by ID' })
   @ApiParam({ name: 'id', description: 'Notification ID' })

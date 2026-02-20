@@ -19,6 +19,9 @@ import { ReferralModule } from './modules/referral/referral.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { FeedsModule } from './modules/feeds/feeds.module';
+import { RedisModule } from './common/services/redis.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { NookCronJobs } from './jobs/nook-cron.jobs';
 
 @Module({
   imports: [
@@ -39,6 +42,8 @@ import { FeedsModule } from './modules/feeds/feeds.module';
         limit: 50, // 50 requests per 10 seconds for messaging endpoints
       },
     ]),
+    ScheduleModule.forRoot(),
+    RedisModule,
     AuthModule,
     UserModule,
     ForumModule,
@@ -55,6 +60,7 @@ import { FeedsModule } from './modules/feeds/feeds.module';
   providers: [
     AppService,
     EncryptionUtil,
+    NookCronJobs,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

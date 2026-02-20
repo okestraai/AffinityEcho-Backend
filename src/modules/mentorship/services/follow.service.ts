@@ -179,6 +179,7 @@ export class FollowService {
             location,
             years_experience,
             career_level_encrypted,
+            affinity_tags_encrypted,
             first_name_encrypted,
             last_name_encrypted,
             has_completed_onboarding,
@@ -201,6 +202,10 @@ export class FollowService {
       const processedFollows = (follows || [])
         .map((follow: any) => {
           const user = follow.following?.[0] || follow.following || {};
+          let affinityTags: string[] = [];
+          if (user.affinity_tags_encrypted) {
+            try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+          }
           return {
             id: follow.id,
             created_at: follow.created_at,
@@ -216,6 +221,7 @@ export class FollowService {
               location: user.location,
               years_experience: user.years_experience,
               career_level: user.career_level_encrypted,
+              affinity_tags: affinityTags,
               first_name_encrypted: user.first_name_encrypted,
               last_name_encrypted: user.last_name_encrypted,
               has_completed_onboarding: user.has_completed_onboarding,
@@ -304,6 +310,7 @@ export class FollowService {
             location,
             years_experience,
             career_level_encrypted,
+            affinity_tags_encrypted,
             first_name_encrypted,
             last_name_encrypted,
             has_completed_onboarding,
@@ -326,6 +333,10 @@ export class FollowService {
       const processedFollows = (follows || [])
         .map((follow: any) => {
           const user = follow.follower?.[0] || follow.follower || {};
+          let affinityTags: string[] = [];
+          if (user.affinity_tags_encrypted) {
+            try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+          }
           return {
             id: follow.id,
             created_at: follow.created_at,
@@ -341,6 +352,7 @@ export class FollowService {
               location: user.location,
               years_experience: user.years_experience,
               career_level: user.career_level_encrypted,
+              affinity_tags: affinityTags,
               first_name_encrypted: user.first_name_encrypted,
               last_name_encrypted: user.last_name_encrypted,
               has_completed_onboarding: user.has_completed_onboarding,

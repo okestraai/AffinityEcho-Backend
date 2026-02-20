@@ -8,12 +8,24 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
 import { CreatePostDto } from '../dto/create-post.dto';
+import { RedisService } from '../../../common/services/redis.service';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { MentionService } from '../../mentions/mention.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class FeedPostsService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private redis: RedisService,
+    private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
+    private mentionService: MentionService,
+    private notificationsService: NotificationsService,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -50,6 +62,21 @@ export class FeedPostsService {
 
       logger.info('Post created successfully', { postId: post.id });
 
+      await this.redis.delPattern('feeds:*');
+
+      // Process @mentions in post content
+      const usernames = this.mentionService.parseMentions(dto.content);
+      if (usernames.length > 0) {
+        this.mentionService.processMentions(userId, usernames, 'post', post.id);
+      }
+
+      // Notify followers about new post (skip for anonymous posts)
+      if (!dto.isAnonymous) {
+        this.notifyFollowers(userId, post).catch((err) =>
+          logger.warn('Failed to notify followers', { error: err }),
+        );
+      }
+
       return {
         success: true,
         data: this.formatPost(post),
@@ -75,7 +102,9 @@ export class FeedPostsService {
             id,
             username,
             avatar,
-            bio
+            bio,
+            first_name_encrypted,
+            last_name_encrypted
           )
         `,
         )
@@ -89,9 +118,26 @@ export class FeedPostsService {
       // Track view
       await this.trackView(postId, userId);
 
+      const formatted = this.formatPost(post);
+
+      // Apply identity reveal
+      const isOwn = post.user_id === userId;
+      let shouldReveal = isOwn;
+      if (!isOwn) {
+        const revealedIds = await this.identityReveal.getRevealedUserIds(userId, [post.user_id]);
+        shouldReveal = revealedIds.has(post.user_id);
+      }
+      if (shouldReveal) {
+        const realName = this.identityReveal.decryptRealName(
+          post.user_profile?.first_name_encrypted,
+          post.user_profile?.last_name_encrypted,
+        );
+        if (realName) formatted.author.display_name = realName;
+      }
+
       return {
         success: true,
-        data: this.formatPost(post),
+        data: formatted,
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -100,7 +146,7 @@ export class FeedPostsService {
     }
   }
 
-  async getUserPosts(userId: string, page: number = 1, limit: number = 20) {
+  async getUserPosts(userId: string, page: number = 1, limit: number = 20, requestingUserId?: string) {
     logger.info('Fetching user posts', { userId, page, limit });
 
     const offset = (page - 1) * limit;
@@ -115,7 +161,9 @@ export class FeedPostsService {
             id,
             username,
             avatar,
-            bio
+            bio,
+            first_name_encrypted,
+            last_name_encrypted
           )
         `,
           { count: 'exact' },
@@ -130,9 +178,36 @@ export class FeedPostsService {
         throw new BadRequestException('Failed to fetch posts');
       }
 
+      const formatted = (posts || []).map((p) => this.formatPost(p));
+
+      // Apply identity reveal for the author
+      const viewerId = requestingUserId || userId;
+      const isOwnPosts = viewerId === userId;
+
+      if (formatted.length > 0) {
+        let revealedIds = new Set<string>();
+        if (!isOwnPosts) {
+          revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, [userId]);
+        }
+
+        const shouldReveal = isOwnPosts || revealedIds.has(userId);
+        if (shouldReveal && posts && posts.length > 0) {
+          const profile = posts[0].user_profile;
+          const realName = this.identityReveal.decryptRealName(
+            profile?.first_name_encrypted,
+            profile?.last_name_encrypted,
+          );
+          if (realName) {
+            formatted.forEach((p: any) => {
+              p.author.display_name = realName;
+            });
+          }
+        }
+      }
+
       return {
         success: true,
-        data: (posts || []).map((p) => this.formatPost(p)),
+        data: formatted,
         pagination: {
           page,
           limit,
@@ -196,6 +271,8 @@ export class FeedPostsService {
         throw new BadRequestException('Failed to update post');
       }
 
+      await this.redis.delPattern('feeds:*');
+
       return {
         success: true,
         data: this.formatPost(post),
@@ -244,6 +321,8 @@ export class FeedPostsService {
         throw new BadRequestException('Failed to delete post');
       }
 
+      await this.redis.delPattern('feeds:*');
+
       return {
         success: true,
         message: 'Post deleted successfully',
@@ -287,6 +366,8 @@ export class FeedPostsService {
       if (error) {
         throw new BadRequestException('Failed to pin post');
       }
+
+      await this.redis.delPattern('feeds:*');
 
       return {
         success: true,
@@ -332,6 +413,8 @@ export class FeedPostsService {
         throw new BadRequestException('Failed to unpin post');
       }
 
+      await this.redis.delPattern('feeds:*');
+
       return {
         success: true,
         message: 'Post unpinned successfully',
@@ -368,13 +451,48 @@ export class FeedPostsService {
 
       if (rpcError) {
         // Fallback if RPC doesn't exist
+        const { data: current } = await this.admin
+          .from('feed_posts')
+          .select('views_count')
+          .eq('id', postId)
+          .single();
         await this.admin
           .from('feed_posts')
-          .update({ views_count: () => 'views_count + 1' })
+          .update({ views_count: (current?.views_count || 0) + 1 })
           .eq('id', postId);
       }
     } catch (error) {
       logger.warn('Failed to track view', { error });
+    }
+  }
+
+  private async notifyFollowers(authorId: string, post: any) {
+    try {
+      const { data: followers } = await this.admin
+        .from('user_follows')
+        .select('follower_id')
+        .eq('following_id', authorId);
+
+      if (!followers?.length) return;
+
+      const authorName = post.user_profile?.username || 'Someone';
+
+      const notifications = followers.map((f: any) => ({
+        user_id: f.follower_id,
+        actor_id: authorId,
+        type: 'followed_user_post',
+        title: 'New Post',
+        message: `${authorName} shared a new post`,
+        action_url: `/feeds/post/${post.id}`,
+        reference_id: post.id,
+        reference_type: 'feed_post',
+        metadata: {},
+        delivery_method: ['in_app'],
+      }));
+
+      await this.notificationsService.createBulkNotifications(notifications);
+    } catch (error) {
+      logger.warn('Failed to notify followers about new post', { error });
     }
   }
 

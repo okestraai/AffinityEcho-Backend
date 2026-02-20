@@ -13,6 +13,7 @@ import logger from '../../../common/utils/logger.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { RedisService } from '../../../common/services/redis.service';
 
 interface UserReaction {
   seen: boolean;
@@ -46,6 +47,7 @@ export class TopicService {
     private notificationsService: NotificationsService,
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
+    private redis: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -149,6 +151,8 @@ export class TopicService {
         },
       );
 
+      await this.redis.delPattern('topics:*');
+
       logger.info('Topic created successfully', { topicId: topic.id });
       return topic;
     } catch (error) {
@@ -165,6 +169,10 @@ export class TopicService {
   }
 
   async findAllTopics(filters: ForumFiltersDto, userId?: string) {
+    const cacheKey = `topics:list:${JSON.stringify(filters)}:${userId || 'anon'}`;
+    const cached = await this.redis.get<any>(cacheKey);
+    if (cached) return cached;
+
     let query = this.admin.from('forum_topics').select(
       `
       *,
@@ -174,6 +182,10 @@ export class TopicService {
     `,
       { count: 'exact' },
     );
+
+    if (userId) {
+      query = query.neq('user_id', userId);
+    }
 
     // Apply filters
     if (filters.forumId) {
@@ -200,7 +212,9 @@ export class TopicService {
         query = query.order('views_count', { ascending: false });
         break;
       case 'trending':
-        query = query.order('last_activity_at', { ascending: false });
+        query = query
+          .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+          .order('comments_count', { ascending: false });
         break;
       case 'relevant':
       default:
@@ -267,7 +281,7 @@ export class TopicService {
       await this.applyIdentityReveals(userId, topicsWithReactions);
     }
 
-    return {
+    const result = {
       data: topicsWithReactions,
       pagination: {
         page,
@@ -276,6 +290,10 @@ export class TopicService {
         totalPages: count ? Math.ceil(count / limit) : 1,
       },
     };
+
+    await this.redis.set(cacheKey, result, 180000);
+
+    return result;
   }
 
   async findTopicById(id: string, userId?: string) {
@@ -432,6 +450,8 @@ export class TopicService {
           },
         );
 
+        await this.redis.delPattern('topics:*');
+
         return { action: 'removed' as const, reactionType };
       }
 
@@ -504,6 +524,8 @@ export class TopicService {
         },
       );
 
+      await this.redis.delPattern('topics:*');
+
       return { action: 'added' as const, reactionType };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -550,6 +572,8 @@ export class TopicService {
         },
       );
 
+      await this.redis.delPattern('topics:*');
+
       return { success: true };
     } catch (error) {
       if (
@@ -567,6 +591,10 @@ export class TopicService {
     userId: string,
     companyName?: string,
   ) {
+    const cacheKey = `topics:recent:${JSON.stringify(filters)}:${userId}:${companyName || 'all'}`;
+    const cached = await this.redis.get<any>(cacheKey);
+    if (cached) return cached;
+
     logger.info('Fetching recent discussions', {
       filters,
       userId,
@@ -642,6 +670,8 @@ export class TopicService {
           { count: 'exact' },
         )
         .in('forum_id', forumIds);
+
+      query = query.neq('user_id', userId);
 
       // Apply filters
       if (search) {
@@ -742,12 +772,16 @@ export class TopicService {
         forumIdsCount: forumIds.length,
       });
 
-      return {
+      const result = {
         topics: formattedTopics,
         total,
         page,
         totalPages: Math.ceil(total / limit),
       };
+
+      await this.redis.set(cacheKey, result, 180000);
+
+      return result;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -758,6 +792,144 @@ export class TopicService {
       throw new InternalServerErrorException(
         'Failed to fetch recent discussions',
       );
+    }
+  }
+
+  async getMyTopics(userId: string, page: number = 1, limit: number = 20) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data: topics, error, count } = await this.admin
+      .from('forum_topics')
+      .select(`
+        id, user_id, forum_id, title, content, is_anonymous, tags, scope,
+        company_name, views_count, comments_count,
+        reaction_seen_count, reaction_validated_count,
+        reaction_inspired_count, reaction_heard_count,
+        is_pinned, is_locked, created_at, updated_at,
+        forum:forums(id, name),
+        user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
+      `, { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw new BadRequestException('Failed to fetch your topics');
+    }
+
+    const formattedTopics = topics || [];
+    await this.applyIdentityReveals(userId, formattedTopics);
+
+    return {
+      success: true,
+      data: {
+        topics: formattedTopics,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasMore: (count || 0) > from + limit,
+        },
+      },
+    };
+  }
+
+  async getBookmarkedTopics(userId: string, page: number = 1, limit: number = 20) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    // Get bookmarked topic IDs
+    const { data: bookmarks, error: bmError } = await this.admin
+      .from('feed_bookmarks')
+      .select('content_id')
+      .eq('user_id', userId)
+      .eq('content_type', 'topic')
+      .order('created_at', { ascending: false });
+
+    if (bmError) {
+      throw new BadRequestException('Failed to fetch bookmarked topics');
+    }
+
+    const topicIds = (bookmarks || []).map((b: any) => b.content_id);
+    if (topicIds.length === 0) {
+      return {
+        success: true,
+        data: {
+          topics: [],
+          pagination: { page, limit, total: 0, totalPages: 0, hasMore: false },
+        },
+      };
+    }
+
+    const { data: topics, error, count } = await this.admin
+      .from('forum_topics')
+      .select(`
+        id, user_id, forum_id, title, content, is_anonymous, tags, scope,
+        company_name, views_count, comments_count,
+        reaction_seen_count, reaction_validated_count,
+        reaction_inspired_count, reaction_heard_count,
+        is_pinned, is_locked, created_at, updated_at,
+        forum:forums(id, name),
+        user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
+      `, { count: 'exact' })
+      .in('id', topicIds)
+      .range(from, to);
+
+    if (error) {
+      throw new BadRequestException('Failed to fetch bookmarked topics');
+    }
+
+    const formattedTopics = topics || [];
+    await this.applyIdentityReveals(userId, formattedTopics);
+
+    return {
+      success: true,
+      data: {
+        topics: formattedTopics,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasMore: (count || 0) > from + limit,
+        },
+      },
+    };
+  }
+
+  async toggleTopicBookmark(topicId: string, userId: string) {
+    // Check if topic exists
+    const { data: topic, error: topicErr } = await this.admin
+      .from('forum_topics')
+      .select('id')
+      .eq('id', topicId)
+      .single();
+
+    if (topicErr || !topic) {
+      throw new NotFoundException('Topic not found');
+    }
+
+    // Check if already bookmarked
+    const { data: existing } = await this.admin
+      .from('feed_bookmarks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('content_type', 'topic')
+      .eq('content_id', topicId)
+      .maybeSingle();
+
+    if (existing) {
+      await this.admin.from('feed_bookmarks').delete().eq('id', existing.id);
+      return { success: true, data: { bookmarked: false }, message: 'Bookmark removed' };
+    } else {
+      await this.admin.from('feed_bookmarks').insert({
+        user_id: userId,
+        content_type: 'topic',
+        content_id: topicId,
+      });
+      return { success: true, data: { bookmarked: true }, message: 'Topic bookmarked' };
     }
   }
 
@@ -784,7 +956,8 @@ export class TopicService {
 
       let displayName = item.is_anonymous ? 'Anonymous User' : item.user_profile.username;
 
-      if (isOwnContent || isRevealed) {
+      // Don't reveal real name on anonymous content
+      if (!item.is_anonymous && (isOwnContent || isRevealed)) {
         const realName = this.identityReveal.decryptRealName(
           item.user_profile.first_name_encrypted,
           item.user_profile.last_name_encrypted,

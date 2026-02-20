@@ -40,7 +40,7 @@ export class NookCronJobs {
     }
   }
 
-  @Cron(CronExpression.EVERY_15_MINUTES)
+  @Cron('0 */15 * * * *')
   async updateAllNookTemperatures() {
     const now = new Date().toISOString();
 

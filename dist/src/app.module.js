@@ -29,6 +29,9 @@ const referral_module_1 = require("./modules/referral/referral.module");
 const messaging_module_1 = require("./modules/messaging/messaging.module");
 const notifications_module_1 = require("./modules/notifications/notifications.module");
 const feeds_module_1 = require("./modules/feeds/feeds.module");
+const redis_module_1 = require("./common/services/redis.module");
+const schedule_1 = require("@nestjs/schedule");
+const nook_cron_jobs_1 = require("./jobs/nook-cron.jobs");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(rate_limit_middleware_1.RateLimitMiddleware).forRoutes('*');
@@ -55,6 +58,8 @@ exports.AppModule = AppModule = __decorate([
                     limit: 50,
                 },
             ]),
+            schedule_1.ScheduleModule.forRoot(),
+            redis_module_1.RedisModule,
             auth_module_1.AuthModule,
             user_module_1.UserModule,
             forum_module_1.ForumModule,
@@ -70,6 +75,7 @@ exports.AppModule = AppModule = __decorate([
         providers: [
             app_service_1.AppService,
             encryption_util_1.EncryptionUtil,
+            nook_cron_jobs_1.NookCronJobs,
             {
                 provide: core_1.APP_GUARD,
                 useClass: throttler_1.ThrottlerGuard,

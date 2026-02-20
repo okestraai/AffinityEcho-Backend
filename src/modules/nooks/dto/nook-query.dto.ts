@@ -51,11 +51,11 @@ export class NookQueryDto {
 
   @ApiProperty({
     required: false,
-    enum: ['created_at', 'last_activity_at', 'members_count'],
+    enum: ['created_at', 'last_activity_at', 'members_count', 'trending'],
     default: 'created_at',
   })
   @IsOptional()
-  @IsEnum(['created_at', 'last_activity_at', 'members_count'])
+  @IsEnum(['created_at', 'last_activity_at', 'members_count', 'trending'])
   sortBy?: string = 'created_at';
 
   @ApiProperty({

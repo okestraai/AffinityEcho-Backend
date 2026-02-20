@@ -21,12 +21,13 @@ const user_account_service_1 = require("../services/user-account.service");
 const user_blocking_service_1 = require("../services/user-blocking.service");
 const user_resources_service_1 = require("../services/user-resources.service");
 const harassment_report_service_1 = require("../services/harassment-report.service");
+const feed_engagement_service_1 = require("../../feeds/services/feed-engagement.service");
 const jwt_auth_guard_1 = require("../../auth/guards/jwt-auth.guard");
 const current_user_decorator_1 = require("../../../common/decorators/current-user.decorator");
 const swagger_1 = require("@nestjs/swagger");
 const update_profile_dto_1 = require("../dto/update-profile.dto");
 let UserController = class UserController {
-    constructor(userService, userProfileService, userSettingsService, userAccountService, userBlockingService, userResourcesService, harassmentReportService) {
+    constructor(userService, userProfileService, userSettingsService, userAccountService, userBlockingService, userResourcesService, harassmentReportService, feedEngagementService) {
         this.userService = userService;
         this.userProfileService = userProfileService;
         this.userSettingsService = userSettingsService;
@@ -34,6 +35,7 @@ let UserController = class UserController {
         this.userBlockingService = userBlockingService;
         this.userResourcesService = userResourcesService;
         this.harassmentReportService = harassmentReportService;
+        this.feedEngagementService = feedEngagementService;
     }
     getProfile(user) {
         return this.userService.getProfile(user.sub);
@@ -95,13 +97,21 @@ let UserController = class UserController {
     getCommunityGuidelines() {
         return this.userResourcesService.getCommunityGuidelines();
     }
+    getMyActivity(req, type, page, limit) {
+        const userId = req.user.sub;
+        return this.userProfileService.getUserActivity(userId, type || 'all', page || 1, limit || 20, userId);
+    }
+    getMyBookmarks(req, page, limit) {
+        const userId = req.user.sub;
+        return this.feedEngagementService.getUserBookmarks(userId, page || 1, limit || 20);
+    }
     submitHarassmentReport(req, dto) {
         const userId = req.user.sub;
         return this.harassmentReportService.createReport(userId, dto);
     }
-    getMyHarassmentReports(req, page, limit) {
+    getMyHarassmentReports(req, page, limit, status) {
         const userId = req.user.sub;
-        return this.harassmentReportService.getUserReports(userId, page, limit);
+        return this.harassmentReportService.getUserReports(userId, page, limit, status);
     }
     getHarassmentReportByReference(req, referenceNumber) {
         const userId = req.user.sub;
@@ -121,8 +131,9 @@ let UserController = class UserController {
     getUserBadges(userId) {
         return this.userProfileService.getUserBadges(userId);
     }
-    getUserActivity(userId, type, page, limit) {
-        return this.userProfileService.getUserActivity(userId, type, page, limit);
+    getUserActivity(req, userId, type, page, limit) {
+        const currentUserId = req.user.sub;
+        return this.userProfileService.getUserActivity(userId, type, page, limit, currentUserId);
     }
     blockUser(req, targetUserId, dto) {
         const userId = req.user.sub;
@@ -300,6 +311,38 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], UserController.prototype, "getCommunityGuidelines", null);
 __decorate([
+    (0, common_1.Get)('me/activity'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get current user activity',
+        description: 'Get aggregated activity (posts, topics, nook messages) for the current user',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'type', required: false, enum: ['posts', 'topics', 'nooks', 'all'] }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('type')),
+    __param(2, (0, common_1.Query)('page')),
+    __param(3, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Number, Number]),
+    __metadata("design:returntype", void 0)
+], UserController.prototype, "getMyActivity", null);
+__decorate([
+    (0, common_1.Get)('me/bookmarks'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get current user bookmarks',
+        description: 'Get bookmarked content for the current user',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number, Number]),
+    __metadata("design:returntype", void 0)
+], UserController.prototype, "getMyBookmarks", null);
+__decorate([
     (0, common_1.Post)('reports/harassment'),
     (0, swagger_1.ApiOperation)({
         summary: 'Submit a harassment report',
@@ -316,15 +359,17 @@ __decorate([
     (0, common_1.Get)('reports/harassment'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get my harassment reports',
-        description: 'Get list of harassment reports submitted by the current user',
+        description: 'Get list of harassment reports submitted by the current user, optionally filtered by status',
     }),
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, enum: ['submitted', 'under_review', 'investigating', 'resolved', 'dismissed', 'all'] }),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('page')),
     __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Number, Number]),
+    __metadata("design:paramtypes", [Object, Number, Number, String]),
     __metadata("design:returntype", void 0)
 ], UserController.prototype, "getMyHarassmentReports", null);
 __decorate([
@@ -385,15 +430,16 @@ __decorate([
     (0, common_1.Get)(':userId/activity'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user activity' }),
     (0, swagger_1.ApiParam)({ name: 'userId', description: 'User ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'type', required: false, enum: ['posts', 'comments', 'topics', 'nooks', 'all'] }),
+    (0, swagger_1.ApiQuery)({ name: 'type', required: false, enum: ['posts', 'topics', 'nooks', 'all'] }),
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
-    __param(0, (0, common_1.Param)('userId')),
-    __param(1, (0, common_1.Query)('type')),
-    __param(2, (0, common_1.Query)('page')),
-    __param(3, (0, common_1.Query)('limit')),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('userId')),
+    __param(2, (0, common_1.Query)('type')),
+    __param(3, (0, common_1.Query)('page')),
+    __param(4, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Number, Number]),
+    __metadata("design:paramtypes", [Object, String, String, Number, Number]),
     __metadata("design:returntype", void 0)
 ], UserController.prototype, "getUserActivity", null);
 __decorate([
@@ -439,6 +485,7 @@ exports.UserController = UserController = __decorate([
         user_account_service_1.UserAccountService,
         user_blocking_service_1.UserBlockingService,
         user_resources_service_1.UserResourcesService,
-        harassment_report_service_1.HarassmentReportService])
+        harassment_report_service_1.HarassmentReportService,
+        feed_engagement_service_1.FeedEngagementService])
 ], UserController);
 //# sourceMappingURL=user.controller.js.map

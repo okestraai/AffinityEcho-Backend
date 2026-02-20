@@ -9,9 +9,10 @@ import { UserBlockingService } from './services/user-blocking.service';
 import { UserResourcesService } from './services/user-resources.service';
 import { HarassmentReportService } from './services/harassment-report.service';
 import { EncryptionModule } from '../encryption/encryption.module';
+import { FeedsModule } from '../feeds/feeds.module';
 
 @Module({
-  imports: [EncryptionModule],
+  imports: [EncryptionModule, FeedsModule],
   controllers: [UserController],
   providers: [
     UserService,

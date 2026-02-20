@@ -29,6 +29,7 @@ describe('FeedsService', () => {
   let mockFeedRanking: any;
   let mockEncryption: any;
   let mockIdentityReveal: any;
+  let mockRedis: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -41,6 +42,7 @@ describe('FeedsService', () => {
 
     mockFeedRanking = {
       rankByEngagement: jest.fn((items: any[]) => items),
+      rankByTrending: jest.fn((items: any[]) => items),
     };
 
     mockEncryption = {
@@ -54,11 +56,20 @@ describe('FeedsService', () => {
       isRevealed: jest.fn().mockResolvedValue(false),
     };
 
+    mockRedis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(undefined),
+      del: jest.fn().mockResolvedValue(undefined),
+      delPattern: jest.fn().mockResolvedValue(undefined),
+      getOrSet: jest.fn(),
+    };
+
     service = new FeedsService(
       mockConfig as any,
       mockFeedRanking,
       mockEncryption,
       mockIdentityReveal,
+      mockRedis,
     );
   });
 

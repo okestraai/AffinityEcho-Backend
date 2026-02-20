@@ -94,17 +94,26 @@ export class UserProfileService {
         }
       }
 
-      // Check if current user follows this user
+      // Check follow status and get follower/following counts in parallel
       let isFollowing = false;
-      if (currentUserId && !isOwnProfile) {
-        const { data: followData } = await this.admin
-          .from('user_follows')
-          .select('id')
-          .eq('follower_id', currentUserId)
-          .eq('following_id', userId)
-          .maybeSingle();
+      let isFollowedBy = false;
+      let followersCount = 0;
+      let followingCount = 0;
 
-        isFollowing = !!followData;
+      const [followersResult, followingResult] = await Promise.all([
+        this.admin.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+        this.admin.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+      ]);
+      followersCount = followersResult.count || 0;
+      followingCount = followingResult.count || 0;
+
+      if (currentUserId && !isOwnProfile) {
+        const [iFollowResult, theyFollowResult] = await Promise.all([
+          this.admin.from('user_follows').select('id').eq('follower_id', currentUserId).eq('following_id', userId).maybeSingle(),
+          this.admin.from('user_follows').select('id').eq('follower_id', userId).eq('following_id', currentUserId).maybeSingle(),
+        ]);
+        isFollowing = !!iFollowResult.data;
+        isFollowedBy = !!theyFollowResult.data;
       }
 
       // Enforce profile_visibility for non-own profiles
@@ -165,6 +174,9 @@ export class UserProfileService {
         badges: profile.badges,
         joinedDate: profile.created_at,
         isFollowing,
+        isFollowedBy: isOwnProfile ? undefined : isFollowedBy,
+        followersCount,
+        followingCount,
       };
 
       // Enforce field-level privacy for non-own profiles
@@ -187,20 +199,27 @@ export class UserProfileService {
         };
       }
 
-      // Add decrypted demographics
-      if (profile.career_level_encrypted) {
-        response.careerLevel = this.encryption.decrypt(profile.career_level_encrypted);
+      // Add decrypted demographics — own profile only (career/company are sensitive)
+      if (isOwnProfile) {
+        if (profile.career_level_encrypted) {
+          response.careerLevel = this.encryption.decrypt(profile.career_level_encrypted);
+        }
+        if (profile.company_encrypted) {
+          response.company = this.encryption.decrypt(profile.company_encrypted);
+        }
       }
-      if (showCompany && profile.company_encrypted) {
-        response.company = this.encryption.decrypt(profile.company_encrypted);
-      }
+
+      // Affinity groups — visible to all users (community tags, not sensitive)
       if (profile.affinity_tags_encrypted) {
         try {
-          response.affinityTags = JSON.parse(
-            this.encryption.decrypt(profile.affinity_tags_encrypted),
-          );
-        } catch (e) {
-          response.affinityTags = [];
+          const decrypted = this.encryption.decrypt(profile.affinity_tags_encrypted);
+          response.affinityTags = JSON.parse(decrypted);
+        } catch {
+          try {
+            response.affinityTags = JSON.parse(profile.affinity_tags_encrypted);
+          } catch {
+            response.affinityTags = [];
+          }
         }
       }
 
@@ -541,90 +560,383 @@ export class UserProfileService {
 
   async getUserActivity(
     userId: string,
-    type: 'posts' | 'comments' | 'topics' | 'nooks' | 'all' = 'all',
+    type: 'posts' | 'topics' | 'nooks' | 'all' = 'all',
     page: number = 1,
     limit: number = 20,
+    currentUserId?: string,
   ) {
     logger.info('Fetching user activity', { userId, type, page, limit });
 
     const offset = (page - 1) * limit;
     const activities: any[] = [];
+    let totalCount = 0;
+    const viewerId = currentUserId || userId;
 
     try {
+      const perSourceLimit = type === 'all' ? limit : limit;
+      const perSourceOffset = type === 'all' ? 0 : offset;
+
       if (type === 'posts' || type === 'all') {
-        const { data: posts } = await this.admin
+        const { data: posts, count } = await this.admin
           .from('feed_posts')
-          .select('id, content, created_at, likes_count, comments_count')
+          .select(`
+            id, user_id, content, is_anonymous, tags, visibility,
+            likes_count, comments_count, shares_count, views_count, created_at,
+            user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
+          `, { count: 'exact' })
           .eq('user_id', userId)
+          .eq('is_archived', false)
           .order('created_at', { ascending: false })
-          .limit(type === 'all' ? 5 : limit)
-          .range(offset, offset + limit - 1);
+          .range(perSourceOffset, perSourceOffset + perSourceLimit - 1);
+
+        if (type === 'posts') totalCount = count || 0;
 
         activities.push(
-          ...(posts || []).map((p) => ({
+          ...(posts || []).map((p: any) => ({
             type: 'post',
+            content_type: 'post',
             id: p.id,
-            content: p.content,
-            createdAt: p.created_at,
-            engagement: { likes: p.likes_count, comments: p.comments_count },
+            content_id: p.id,
+            user_id: p.user_id,
+            is_anonymous: p.is_anonymous,
+            author: {
+              display_name: p.user_profile?.username || 'Unknown',
+              username: p.user_profile?.username || 'Unknown',
+              bio: p.user_profile?.bio || null,
+              avatar: p.user_profile?.avatar || 'User',
+              first_name_encrypted: p.user_profile?.first_name_encrypted,
+              last_name_encrypted: p.user_profile?.last_name_encrypted,
+            },
+            content: {
+              text: p.content,
+              tags: p.tags,
+            },
+            visibility: p.visibility,
+            engagement: {
+              likes: p.likes_count,
+              comments: p.comments_count,
+              shares: p.shares_count,
+              views: p.views_count,
+            },
+            created_at: p.created_at,
           })),
         );
       }
 
       if (type === 'topics' || type === 'all') {
-        const { data: topics } = await this.admin
+        const { data: topics, count } = await this.admin
           .from('forum_topics')
-          .select('id, title, created_at, comments_count')
+          .select(`
+            id, user_id, title, content, is_anonymous, tags, scope, views_count,
+            comments_count, reaction_seen_count, reaction_validated_count,
+            reaction_inspired_count, reaction_heard_count, created_at,
+            user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted),
+            forum:forums(id, name)
+          `, { count: 'exact' })
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
-          .limit(type === 'all' ? 5 : limit)
-          .range(offset, offset + limit - 1);
+          .range(perSourceOffset, perSourceOffset + perSourceLimit - 1);
+
+        if (type === 'topics') totalCount = count || 0;
 
         activities.push(
-          ...(topics || []).map((t) => ({
-            type: 'topic',
-            id: t.id,
-            content: t.title,
-            createdAt: t.created_at,
-            engagement: { comments: t.comments_count },
-          })),
+          ...(topics || []).map((t: any) => {
+            const totalReactions =
+              (t.reaction_seen_count || 0) +
+              (t.reaction_validated_count || 0) +
+              (t.reaction_inspired_count || 0) +
+              (t.reaction_heard_count || 0);
+
+            return {
+              type: 'topic',
+              content_type: 'topic',
+              id: t.id,
+              content_id: t.id,
+              user_id: t.user_id,
+              is_anonymous: t.is_anonymous,
+              author: {
+                display_name: t.user_profile?.username || 'Unknown',
+                username: t.user_profile?.username || 'Unknown',
+                bio: t.user_profile?.bio || null,
+                avatar: t.user_profile?.avatar || 'User',
+                first_name_encrypted: t.user_profile?.first_name_encrypted,
+                last_name_encrypted: t.user_profile?.last_name_encrypted,
+              },
+              content: {
+                title: t.title,
+                text: t.content,
+                forum_name: t.forum?.name || null,
+                tags: t.tags,
+              },
+              engagement: {
+                likes: totalReactions,
+                comments: t.comments_count,
+                views: t.views_count,
+              },
+              reaction_counts: {
+                seen: t.reaction_seen_count || 0,
+                validated: t.reaction_validated_count || 0,
+                inspired: t.reaction_inspired_count || 0,
+                heard: t.reaction_heard_count || 0,
+              },
+              created_at: t.created_at,
+            };
+          }),
         );
       }
 
-      if (type === 'comments' || type === 'all') {
-        const { data: comments } = await this.admin
-          .from('forum_comments')
-          .select('id, content, created_at')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false})
-          .limit(type === 'all' ? 5 : limit)
-          .range(offset, offset + limit - 1);
+      if (type === 'nooks' || type === 'all') {
+        const now = new Date().toISOString();
+        const { data: nooks, count } = await this.admin
+          .from('nooks')
+          .select(`
+            id, title, description, creator_id, urgency, scope, temperature,
+            hashtags, members_count, messages_count, expires_at, created_at,
+            user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
+          `, { count: 'exact' })
+          .eq('creator_id', userId)
+          .gt('expires_at', now)
+          .order('created_at', { ascending: false })
+          .range(perSourceOffset, perSourceOffset + perSourceLimit - 1);
+
+        if (type === 'nooks') totalCount = count || 0;
 
         activities.push(
-          ...(comments || []).map((c) => ({
-            type: 'comment',
-            id: c.id,
-            content: c.content,
-            createdAt: c.created_at,
-          })),
+          ...(nooks || []).map((nook: any) => {
+            const userProfile = Array.isArray(nook.user_profile) ? nook.user_profile[0] : nook.user_profile;
+            const timeLeft = this.calculateTimeLeft(nook.expires_at);
+
+            return {
+              type: 'nook_message',
+              content_type: 'nook_message',
+              id: nook.id,
+              content_id: nook.id,
+              user_id: nook.creator_id,
+              is_anonymous: false,
+              author: {
+                display_name: userProfile?.username || 'Unknown',
+                username: userProfile?.username || 'Unknown',
+                bio: userProfile?.bio || null,
+                avatar: userProfile?.avatar || 'User',
+                first_name_encrypted: userProfile?.first_name_encrypted,
+                last_name_encrypted: userProfile?.last_name_encrypted,
+              },
+              content: {
+                title: nook.title,
+                text: nook.description,
+                nook_name: nook.title,
+                nook_urgency: nook.urgency || 'medium',
+                nook_scope: nook.scope || 'company',
+                nook_temperature: nook.temperature || 'cool',
+                nook_members: nook.members_count || 0,
+                nook_time_left: timeLeft,
+              },
+              engagement: {
+                likes: 0,
+                comments: nook.messages_count || 0,
+              },
+              expires_at: nook.expires_at,
+              created_at: nook.created_at,
+            };
+          }),
         );
       }
 
       // Sort all activities by date
-      activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      // For 'all' type, manually paginate the merged results
+      const paginatedActivities = type === 'all'
+        ? activities.slice(offset, offset + limit)
+        : activities;
+
+      // Enrich with user engagement data (likes, bookmarks, reactions)
+      const enriched = await this.enrichActivityWithEngagement(viewerId, paginatedActivities);
+
+      // Apply identity reveals
+      await this.applyActivityIdentityReveals(viewerId, enriched);
+
+      // For 'all', total is approximated from what we fetched
+      const total = type === 'all' ? activities.length : totalCount;
 
       return {
         success: true,
-        data: activities.slice(0, limit),
+        data: enriched,
         pagination: {
           page,
           limit,
-          hasMore: activities.length > limit,
+          total,
+          hasMore: type === 'all'
+            ? activities.length > offset + limit
+            : totalCount > offset + limit,
         },
       };
     } catch (error) {
       logger.error('Failed to fetch user activity', { error });
       throw new BadRequestException('Failed to fetch user activity');
     }
+  }
+
+  private calculateTimeLeft(expiresAt: string | null): string {
+    if (!expiresAt) return 'N/A';
+
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    const diffMs = expiry.getTime() - now.getTime();
+
+    if (diffMs <= 0) return 'Expired';
+
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${hours}h ${minutes}m`;
+  }
+
+  private async enrichActivityWithEngagement(userId: string, items: any[]): Promise<any[]> {
+    if (items.length === 0) return items;
+
+    const contentIds = items.map((i) => i.content_id);
+    const postIds = items.filter((i) => i.content_type === 'post').map((i) => i.content_id);
+    const topicIds = items.filter((i) => i.content_type === 'topic').map((i) => i.content_id);
+
+    const [
+      { data: likes },
+      { data: bookmarks },
+      { data: feedUserReactions },
+      { data: feedAllReactions },
+      { data: topicUserReactions },
+    ] = await Promise.all([
+      this.admin
+        .from('feed_likes')
+        .select('content_type, content_id')
+        .eq('user_id', userId)
+        .in('content_id', contentIds),
+      this.admin
+        .from('feed_bookmarks')
+        .select('content_type, content_id')
+        .eq('user_id', userId)
+        .in('content_id', contentIds),
+      // Post reactions from feed_reactions
+      postIds.length > 0
+        ? this.admin
+            .from('feed_reactions')
+            .select('content_type, content_id, reaction_type')
+            .eq('user_id', userId)
+            .in('content_id', postIds)
+        : Promise.resolve({ data: [] }),
+      postIds.length > 0
+        ? this.admin
+            .from('feed_reactions')
+            .select('content_type, content_id, reaction_type')
+            .in('content_id', postIds)
+        : Promise.resolve({ data: [] }),
+      // Topic reactions from topic_reactions table
+      topicIds.length > 0
+        ? this.admin
+            .from('topic_reactions')
+            .select('topic_id, reaction_type')
+            .eq('user_id', userId)
+            .in('topic_id', topicIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const likeSet = new Set((likes || []).map((l: any) => `${l.content_type}_${l.content_id}`));
+    const bookmarkSet = new Set((bookmarks || []).map((b: any) => `${b.content_type}_${b.content_id}`));
+
+    // Post user reactions (from feed_reactions)
+    const feedUserReactionMap = new Map<string, Set<string>>();
+    (feedUserReactions || []).forEach((r: any) => {
+      const key = `${r.content_type}_${r.content_id}`;
+      if (!feedUserReactionMap.has(key)) feedUserReactionMap.set(key, new Set());
+      feedUserReactionMap.get(key)!.add(r.reaction_type);
+    });
+
+    // Post reaction counts (from feed_reactions)
+    const feedReactionCounts = new Map<string, Record<string, number>>();
+    (feedAllReactions || []).forEach((r: any) => {
+      const key = `${r.content_type}_${r.content_id}`;
+      if (!feedReactionCounts.has(key)) feedReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
+      const counts = feedReactionCounts.get(key)!;
+      if (counts[r.reaction_type] !== undefined) counts[r.reaction_type]++;
+    });
+
+    // Topic user reactions (from topic_reactions)
+    const topicUserReactionMap = new Map<string, Set<string>>();
+    (topicUserReactions || []).forEach((r: any) => {
+      if (!topicUserReactionMap.has(r.topic_id)) topicUserReactionMap.set(r.topic_id, new Set());
+      topicUserReactionMap.get(r.topic_id)!.add(r.reaction_type);
+    });
+
+    return items.map((item) => {
+      const key = `${item.content_type}_${item.content_id}`;
+
+      if (item.content_type === 'topic') {
+        // Topics: reaction_counts already set from DB columns, user_reactions from topic_reactions
+        const topicReactions = topicUserReactionMap.get(item.content_id);
+        return {
+          ...item,
+          user_liked: likeSet.has(key),
+          user_bookmarked: bookmarkSet.has(key),
+          user_reactions: {
+            seen: topicReactions?.has('seen') || false,
+            validated: topicReactions?.has('validated') || false,
+            inspired: topicReactions?.has('inspired') || false,
+            heard: topicReactions?.has('heard') || false,
+          },
+          // reaction_counts already set from topic DB columns in the mapping above
+        };
+      }
+
+      // Posts and nooks: use feed_reactions
+      return {
+        ...item,
+        user_liked: likeSet.has(key),
+        user_bookmarked: bookmarkSet.has(key),
+        user_reactions: {
+          heard: feedUserReactionMap.get(key)?.has('heard') || false,
+          validated: feedUserReactionMap.get(key)?.has('validated') || false,
+          inspired: feedUserReactionMap.get(key)?.has('inspired') || false,
+        },
+        reaction_counts: feedReactionCounts.get(key) || { heard: 0, validated: 0, inspired: 0 },
+      };
+    });
+  }
+
+  private async applyActivityIdentityReveals(userId: string, items: any[]): Promise<void> {
+    if (items.length === 0) return;
+
+    const otherAuthorIds = [...new Set(
+      items
+        .filter((item) => item.user_id && item.user_id !== userId)
+        .map((item) => item.user_id),
+    )];
+
+    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+
+    items.forEach((item) => {
+      if (!item.author) return;
+
+      const isOwnContent = item.user_id === userId;
+      const isRevealed = revealedIds.has(item.user_id);
+
+      if (!item.is_anonymous && (isOwnContent || isRevealed)) {
+        const realName = this.identityReveal.decryptRealName(
+          item.author.first_name_encrypted,
+          item.author.last_name_encrypted,
+        );
+        if (realName) {
+          item.author.display_name = realName;
+        }
+      }
+
+      // Clean encrypted fields from response
+      delete item.author.first_name_encrypted;
+      delete item.author.last_name_encrypted;
+    });
+
+    // Clean is_anonymous from response
+    items.forEach((item) => {
+      delete item.is_anonymous;
+    });
   }
 }

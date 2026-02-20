@@ -515,6 +515,7 @@ import logger from '../../../common/utils/logger.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { MentionService } from '../../mentions/mention.service';
 
 interface UserReactionMap {
   [commentId: string]: { helpful: boolean; supportive: boolean };
@@ -529,6 +530,7 @@ export class CommentService {
     private notificationsService: NotificationsService,
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
+    private mentionService: MentionService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -700,6 +702,12 @@ export class CommentService {
         } catch (notifError) {
           logger.error('Failed to create reply notification:', notifError);
         }
+      }
+
+      // Process @mentions in comment content
+      const usernames = this.mentionService.parseMentions(createCommentDto.content);
+      if (usernames.length > 0) {
+        this.mentionService.processMentions(userId, usernames, 'comment', comment.id, topicId);
       }
 
       logger.info('Comment created', { commentId: comment.id });

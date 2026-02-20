@@ -26,6 +26,8 @@ describe('NookMessagesService', () => {
   let mockClient: any;
   let mockConfigService: any;
   let mockIdentityReveal: any;
+  let mockMentionService: any;
+  let mockNotificationsService: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -39,10 +41,19 @@ describe('NookMessagesService', () => {
       getRevealedUserIds: jest.fn().mockResolvedValue(new Set()),
       decryptRealName: jest.fn().mockReturnValue(null),
     };
+    mockMentionService = {
+      parseMentions: jest.fn().mockReturnValue([]),
+      processMentions: jest.fn().mockResolvedValue(undefined),
+    };
+    mockNotificationsService = {
+      createNotification: jest.fn().mockResolvedValue({ success: true }),
+    };
 
     service = new NookMessagesService(
       mockConfigService as any,
       mockIdentityReveal as any,
+      mockMentionService as any,
+      mockNotificationsService as any,
     );
   });
 

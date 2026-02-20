@@ -17,12 +17,13 @@ const user_blocking_service_1 = require("./services/user-blocking.service");
 const user_resources_service_1 = require("./services/user-resources.service");
 const harassment_report_service_1 = require("./services/harassment-report.service");
 const encryption_module_1 = require("../encryption/encryption.module");
+const feeds_module_1 = require("../feeds/feeds.module");
 let UserModule = class UserModule {
 };
 exports.UserModule = UserModule;
 exports.UserModule = UserModule = __decorate([
     (0, common_1.Module)({
-        imports: [encryption_module_1.EncryptionModule],
+        imports: [encryption_module_1.EncryptionModule, feeds_module_1.FeedsModule],
         controllers: [user_controller_1.UserController],
         providers: [
             user_service_1.UserService,

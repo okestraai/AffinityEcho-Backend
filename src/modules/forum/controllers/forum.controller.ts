@@ -392,6 +392,32 @@ export class ForumController {
     return this.forumService.leaveForum(id, user.userId);
   }
 
+  // ========== TOPIC CONTENT FILTER ROUTES (BEFORE :id) ==========
+
+  @Get('topics/my-posts')
+  @ApiOperation({ summary: 'Get topics created by the current user' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getMyTopics(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.topicService.getMyTopics(user.userId, page || 1, limit || 20);
+  }
+
+  @Get('topics/bookmarked')
+  @ApiOperation({ summary: 'Get topics bookmarked by the current user' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getBookmarkedTopics(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.topicService.getBookmarkedTopics(user.userId, page || 1, limit || 20);
+  }
+
   // ========== TOPIC PARAMETERIZED ROUTES ==========
 
   @Get('topics/:id')
@@ -433,6 +459,16 @@ export class ForumController {
       user.userId,
       reactionDto.reactionType,
     );
+  }
+
+  @Post('topics/:topicId/bookmark')
+  @ApiOperation({ summary: 'Toggle bookmark on a forum topic' })
+  @ApiParam({ name: 'topicId', description: 'Topic ID' })
+  async toggleTopicBookmark(
+    @CurrentUser() user: any,
+    @Param('topicId') topicId: string,
+  ) {
+    return this.topicService.toggleTopicBookmark(topicId, user.userId);
   }
 
   @Delete('topics/:id')

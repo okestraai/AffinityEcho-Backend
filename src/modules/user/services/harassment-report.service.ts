@@ -79,22 +79,41 @@ export class HarassmentReportService {
     }
   }
 
-  async getUserReports(userId: string, page = 1, limit = 10) {
-    logger.info('Fetching user harassment reports', { userId });
+  async getUserReports(userId: string, page = 1, limit = 10, status?: string) {
+    logger.info('Fetching user harassment reports', { userId, status });
 
     try {
       const offset = (page - 1) * limit;
 
-      const { data, error, count } = await this.admin
+      // Build filtered query
+      let query = this.admin
         .from('harassment_reports')
         .select('*', { count: 'exact' })
-        .eq('reporter_id', userId)
+        .eq('reporter_id', userId);
+
+      if (status && status !== 'all') {
+        query = query.eq('status', status);
+      }
+
+      const { data, error, count } = await query
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (error) {
         throw new BadRequestException('Failed to fetch reports');
       }
+
+      // Get summary counts (unfiltered, grouped by status)
+      const { data: allReports } = await this.admin
+        .from('harassment_reports')
+        .select('status')
+        .eq('reporter_id', userId);
+
+      const summary: Record<string, number> = { total: 0 };
+      (allReports || []).forEach((r: any) => {
+        summary.total++;
+        summary[r.status] = (summary[r.status] || 0) + 1;
+      });
 
       return {
         success: true,
@@ -112,6 +131,7 @@ export class HarassmentReportService {
             createdAt: report.created_at,
             updatedAt: report.updated_at,
           })),
+          summary,
           total: count || 0,
           page,
           limit,
@@ -182,6 +202,20 @@ export class HarassmentReportService {
         throw new NotFoundException('Report not found');
       }
 
+      // Build timeline from available timestamp fields
+      const timeline: Array<{ event: string; date: string }> = [];
+      if (data.created_at) {
+        timeline.push({ event: 'Report submitted', date: data.created_at });
+      }
+      if (data.updated_at && data.updated_at !== data.created_at) {
+        timeline.push({ event: 'Report updated', date: data.updated_at });
+      }
+      if (data.resolved_at) {
+        timeline.push({ event: 'Report resolved', date: data.resolved_at });
+      }
+      // Sort timeline chronologically
+      timeline.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
       return {
         success: true,
         data: {
@@ -200,6 +234,7 @@ export class HarassmentReportService {
           createdAt: data.created_at,
           updatedAt: data.updated_at,
           resolvedAt: data.resolved_at,
+          timeline,
         },
       };
     } catch (error) {

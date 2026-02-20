@@ -62,16 +62,89 @@ const MIN_AGE_HOURS = 0.5;
 @Injectable()
 export class FeedRankingService {
   /**
+   * Twitter-inspired trending algorithm.
+   * Only considers content from the last 7 days.
+   * Scores based on engagement velocity + acceleration (is engagement speeding up?).
+   *
+   * trendingScore = engagementVelocity * accelerationFactor
+   * - velocity = totalEngagement / ageHours
+   * - acceleration = recent rate (24h) / baseline rate (7d average)
+   */
+
+  private static readonly TRENDING_WINDOW_DAYS = 7;
+  private static readonly ACCELERATION_WINDOW_HOURS = 24;
+
+  rankByTrending(items: FeedItem[]): RankedFeedItem[] {
+    if (items.length === 0) return [];
+
+    const now = Date.now();
+    const windowMs = FeedRankingService.TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+    // Only consider items within the trending window
+    const recentItems = items.filter(
+      (item) => now - new Date(item.created_at).getTime() < windowMs,
+    );
+
+    if (recentItems.length === 0) return [];
+
+    const scored = recentItems.map((item) => {
+      const score = this.calculateTrendingScore(item, now);
+      return { ...item, engagement_score: score };
+    });
+
+    scored.sort((a, b) => b.engagement_score - a.engagement_score);
+    return scored;
+  }
+
+  private calculateTrendingScore(item: FeedItem, now: number): number {
+    const likes = item.engagement.likes || 0;
+    const comments = item.engagement.comments || 0;
+    const shares = item.engagement.shares || 0;
+
+    const totalEngagement = likes + comments * 3 + shares * 5; // Weighted
+
+    const ageMs = now - new Date(item.created_at).getTime();
+    const ageHours = Math.max(ageMs / (1000 * 60 * 60), 0.5);
+
+    // Engagement velocity — engagement per hour
+    const velocity = totalEngagement / ageHours;
+
+    // Acceleration — is engagement speeding up?
+    // We approximate: if item is very new (< 24h), acceleration = 1.5 (boost new hot content)
+    // If older, acceleration = velocity / (totalEngagement / (ageHours or trending window average))
+    const accelWindowHours = FeedRankingService.ACCELERATION_WINDOW_HOURS;
+    let acceleration = 1.0;
+
+    if (ageHours <= accelWindowHours) {
+      // New content — if it has engagement, it's accelerating
+      acceleration = totalEngagement > 0 ? 1.5 : 0.5;
+    } else {
+      // Older content — compare recent rate vs baseline
+      const baselineRate = totalEngagement / ageHours;
+      // Approximate recent rate: assume engagement is evenly distributed (no per-hour data)
+      // Boost items with high engagement relative to age
+      const engagementDensity = totalEngagement / Math.sqrt(ageHours);
+      acceleration = engagementDensity > baselineRate ? 1.2 : 0.8;
+    }
+
+    // Trending score = velocity * acceleration * freshness bonus
+    const freshnessBonus = 1 / (1 + ageHours / 48); // 48h half-life for trending
+    const trendingScore = velocity * acceleration * (1 + freshnessBonus);
+
+    return Math.round(trendingScore * 100) / 100;
+  }
+
+  /**
    * Rank an array of feed items by engagement score (descending).
    * Pinned items (if any) are kept at the top regardless of score.
    */
-  rankByEngagement(items: FeedItem[]): RankedFeedItem[] {
+  rankByEngagement(items: FeedItem[], userAffinities?: Map<string, number>): RankedFeedItem[] {
     if (items.length === 0) return [];
 
     const now = Date.now();
 
     const scored = items.map((item) => {
-      const score = this.calculateScore(item, now);
+      const score = this.calculateScore(item, now, userAffinities);
       return { ...item, engagement_score: score };
     });
 
@@ -84,7 +157,7 @@ export class FeedRankingService {
   /**
    * Calculate engagement score for a single feed item.
    */
-  private calculateScore(item: FeedItem, now: number): number {
+  private calculateScore(item: FeedItem, now: number, userAffinities?: Map<string, number>): number {
     const likes = item.engagement.likes || 0;
     const comments = item.engagement.comments || 0;
     const shares = item.engagement.shares || 0;
@@ -107,8 +180,25 @@ export class FeedRankingService {
     const velocity = totalEngagement / ageHours;
     const velocityBonus = velocity * VELOCITY_WEIGHT;
 
-    // 4. Final composite score
-    const finalScore = rawScore * decayFactor + velocityBonus;
+    // 4. Personalization boost — boost content matching user's engagement patterns
+    let personalizationBoost = 0;
+    if (userAffinities && userAffinities.size > 0) {
+      const itemTags: string[] = item.content?.tags || [];
+      if (itemTags.length > 0) {
+        let affinitySum = 0;
+        itemTags.forEach((tag) => {
+          const affinity = userAffinities.get(tag);
+          if (affinity) {
+            affinitySum += affinity;
+          }
+        });
+        // Cap personalization boost at 30% of raw score
+        personalizationBoost = Math.min(affinitySum * 5, rawScore * 0.3);
+      }
+    }
+
+    // 5. Final composite score
+    const finalScore = rawScore * decayFactor + velocityBonus + personalizationBoost;
 
     return Math.round(finalScore * 100) / 100;
   }

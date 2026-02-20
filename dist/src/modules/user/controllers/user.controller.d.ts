@@ -5,6 +5,7 @@ import { UserAccountService } from '../services/user-account.service';
 import { UserBlockingService } from '../services/user-blocking.service';
 import { UserResourcesService } from '../services/user-resources.service';
 import { HarassmentReportService } from '../services/harassment-report.service';
+import { FeedEngagementService } from '../../feeds/services/feed-engagement.service';
 import { UpdateProfileDto, UpdateAvatarDto, UpdateUsernameDto, UpdatePrivacySettingsDto, UpdateNotificationSettingsDto, DeactivateAccountDto, ReactivateAccountDto, DeleteAccountDto, BlockUserDto, CreateHarassmentReportDto, ChangePasswordDto } from '../dto/update-profile.dto';
 export declare class UserController {
     private userService;
@@ -14,7 +15,8 @@ export declare class UserController {
     private userBlockingService;
     private userResourcesService;
     private harassmentReportService;
-    constructor(userService: UserService, userProfileService: UserProfileService, userSettingsService: UserSettingsService, userAccountService: UserAccountService, userBlockingService: UserBlockingService, userResourcesService: UserResourcesService, harassmentReportService: HarassmentReportService);
+    private feedEngagementService;
+    constructor(userService: UserService, userProfileService: UserProfileService, userSettingsService: UserSettingsService, userAccountService: UserAccountService, userBlockingService: UserBlockingService, userResourcesService: UserResourcesService, harassmentReportService: HarassmentReportService, feedEngagementService: FeedEngagementService);
     getProfile(user: any): Promise<{
         id: any;
         username: any;
@@ -324,6 +326,170 @@ export declare class UserController {
             acknowledgment: string;
         };
     };
+    getMyActivity(req: any, type?: 'posts' | 'topics' | 'nooks' | 'all', page?: number, limit?: number): Promise<{
+        success: boolean;
+        data: any[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            hasMore: boolean;
+        };
+    }>;
+    getMyBookmarks(req: any, page?: number, limit?: number): Promise<{
+        success: boolean;
+        data: ({
+            bookmark_id: any;
+            content_type: any;
+            content_id: any;
+            bookmarked_at: any;
+            user_liked: boolean;
+            user_bookmarked: boolean;
+        } | {
+            content: null;
+            author: null;
+            bookmark_id: any;
+            content_type: any;
+            content_id: any;
+            bookmarked_at: any;
+            user_liked: boolean;
+            user_bookmarked: boolean;
+        } | {
+            user_id: any;
+            content: {
+                text: any;
+                tags: any;
+                title?: undefined;
+                forum_name?: undefined;
+                nook_name?: undefined;
+                nook_urgency?: undefined;
+                nook_scope?: undefined;
+                nook_temperature?: undefined;
+                nook_members?: undefined;
+                nook_time_left?: undefined;
+            };
+            engagement: {
+                likes: any;
+                comments: any;
+                shares: any;
+                views: any;
+            };
+            author: {
+                display_name: any;
+                username: any;
+                bio: any;
+                avatar: any;
+                first_name_encrypted: any;
+                last_name_encrypted: any;
+            };
+            is_anonymous: any;
+            reaction_counts: Record<string, number>;
+            user_reactions: {
+                heard: boolean;
+                validated: boolean;
+                inspired: boolean;
+                seen?: undefined;
+            };
+            created_at: any;
+            bookmark_id: any;
+            content_type: any;
+            content_id: any;
+            bookmarked_at: any;
+            user_liked: boolean;
+            user_bookmarked: boolean;
+        } | {
+            user_id: any;
+            content: {
+                title: any;
+                text: any;
+                forum_name: any;
+                tags: any;
+                nook_name?: undefined;
+                nook_urgency?: undefined;
+                nook_scope?: undefined;
+                nook_temperature?: undefined;
+                nook_members?: undefined;
+                nook_time_left?: undefined;
+            };
+            engagement: {
+                likes: any;
+                comments: any;
+                views: any;
+                shares?: undefined;
+            };
+            author: {
+                display_name: any;
+                username: any;
+                bio: any;
+                avatar: any;
+                first_name_encrypted: any;
+                last_name_encrypted: any;
+            };
+            is_anonymous: any;
+            reaction_counts: {
+                seen: any;
+                validated: any;
+                inspired: any;
+                heard: any;
+            };
+            user_reactions: {
+                seen: boolean;
+                validated: boolean;
+                inspired: boolean;
+                heard: boolean;
+            };
+            created_at: any;
+            bookmark_id: any;
+            content_type: any;
+            content_id: any;
+            bookmarked_at: any;
+            user_liked: boolean;
+            user_bookmarked: boolean;
+        } | {
+            user_id: any;
+            content: {
+                title: any;
+                text: any;
+                nook_name: any;
+                nook_urgency: any;
+                nook_scope: any;
+                nook_temperature: any;
+                nook_members: any;
+                nook_time_left: string;
+                tags?: undefined;
+                forum_name?: undefined;
+            };
+            engagement: {
+                likes: number;
+                comments: any;
+                shares?: undefined;
+                views?: undefined;
+            };
+            author: {
+                display_name: any;
+                username: any;
+                bio: any;
+                avatar: any;
+                first_name_encrypted: any;
+                last_name_encrypted: any;
+            };
+            is_anonymous: boolean;
+            expires_at: any;
+            created_at: any;
+            bookmark_id: any;
+            content_type: any;
+            content_id: any;
+            bookmarked_at: any;
+            user_liked: boolean;
+            user_bookmarked: boolean;
+        })[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            hasMore: boolean;
+        };
+    }>;
     submitHarassmentReport(req: any, dto: CreateHarassmentReportDto): Promise<{
         success: boolean;
         data: {
@@ -335,7 +501,7 @@ export declare class UserController {
         };
         message: string;
     }>;
-    getMyHarassmentReports(req: any, page?: number, limit?: number): Promise<{
+    getMyHarassmentReports(req: any, page?: number, limit?: number, status?: string): Promise<{
         success: boolean;
         data: {
             reports: {
@@ -351,6 +517,7 @@ export declare class UserController {
                 createdAt: any;
                 updatedAt: any;
             }[];
+            summary: Record<string, number>;
             total: number;
             page: number;
             limit: number;
@@ -395,6 +562,10 @@ export declare class UserController {
             createdAt: any;
             updatedAt: any;
             resolvedAt: any;
+            timeline: {
+                event: string;
+                date: string;
+            }[];
         };
     }>;
     getUserById(req: any, userId: string): Promise<{
@@ -429,12 +600,13 @@ export declare class UserController {
             totalCount: number;
         };
     }>;
-    getUserActivity(userId: string, type?: 'posts' | 'comments' | 'topics' | 'nooks' | 'all', page?: number, limit?: number): Promise<{
+    getUserActivity(req: any, userId: string, type?: 'posts' | 'topics' | 'nooks' | 'all', page?: number, limit?: number): Promise<{
         success: boolean;
         data: any[];
         pagination: {
             page: number;
             limit: number;
+            total: number;
             hasMore: boolean;
         };
     }>;

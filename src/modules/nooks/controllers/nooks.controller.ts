@@ -45,8 +45,8 @@ export class NooksController {
     status: 200,
     description: 'Nooks retrieved successfully',
   })
-  async findAll(@Query() query: NookQueryDto) {
-    return this.nooksService.findAll(query);
+  async findAll(@Query() query: NookQueryDto, @CurrentUser() user: any) {
+    return this.nooksService.findAll(query, user.userId);
   }
 
   @Post()
@@ -80,6 +80,30 @@ export class NooksController {
   })
   async getStats() {
     return this.nooksService.getGlobalStats();
+  }
+
+  @Get('my-nooks')
+  @ApiOperation({ summary: 'Get nooks created by the current user' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getMyNooks(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.nooksService.getMyNooks(user.userId, page || 1, limit || 8);
+  }
+
+  @Get('bookmarked')
+  @ApiOperation({ summary: 'Get nooks bookmarked by the current user' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getBookmarkedNooks(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.nooksService.getBookmarkedNooks(user.userId, page || 1, limit || 8);
   }
 
   @Get(':id')
@@ -149,6 +173,16 @@ export class NooksController {
       throw new BadRequestException('Admin privileges required');
     }
     return this.nooksService.lock(id, lockDto.reason);
+  }
+
+  @Post(':id/bookmark')
+  @ApiOperation({ summary: 'Toggle bookmark on a nook' })
+  @ApiParam({ name: 'id', description: 'Nook ID' })
+  async toggleNookBookmark(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+  ) {
+    return this.nooksService.toggleNookBookmark(id, user.userId);
   }
 
   @Post(':id/flag')

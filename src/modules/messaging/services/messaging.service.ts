@@ -4,11 +4,14 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { EmailService } from '../../../common/utils/email/email.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import logger from '../../../common/utils/logger.util';
 import { SendMessageDto } from '../dto/messaging.dto';
 
@@ -20,6 +23,8 @@ export class MessagingService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private emailService: EmailService,
+    @Inject(forwardRef(() => NotificationsService))
+    private notifications: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -103,6 +108,26 @@ export class MessagingService {
         .select('username, avatar')
         .eq('id', userId)
         .single();
+
+      // Notify recipient of new message
+      try {
+        await this.notifications.createNotification({
+          user_id: recipientId,
+          actor_id: userId,
+          type: 'message_received',
+          title: 'New Message',
+          message: `${senderProfile?.username || 'Someone'} sent you a message`,
+          action_url: `/messages/${dto.conversation_id}`,
+          reference_id: message.id,
+          reference_type: 'message',
+          metadata: {
+            conversation_id: dto.conversation_id,
+            chat_type: dto.chat_type,
+          },
+        });
+      } catch (notifError) {
+        logger.warn('Failed to send message notification', { notifError, recipientId });
+      }
 
       // Return complete message data for WebSocket broadcast
       return {

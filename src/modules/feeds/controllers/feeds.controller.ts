@@ -60,11 +60,13 @@ export class FeedsController {
   @ApiOperation({ summary: 'Get posts by user' })
   @ApiParam({ name: 'userId', description: 'User ID' })
   async getUserPosts(
+    @Req() req: any,
     @Param('userId') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.feedPostsService.getUserPosts(userId, page, limit);
+    const requestingUserId = req.user.sub;
+    return this.feedPostsService.getUserPosts(userId, page, limit, requestingUserId);
   }
 
   @Put('posts/:postId')
@@ -118,6 +120,22 @@ export class FeedsController {
     return this.feedEngagementService.toggleLike(contentType, contentId, userId);
   }
 
+  // ============ REACTIONS ============
+  @Post(':contentType/:contentId/react')
+  @ApiOperation({ summary: 'Toggle a reaction (heard/validated/inspired) on feed content' })
+  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({ name: 'contentId', description: 'Content ID' })
+  @ApiBody({ schema: { properties: { reactionType: { type: 'string', enum: ['heard', 'validated', 'inspired'] } } } })
+  async toggleReaction(
+    @Req() req: any,
+    @Param('contentType') contentType: 'post' | 'topic' | 'nook_message',
+    @Param('contentId') contentId: string,
+    @Body('reactionType') reactionType: string,
+  ) {
+    const userId = req.user.sub;
+    return this.feedEngagementService.toggleReaction(contentType, contentId, userId, reactionType);
+  }
+
   // ============ COMMENTS ============
   @Post(':contentType/:contentId/comments')
   @ApiOperation({ summary: 'Add comment to feed item' })
@@ -139,12 +157,14 @@ export class FeedsController {
   @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   async getComments(
+    @Req() req: any,
     @Param('contentType') contentType: 'post' | 'topic' | 'nook_message',
     @Param('contentId') contentId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.feedEngagementService.getComments(contentType, contentId, page, limit);
+    const userId = req.user.sub;
+    return this.feedEngagementService.getComments(contentType, contentId, userId, page, limit);
   }
 
   // ============ SHARES ============

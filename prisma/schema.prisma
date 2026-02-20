@@ -160,6 +160,8 @@ model user_profiles {
   feed_views            feed_views[] @relation("feed_views")
   feed_bookmarks        feed_bookmarks[] @relation("feed_bookmarks")
   harassment_reports     harassment_reports[] @relation("harassment_reports")
+  mentions_sent         mentions[] @relation("mentions_sent")
+  mentions_received     mentions[] @relation("mentions_received")
 
   @@map("user_profiles")
 }
@@ -670,7 +672,7 @@ model messages {
   flagged_reason      String?
 
   created_at          DateTime @default(now()) @db.Timestamptz(3)
-  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   // Relations
   conversation conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
   sender       user_profiles @relation(fields: [sender_id], references: [id], onDelete: Cascade)
@@ -819,10 +821,11 @@ model nook_messages {
   heard_count         Int      @default(0)
   validated_count     Int      @default(0)
   helpful_count       Int      @default(0)
-  
+  inspired_count      Int      @default(0)
+
   created_at          DateTime @default(now()) @db.Timestamptz(3)
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
-  
+
   // Relations
   nook                nooks              @relation(fields: [nook_id], references: [id], onDelete: Cascade)
   user                user_profiles      @relation("nook_messages", fields: [user_id], references: [id], onDelete: Cascade)
@@ -1015,6 +1018,21 @@ model feed_bookmarks {
   @@map("feed_bookmarks")
 }
 
+model feed_reactions {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+  content_type        String   @db.VarChar(20) // post, topic, nook_message
+  content_id          String   @db.Uuid
+  reaction_type       String   @db.VarChar(20) // heard, validated, inspired
+
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([user_id, content_type, content_id, reaction_type])
+  @@index([user_id])
+  @@index([content_type, content_id])
+  @@map("feed_reactions")
+}
+
 //
 // HARASSMENT REPORTS
 //
@@ -1049,4 +1067,27 @@ model harassment_reports {
   @@index([reference_number])
   @@index([created_at(sort: Desc)])
   @@map("harassment_reports")
+}
+
+//
+// MENTIONS
+//
+model mentions {
+  id                String   @id @default(uuid()) @db.Uuid
+  mentioner_id      String   @db.Uuid
+  mentioned_user_id String   @db.Uuid
+  content_type      String   @db.VarChar(20) // post, comment, nook_message
+  content_id        String   @db.Uuid
+  context_id        String?  @db.Uuid
+
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  mentioner         user_profiles @relation("mentions_sent", fields: [mentioner_id], references: [id], onDelete: Cascade)
+  mentioned_user    user_profiles @relation("mentions_received", fields: [mentioned_user_id], references: [id], onDelete: Cascade)
+
+  @@unique([mentioner_id, mentioned_user_id, content_type, content_id])
+  @@index([mentioned_user_id, created_at(sort: Desc)])
+  @@index([content_type, content_id])
+  @@map("mentions")
 }

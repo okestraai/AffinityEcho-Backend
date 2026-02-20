@@ -12,6 +12,65 @@ export class UserDiscoveryService {
     this.admin = supabaseAdmin(config);
   }
 
+  /**
+   * Search users by username prefix for @mention autocomplete.
+   * Excludes self, deleted, deactivated, not-onboarded, and blocked users.
+   */
+  async search(userId: string, searchTerm: string, limit: number = 5) {
+    try {
+      if (!searchTerm || searchTerm.trim().length === 0) {
+        return { success: true, data: { users: [] } };
+      }
+
+      const term = searchTerm.trim().toLowerCase();
+
+      // Get blocked user IDs (bidirectional)
+      const { data: blocks } = await this.admin
+        .from('user_blocks')
+        .select('blocker_id, blocked_id')
+        .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
+      const blockedIds = new Set<string>();
+      (blocks || []).forEach((b: any) => {
+        if (b.blocker_id === userId) blockedIds.add(b.blocked_id);
+        if (b.blocked_id === userId) blockedIds.add(b.blocker_id);
+      });
+
+      const query = this.admin
+        .from('user_profiles')
+        .select('id, username, avatar')
+        .neq('id', userId)
+        .eq('is_deleted', false)
+        .eq('is_deactivated', false)
+        .eq('has_completed_onboarding', true)
+        .ilike('username', `${term}%`)
+        .order('username', { ascending: true })
+        .limit(limit + blockedIds.size); // over-fetch to compensate for block filtering
+
+      const { data: users, error } = await query;
+      if (error) throw error;
+
+      // Filter out blocked users and limit
+      const filtered = (users || [])
+        .filter((u: any) => !blockedIds.has(u.id))
+        .slice(0, limit)
+        .map((u: any) => ({
+          id: u.id,
+          username: u.username,
+          display_name: 'Anonymous User',
+          avatar_emoji: u.avatar || 'User',
+        }));
+
+      return {
+        success: true,
+        data: { users: filtered },
+      };
+    } catch (error) {
+      logger.error('Failed to search users', { error, userId });
+      throw new BadRequestException('Failed to search users');
+    }
+  }
+
   async getConnectableUsers(
     userId: string,
     filters: {

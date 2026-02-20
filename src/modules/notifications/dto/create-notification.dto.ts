@@ -30,6 +30,14 @@ export class CreateNotificationDto {
       'identity_reveal',
       'identity_reveal_request',
       'message_received',
+      'mention',
+      'report_status_update',
+      'post_reaction',
+      'topic_comment',
+      'nook_reply',
+      'feed_like',
+      'user_followed',
+      'followed_user_post',
     ],
   })
   @IsString()

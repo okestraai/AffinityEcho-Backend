@@ -111,4 +111,30 @@ export class MentorshipQueryDto {
   @IsOptional()
   @IsIn(['asc', 'desc'])
   sortOrder?: string = 'desc';
+
+  @ApiProperty({
+    description: 'Minimum match score',
+    required: false,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  minMatchScore?: number;
+
+  @ApiProperty({
+    description: 'Maximum match score',
+    required: false,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  maxMatchScore?: number;
 }

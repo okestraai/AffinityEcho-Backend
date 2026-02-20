@@ -14,6 +14,7 @@ import {
 } from '../dto/create-direct-request.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 
 @Injectable()
 export class MentorshipRequestsService {
@@ -24,6 +25,7 @@ export class MentorshipRequestsService {
     private config: ConfigService,
     private notificationsService: NotificationsService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -1502,6 +1504,8 @@ export class MentorshipRequestsService {
     years_experience,
     skills,
     linkedin_url,
+    first_name_encrypted,
+    last_name_encrypted,
     company_encrypted,
     career_level_encrypted,
     affinity_tags_encrypted,
@@ -1560,6 +1564,8 @@ export class MentorshipRequestsService {
       yearsExperience: raw.years_experience,
       skills: raw.skills || [],
       linkedinUrl: raw.linkedin_url,
+      _first_name_encrypted: raw.first_name_encrypted,
+      _last_name_encrypted: raw.last_name_encrypted,
       company,
       companyType: raw.company_type,
       careerLevel,
@@ -1598,6 +1604,33 @@ export class MentorshipRequestsService {
       },
       badges: raw.badges || [],
     };
+  }
+
+  /**
+   * Apply identity reveal logic to a list of profiles.
+   * For each profile that has an accepted identity reveal with the current user,
+   * replace the username with the decrypted real name.
+   */
+  private async applyIdentityRevealToProfiles(currentUserId: string, profiles: any[]) {
+    if (profiles.length === 0) return;
+
+    const profileIds = profiles.map((p) => p.id).filter(Boolean);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(currentUserId, profileIds);
+
+    profiles.forEach((profile) => {
+      if (revealedIds.has(profile.id)) {
+        const realName = this.identityReveal.decryptRealName(
+          profile._first_name_encrypted,
+          profile._last_name_encrypted,
+        );
+        if (realName) {
+          profile.displayName = realName;
+        }
+      }
+      // Clean up internal encrypted fields from response
+      delete profile._first_name_encrypted;
+      delete profile._last_name_encrypted;
+    });
   }
 
   // ========== MY MENTORS / MY MENTEES ==========
@@ -1728,6 +1761,12 @@ export class MentorshipRequestsService {
         (a, b) =>
           new Date(b.connectedSince).getTime() -
           new Date(a.connectedSince).getTime(),
+      );
+
+      // Apply identity reveals — show real names for revealed mentors
+      await this.applyIdentityRevealToProfiles(
+        userId,
+        uniqueMentors.map((m) => m.mentor),
       );
 
       return {
@@ -1880,6 +1919,12 @@ export class MentorshipRequestsService {
         (a, b) =>
           new Date(b.connectedSince).getTime() -
           new Date(a.connectedSince).getTime(),
+      );
+
+      // Apply identity reveals — show real names for revealed mentees
+      await this.applyIdentityRevealToProfiles(
+        userId,
+        uniqueMentees.map((m) => m.mentee),
       );
 
       return {

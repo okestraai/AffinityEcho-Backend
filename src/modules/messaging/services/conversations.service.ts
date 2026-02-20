@@ -449,12 +449,9 @@ export class ConversationsService {
               display_name: displayName,
               avatar: otherUser?.avatar || '👤',
               job_title: otherUser?.job_title,
-              company: companyDecrypted || otherUser?.company_encrypted,
-              company_encrypted: otherUser?.company_encrypted,
-              career_level:
-                careerLevelDecrypted || otherUser?.career_level_encrypted,
+              company: companyDecrypted || null,
+              career_level: careerLevelDecrypted || null,
               mentoring_as: otherUser?.mentoring_as,
-              bio: otherUser?.bio,
             },
             last_message: lastMessage
               ? {
