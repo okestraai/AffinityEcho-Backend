@@ -133,6 +133,13 @@ export class FollowService {
 
   async unfollowUser(followerId: string, followingId: string) {
     try {
+      // Get follower username for notification message
+      const { data: follower } = await this.admin
+        .from('user_profiles')
+        .select('username')
+        .eq('id', followerId)
+        .single();
+
       const { error } = await this.admin
         .from('user_follows')
         .delete()
@@ -145,6 +152,18 @@ export class FollowService {
           `Failed to unfollow user: ${error.message}`,
         );
       }
+
+      // Send unfollow notification
+      await this.createNotification(
+        followingId,
+        followerId,
+        'user_unfollowed',
+        'User Unfollowed',
+        `${follower?.username || 'Someone'} unfollowed you`,
+        `/mentorship/profile/${followerId}`,
+        followerId,
+        'user_profile',
+      );
 
       return {
         success: true,

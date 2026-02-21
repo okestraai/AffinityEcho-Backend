@@ -93,32 +93,76 @@ export class FeedPostsService {
     logger.info('Fetching post by ID', { postId, userId });
 
     try {
-      const { data: post, error } = await this.admin
-        .from('feed_posts')
-        .select(
-          `
-          *,
-          user_profile:user_id(
-            id,
-            username,
-            avatar,
-            bio,
-            first_name_encrypted,
-            last_name_encrypted
+      // Fetch post + user engagement data in parallel
+      const [postResult, likeResult, bookmarkResult, shareResult, reactionsResult, allReactionsResult] = await Promise.all([
+        this.admin
+          .from('feed_posts')
+          .select(
+            `
+            *,
+            user_profile:user_id(
+              id,
+              username,
+              avatar,
+              bio,
+              first_name_encrypted,
+              last_name_encrypted
+            )
+          `,
           )
-        `,
-        )
-        .eq('id', postId)
-        .single();
+          .eq('id', postId)
+          .single(),
+        this.admin
+          .from('feed_likes')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('content_type', 'post')
+          .eq('content_id', postId)
+          .maybeSingle(),
+        this.admin
+          .from('feed_bookmarks')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('content_type', 'post')
+          .eq('content_id', postId)
+          .maybeSingle(),
+        this.admin
+          .from('feed_shares')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('content_type', 'post')
+          .eq('content_id', postId)
+          .maybeSingle(),
+        this.admin
+          .from('feed_reactions')
+          .select('reaction_type')
+          .eq('user_id', userId)
+          .eq('content_id', postId),
+        this.admin
+          .from('feed_reactions')
+          .select('reaction_type')
+          .eq('content_id', postId),
+      ]);
+
+      const { data: post, error } = postResult;
 
       if (error || !post) {
         throw new NotFoundException('Post not found');
       }
 
-      // Track view
-      await this.trackView(postId, userId);
+      // Track view (fire-and-forget)
+      this.trackView(postId, userId).catch(() => {});
 
       const formatted = this.formatPost(post);
+
+      // Engagement status
+      const userReactionTypes = new Set((reactionsResult.data || []).map((r: any) => r.reaction_type));
+      const reactionCounts: Record<string, number> = { heard: 0, validated: 0, inspired: 0 };
+      (allReactionsResult.data || []).forEach((r: any) => {
+        if (reactionCounts[r.reaction_type] !== undefined) {
+          reactionCounts[r.reaction_type]++;
+        }
+      });
 
       // Apply identity reveal
       const isOwn = post.user_id === userId;
@@ -137,7 +181,18 @@ export class FeedPostsService {
 
       return {
         success: true,
-        data: formatted,
+        data: {
+          ...formatted,
+          user_liked: !!likeResult.data,
+          user_bookmarked: !!bookmarkResult.data,
+          user_shared: !!shareResult.data,
+          user_reactions: {
+            heard: userReactionTypes.has('heard'),
+            validated: userReactionTypes.has('validated'),
+            inspired: userReactionTypes.has('inspired'),
+          },
+          reaction_counts: reactionCounts,
+        },
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;

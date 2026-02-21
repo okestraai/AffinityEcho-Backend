@@ -37,6 +37,7 @@ export class CreateNotificationDto {
       'nook_reply',
       'feed_like',
       'user_followed',
+      'user_unfollowed',
       'followed_user_post',
     ],
   })

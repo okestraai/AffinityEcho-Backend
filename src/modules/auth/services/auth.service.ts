@@ -380,7 +380,7 @@ export class AuthService {
         throw new UnauthorizedException('Login failed - user data missing');
       }
 
-      // OPTIMIZATION: Fetch profile and ensure it exists in one query
+      // Fetch profile — do NOT auto-create, only signup should create profiles
       let hasCompletedOnboarding = false;
       let isDeactivated = false;
       try {
@@ -394,14 +394,22 @@ export class AuthService {
           hasCompletedOnboarding = !!profile.has_completed_onboarding;
           isDeactivated = !!profile.is_deactivated;
         } else {
-          // Profile doesn't exist, create it
-          await this.ensureProfileExists(data.user.id, data.user.email!);
+          logger.warn('Login attempt for user without profile — must sign up first', {
+            userId: data.user.id,
+          });
+          throw new UnauthorizedException(
+            'No profile found. Please sign up first.',
+          );
         }
       } catch (err: any) {
-        logger.warn('Could not fetch onboarding status, ensuring profile exists', {
+        if (err instanceof UnauthorizedException) throw err;
+        logger.error('Could not fetch profile during login', {
           userId: data.user.id,
+          error: err?.message,
         });
-        await this.ensureProfileExists(data.user.id, data.user.email!);
+        throw new UnauthorizedException(
+          'No profile found. Please sign up first.',
+        );
       }
 
       const tokens = this.generateTokens(data.user.id, data.user.email!);
@@ -993,14 +1001,8 @@ export class AuthService {
         .single();
 
       if (error || !profile) {
-        logger.warn('User profile not found, attempting auto-create', {
-          userId,
-        });
-        const created = await this.ensureProfileExists(userId, '');
-        if (created) {
-          return this.getCurrentUser(userId); // Now type-safe recursion!
-        }
-        throw new UnauthorizedException('User profile not found');
+        logger.warn('User profile not found — must sign up first', { userId });
+        throw new UnauthorizedException('User profile not found. Please sign up first.');
       }
 
       return this.cleanUserData(profile);

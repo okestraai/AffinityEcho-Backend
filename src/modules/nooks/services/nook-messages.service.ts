@@ -276,9 +276,9 @@ export class NookMessagesService {
             title: 'New Reply',
             message: `${replier?.username || 'Someone'} replied to your message in a nook`,
             action_url: `/nooks/${nookId}`,
-            reference_id: message.id,
+            reference_id: parent_message_id,
             reference_type: 'nook_message',
-            metadata: { nook_id: nookId, parent_message_id },
+            metadata: { nook_id: nookId, reply_message_id: message.id },
           });
         }
       } catch (notifError) {

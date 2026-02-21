@@ -207,8 +207,9 @@ export class MentorshipDiscoverService {
           // Career level filter (in memory since field is encrypted)
           if (careerLevel?.length) {
             if (!profile.career_level_encrypted) return false;
+            const decryptedLevel = this.decryptField(profile.career_level_encrypted);
             const hasMatchingCareerLevel = careerLevel.some((level) =>
-              profile.career_level_encrypted.includes(level),
+              decryptedLevel.includes(level),
             );
             if (!hasMatchingCareerLevel) return false;
           }
@@ -252,7 +253,7 @@ export class MentorshipDiscoverService {
 
           return {
             ...profile,
-            career_level: profile.career_level_encrypted,
+            career_level: this.decryptField(profile.career_level_encrypted),
             affinity_tags: affinityTagsArray,
             isBookmarked: bookmarkedIds.includes(profile.id),
             matchScore: this.calculateMatchScore(profile, currentUserId, currentUserProfile),
@@ -417,7 +418,7 @@ export class MentorshipDiscoverService {
 
             return {
               ...profile,
-              career_level: profile.career_level_encrypted,
+              career_level: this.decryptField(profile.career_level_encrypted),
               affinity_tags: affinityTags,
               matchScore: this.calculateSuggestionScore(profile, currentUser),
             };
@@ -672,11 +673,22 @@ export class MentorshipDiscoverService {
     }
   }
 
+  private decryptField(value: string | null | undefined): string {
+    if (!value) return '';
+    try {
+      return this.encryption.decrypt(value);
+    } catch {
+      return value;
+    }
+  }
+
   private parseCareerLevel(level: string): number {
-    if (level.includes('Entry') || level.includes('0-2')) return 1;
-    if (level.includes('Mid') || level.includes('3-7')) return 2;
-    if (level.includes('Senior') || level.includes('8-12')) return 3;
-    if (level.includes('Executive') || level.includes('C-Suite')) return 4;
+    const decrypted = this.decryptField(level);
+    if (decrypted.includes('Entry') || decrypted.includes('0-2')) return 1;
+    if (decrypted.includes('Mid') || decrypted.includes('3-7')) return 2;
+    if (decrypted.includes('Senior') || decrypted.includes('8-12')) return 3;
+    if (decrypted.includes('Leadership') || decrypted.includes('13+')) return 4;
+    if (decrypted.includes('Executive') || decrypted.includes('C-Suite')) return 5;
     return 0;
   }
 }

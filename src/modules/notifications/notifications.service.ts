@@ -23,6 +23,7 @@ export class NotificationsService {
     referral_comment: 'notify_on_comment',
     topic_comment: 'notify_on_comment',
     user_followed: 'notify_on_follow',
+    user_unfollowed: 'notify_on_follow',
     referral_connection: 'notify_on_connection_request',
     mentorship_request: 'notify_on_connection_request',
     message_received: 'notify_on_message',

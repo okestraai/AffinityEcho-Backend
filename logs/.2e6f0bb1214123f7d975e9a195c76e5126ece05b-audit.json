@@ -39,6 +39,11 @@
             "date": 1771550735431,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-20.log",
             "hash": "47c85d26848d605f5a70ac16469b9a3c4ecec37fc2a104a6f8e8a45f6cabb00b"
+        },
+        {
+            "date": 1771673623619,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-21.log",
+            "hash": "9bfcff6e386a01dd53051c7ed2d62196c7993ab6b80d043df4d0c7e6baccbdd7"
         }
     ],
     "hashType": "sha256"
