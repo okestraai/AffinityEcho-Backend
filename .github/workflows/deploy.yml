@@ -115,7 +115,7 @@ jobs:
       - name: Deploy staging stack
         working-directory: /home/okestraailabs/affinityecho/staging
         run: |
-          docker compose --env-file .env.staging -f docker-compose.staging.yml -p affinityecho-staging up -d --no-build api
+          docker compose --env-file .env.staging -f docker-compose.staging.yml -p affinityecho-staging up -d --no-build api redis cloudflared
           echo "Waiting for API healthcheck..."
           for i in $(seq 1 30); do
             if docker inspect --format='{{.State.Health.Status}}' affinityecho-staging-api 2>/dev/null | grep -q healthy; then
@@ -153,7 +153,7 @@ jobs:
       - name: Deploy production stack
         working-directory: /home/okestraailabs/affinityecho/production
         run: |
-          docker compose -f docker-compose.yml -p affinityecho-production up -d --no-build api
+          docker compose --env-file .env.production -f docker-compose.yml -p affinityecho-production up -d --no-build api redis cloudflared
           echo "Waiting for API healthcheck..."
           for i in $(seq 1 30); do
             if docker inspect --format='{{.State.Health.Status}}' affinityecho-production-api 2>/dev/null | grep -q healthy; then
