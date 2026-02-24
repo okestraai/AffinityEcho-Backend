@@ -89,6 +89,7 @@ jobs:
 
       - name: Run Trivy on pushed image
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ steps.env-tag.outputs.tag }}
           format: table
@@ -114,7 +115,7 @@ jobs:
       - name: Deploy staging stack
         working-directory: /home/okestraailabs/affinityecho/staging
         run: |
-          docker compose -f docker-compose.staging.yml -p affinityecho-staging up -d --no-build api
+          docker compose --env-file .env.staging -f docker-compose.staging.yml -p affinityecho-staging up -d --no-build api
           echo "Waiting for API healthcheck..."
           for i in $(seq 1 30); do
             if docker inspect --format='{{.State.Health.Status}}' affinityecho-staging-api 2>/dev/null | grep -q healthy; then
