@@ -110,7 +110,7 @@ jobs:
         run: docker pull ${{ env.IMAGE_NAME }}:staging
 
       - name: Deploy staging stack
-        working-directory: /opt/affinityecho/staging
+        working-directory: /home/okestraailabs/affinityecho/staging
         run: |
           docker compose -f docker-compose.staging.yml -p affinityecho-staging up -d --no-build api
           echo "Waiting for API healthcheck..."
@@ -142,13 +142,13 @@ jobs:
         run: docker pull ${{ env.IMAGE_NAME }}:production
 
       - name: Record rollback tag
-        working-directory: /opt/affinityecho/production
+        working-directory: /home/okestraailabs/affinityecho/production
         run: |
           CURRENT_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.IMAGE_NAME }}:production 2>/dev/null || echo "none")
           echo "$CURRENT_DIGEST" > .last-good-backend-digest
 
       - name: Deploy production stack
-        working-directory: /opt/affinityecho/production
+        working-directory: /home/okestraailabs/affinityecho/production
         run: |
           docker compose -f docker-compose.yml -p affinityecho-production up -d --no-build api
           echo "Waiting for API healthcheck..."
