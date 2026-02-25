@@ -20,8 +20,11 @@ import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { FeedsModule } from './modules/feeds/feeds.module';
 import { RedisModule } from './common/services/redis.module';
+import { BullModule } from '@nestjs/bullmq';
+import { getBullConfig } from './config/bull.config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NookCronJobs } from './jobs/nook-cron.jobs';
+import { OkestraModule } from './modules/okestra/okestra.module';
 
 @Module({
   imports: [
@@ -42,6 +45,7 @@ import { NookCronJobs } from './jobs/nook-cron.jobs';
         limit: 50, // 50 requests per 10 seconds for messaging endpoints
       },
     ]),
+    BullModule.forRoot(getBullConfig()),
     ScheduleModule.forRoot(),
     RedisModule,
     AuthModule,
@@ -55,6 +59,7 @@ import { NookCronJobs } from './jobs/nook-cron.jobs';
     MessagingModule,
     NotificationsModule,
     FeedsModule,
+    OkestraModule,
   ],
   controllers: [AppController],
   providers: [

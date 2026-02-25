@@ -14,6 +14,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { RedisService } from '../../../common/services/redis.service';
+import { OkestraService } from '../../okestra/services/okestra.service';
 
 interface UserReaction {
   seen: boolean;
@@ -48,6 +49,7 @@ export class TopicService {
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
     private redis: RedisService,
+    private okestraService: OkestraService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -525,6 +527,9 @@ export class TopicService {
       );
 
       await this.redis.delPattern('topics:*');
+
+      // Invalidate AI insights cache for this topic
+      this.okestraService.invalidateCache('topic', topicId).catch(() => {});
 
       return { action: 'added' as const, reactionType };
     } catch (error) {
