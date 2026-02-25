@@ -106,6 +106,16 @@ jobs:
       name: staging
       url: https://staging-api.affinityecho.com
     steps:
+      - name: Ensure vLLM env vars in staging .env
+        working-directory: /home/okestraailabs/affinityecho/staging
+        run: |
+          if ! grep -q "VLLM_CHAT_URL" .env.staging 2>/dev/null; then
+            printf '\n# ── vLLM (Okestra AI Insights — direct call) ─────────────\nVLLM_CHAT_URL=https://chat.affinityecho.com\nCF_ACCESS_CLIENT_ID=c83bd82878c8a1937d64ba223324b615.access\nCF_ACCESS_CLIENT_SECRET=d71737956553bccdb12403d5512b8b87a9244815fc9685bd5efe970f3138f9dd\n' >> .env.staging
+            echo "Added vLLM env vars to .env.staging"
+          else
+            echo "vLLM env vars already present in .env.staging"
+          fi
+
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
@@ -138,6 +148,16 @@ jobs:
       name: production
       url: https://api.affinityecho.com
     steps:
+      - name: Ensure vLLM env vars in production .env
+        working-directory: /home/okestraailabs/affinityecho/production
+        run: |
+          if ! grep -q "VLLM_CHAT_URL" .env.production 2>/dev/null; then
+            printf '\n# ── vLLM (Okestra AI Insights — direct call) ─────────────\nVLLM_CHAT_URL=https://chat.affinityecho.com\nCF_ACCESS_CLIENT_ID=c83bd82878c8a1937d64ba223324b615.access\nCF_ACCESS_CLIENT_SECRET=d71737956553bccdb12403d5512b8b87a9244815fc9685bd5efe970f3138f9dd\n' >> .env.production
+            echo "Added vLLM env vars to .env.production"
+          else
+            echo "vLLM env vars already present in .env.production"
+          fi
+
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 

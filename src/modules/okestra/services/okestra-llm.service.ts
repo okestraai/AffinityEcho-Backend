@@ -112,13 +112,24 @@ Return ONLY the JSON object.`;
 export class OkestraLlmService {
   private readonly logger = new Logger(OkestraLlmService.name);
   private admin: SupabaseClient;
-  private supabaseUrl: string;
-  private serviceRoleKey: string;
+  private vllmChatUrl: string;
+  private cfClientId: string;
+  private cfClientSecret: string;
 
   constructor(private config: ConfigService) {
-    this.supabaseUrl = this.config.get<string>('SUPABASE_URL')!;
-    this.serviceRoleKey = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY')!;
-    this.admin = createClient(this.supabaseUrl, this.serviceRoleKey);
+    const supabaseUrl = this.config.get<string>('SUPABASE_URL')!;
+    const serviceRoleKey = this.config.get<string>(
+      'SUPABASE_SERVICE_ROLE_KEY',
+    )!;
+    this.admin = createClient(supabaseUrl, serviceRoleKey);
+
+    // Direct vLLM connection (bypasses Supabase Edge Function)
+    this.vllmChatUrl =
+      this.config.get<string>('VLLM_CHAT_URL') ||
+      'https://chat.affinityecho.com';
+    this.cfClientId = this.config.get<string>('CF_ACCESS_CLIENT_ID') || '';
+    this.cfClientSecret =
+      this.config.get<string>('CF_ACCESS_CLIENT_SECRET') || '';
   }
 
   async generateInsights(
@@ -137,26 +148,38 @@ export class OkestraLlmService {
       userId || 'anonymous',
     );
 
-    const edgeFunctionUrl = `${this.supabaseUrl}/functions/v1/okestra-llm`;
-
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.serviceRoleKey}`,
+    // Call vLLM directly (OpenAI-compatible /v1/chat/completions)
+    const response = await fetch(
+      `${this.vllmChatUrl}/v1/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Access-Client-Id': this.cfClientId,
+          'CF-Access-Client-Secret': this.cfClientSecret,
+        },
+        body: JSON.stringify({
+          model:
+            'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4',
+          messages: [
+            { role: 'system', content: OKESTRA_SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: JSON.stringify(threadPayload),
+            },
+          ],
+          max_tokens: 2048,
+          temperature: 0.3,
+        }),
       },
-      body: JSON.stringify({
-        threadPayload,
-        systemPrompt: OKESTRA_SYSTEM_PROMPT,
-      }),
-    });
+    );
 
     if (!response.ok) {
       const errorData = await response
         .json()
         .catch(() => ({ error: 'Unknown error' }));
       throw new Error(
-        `Edge Function error: ${errorData.error || response.status}`,
+        `vLLM error: ${errorData.error || response.status}`,
       );
     }
 
