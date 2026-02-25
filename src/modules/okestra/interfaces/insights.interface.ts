@@ -2,11 +2,8 @@ export type ContentType = 'topic' | 'nook';
 
 export interface OkestraInsightsResult {
   tldr: string;
-  overallSentiment: 'Positive' | 'Neutral' | 'Negative';
+  overallSentiment: string;
   keyThemes: string[];
-  openQuestions: string[];
-  consensus: string[];
-  disagreements: string[];
   themes: {
     name: string;
     sentiment: 'Positive' | 'Neutral' | 'Negative';

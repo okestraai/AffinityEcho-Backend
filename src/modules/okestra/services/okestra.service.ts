@@ -32,7 +32,7 @@ export class OkestraService {
     userId: string,
   ): Promise<{
     insights: OkestraInsightsResult | null;
-    status: 'cached' | 'generating' | 'stale_cached';
+    status: 'cached' | 'fresh' | 'stale_cached';
     cached: boolean;
   }> {
     const currentHash = await this.contentHashService.computeHash(
@@ -40,7 +40,13 @@ export class OkestraService {
       contentId,
     );
     if (!currentHash) {
-      return { insights: null, status: 'generating', cached: false };
+      // Can't compute hash — generate inline as fallback
+      const insights = await this.llmService.generateInsights(
+        contentType,
+        contentId,
+        userId,
+      );
+      return { insights, status: 'fresh', cached: false };
     }
 
     const cacheKey = this.getCacheKey(contentType, contentId);
@@ -53,7 +59,10 @@ export class OkestraService {
 
     if (cached && cached.contentHash !== currentHash) {
       this.logger.debug(`Cache STALE for ${contentType}:${contentId}`);
-      await this.enqueueGeneration(contentType, contentId, currentHash);
+      // Return stale immediately, regenerate in background via BullMQ
+      this.enqueueGeneration(contentType, contentId, currentHash).catch(
+        () => {},
+      );
       return {
         insights: cached.insights,
         status: 'stale_cached',
@@ -61,9 +70,12 @@ export class OkestraService {
       };
     }
 
-    this.logger.debug(`Cache MISS for ${contentType}:${contentId}`);
-    await this.enqueueGeneration(contentType, contentId, currentHash);
-    return { insights: null, status: 'generating', cached: false };
+    // Cache MISS — generate inline (single round-trip)
+    this.logger.debug(
+      `Cache MISS for ${contentType}:${contentId}, generating inline`,
+    );
+    const insights = await this.generateSync(contentType, contentId, userId);
+    return { insights, status: 'fresh', cached: false };
   }
 
   async generateSync(
