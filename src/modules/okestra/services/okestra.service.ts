@@ -35,31 +35,21 @@ export class OkestraService {
     status: 'cached' | 'fresh' | 'stale_cached';
     cached: boolean;
   }> {
-    const currentHash = await this.contentHashService.computeHash(
-      contentType,
-      contentId,
-    );
-    if (!currentHash) {
-      // Can't compute hash — generate inline as fallback
-      const insights = await this.llmService.generateInsights(
-        contentType,
-        contentId,
-        userId,
-      );
-      return { insights, status: 'fresh', cached: false };
-    }
-
     const cacheKey = this.getCacheKey(contentType, contentId);
-    const cached = await this.redis.get<CachedInsights>(cacheKey);
 
-    if (cached && cached.contentHash === currentHash) {
+    // Fetch hash + cache in parallel (saves ~100-200ms)
+    const [currentHash, cached] = await Promise.all([
+      this.contentHashService.computeHash(contentType, contentId),
+      this.redis.get<CachedInsights>(cacheKey),
+    ]);
+
+    if (cached && currentHash && cached.contentHash === currentHash) {
       this.logger.debug(`Cache HIT for ${contentType}:${contentId}`);
       return { insights: cached.insights, status: 'cached', cached: true };
     }
 
-    if (cached && cached.contentHash !== currentHash) {
+    if (cached && currentHash && cached.contentHash !== currentHash) {
       this.logger.debug(`Cache STALE for ${contentType}:${contentId}`);
-      // Return stale immediately, regenerate in background via BullMQ
       this.enqueueGeneration(contentType, contentId, currentHash).catch(
         () => {},
       );
@@ -70,11 +60,17 @@ export class OkestraService {
       };
     }
 
-    // Cache MISS — generate inline (single round-trip)
+    // Cache MISS — generate inline, pass hash to avoid recomputing
     this.logger.debug(
       `Cache MISS for ${contentType}:${contentId}, generating inline`,
     );
-    const insights = await this.generateSync(contentType, contentId, userId);
+    const insights = await this.generateInline(
+      contentType,
+      contentId,
+      userId,
+      currentHash,
+      cacheKey,
+    );
     return { insights, status: 'fresh', cached: false };
   }
 
@@ -83,18 +79,31 @@ export class OkestraService {
     contentId: string,
     userId: string,
   ): Promise<OkestraInsightsResult> {
-    const currentHash = await this.contentHashService.computeHash(
-      contentType,
-      contentId,
-    );
-
-    // Check cache first
     const cacheKey = this.getCacheKey(contentType, contentId);
-    const cached = await this.redis.get<CachedInsights>(cacheKey);
-    if (cached && cached.contentHash === currentHash) {
+    const [currentHash, cached] = await Promise.all([
+      this.contentHashService.computeHash(contentType, contentId),
+      this.redis.get<CachedInsights>(cacheKey),
+    ]);
+    if (cached && currentHash && cached.contentHash === currentHash) {
       return cached.insights;
     }
+    return this.generateInline(
+      contentType,
+      contentId,
+      userId,
+      currentHash,
+      cacheKey,
+    );
+  }
 
+  /** Shared generation logic — no redundant hash/cache lookups */
+  private async generateInline(
+    contentType: ContentType,
+    contentId: string,
+    userId: string,
+    currentHash: string,
+    cacheKey: string,
+  ): Promise<OkestraInsightsResult> {
     // Check generation lock to prevent duplicate work
     const lockKey = `okestra:lock:${contentType}:${contentId}`;
     const locked = await this.redis.get<boolean>(lockKey);
@@ -104,7 +113,6 @@ export class OkestraService {
       if (freshCached) return freshCached.insights;
     }
 
-    // Set lock
     await this.redis.set(lockKey, true, this.LOCK_TTL);
 
     try {
