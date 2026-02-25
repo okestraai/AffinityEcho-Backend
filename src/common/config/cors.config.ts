@@ -6,6 +6,7 @@ const productionOrigins: string[] = [
   'https://affinityecho.com',
   'https://www.affinityecho.com',
   'https://app.affinityecho.com',
+  'https://staging-app.affinityecho.com',
   'https://affinity-echo.vercel.app',
 ];
 
