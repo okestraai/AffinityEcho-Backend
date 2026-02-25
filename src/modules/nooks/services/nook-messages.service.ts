@@ -12,6 +12,7 @@ import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MentionService } from '../../mentions/mention.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import logger from '../../../common/utils/logger.util';
+import { OkestraService } from '../../okestra/services/okestra.service';
 
 @Injectable()
 export class NookMessagesService {
@@ -22,6 +23,7 @@ export class NookMessagesService {
     private identityReveal: IdentityRevealUtil,
     private mentionService: MentionService,
     private notificationsService: NotificationsService,
+    private okestraService: OkestraService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -286,6 +288,9 @@ export class NookMessagesService {
       }
     }
 
+    // Invalidate AI insights cache for this nook
+    this.okestraService.invalidateCache('nook', nookId).catch(() => {});
+
     return {
       success: true,
       data: { message },
@@ -344,6 +349,9 @@ export class NookMessagesService {
         messages_count: Math.max(0, (nook?.messages_count || 1) - 1),
       })
       .eq('id', nookId);
+
+    // Invalidate AI insights cache for this nook
+    this.okestraService.invalidateCache('nook', nookId).catch(() => {});
 
     return {
       success: true,
