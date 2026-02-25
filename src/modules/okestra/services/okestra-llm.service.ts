@@ -65,15 +65,6 @@ Good: "Keeping a detailed record of incidents—including dates, times, and witn
 
 **Confidence**: High = broadly supported, low risk. Med = has tradeoffs or context-dependent. Low = speculative or high-risk.
 
-## CONSENSUS & DISAGREEMENTS
-
-- Consensus: Repeated advice patterns, aligned high-engagement perspectives
-- Disagreements: Contradicting viewpoints, risk/reward tradeoffs, minority challenges to majority
-
-## OPEN QUESTIONS
-
-Unresolved: missing info from poster, unsettled debates, unanswered follow-ups, implicit questions not yet raised.
-
 ## SAFETY
 
 Flag if detected: PII, SELF_HARM, HARASSMENT, THREAT, CRISIS
@@ -100,9 +91,6 @@ Return ONLY valid JSON. No markdown, no commentary.
   "tldr": "1-2 sentence summary",
   "overallSentiment": "Positive | Neutral | Negative",
   "keyThemes": ["TopicWord", "DiscussionTopic"],
-  "openQuestions": ["Question 1", "Question 2"],
-  "consensus": ["Agreement 1", "Agreement 2"],
-  "disagreements": ["Conflict 1", "Conflict 2"],
   "themes": [
     { "name": "TopicWord", "sentiment": "Positive | Neutral | Negative", "supportingCommentIds": ["c_001"] }
   ],
@@ -383,13 +371,6 @@ export class OkestraLlmService {
       tldr: parsed.tldr || 'Thread analysis completed.',
       overallSentiment: parsed.overallSentiment || 'Neutral',
       keyThemes: Array.isArray(parsed.keyThemes) ? parsed.keyThemes : [],
-      openQuestions: Array.isArray(parsed.openQuestions)
-        ? parsed.openQuestions
-        : [],
-      consensus: Array.isArray(parsed.consensus) ? parsed.consensus : [],
-      disagreements: Array.isArray(parsed.disagreements)
-        ? parsed.disagreements
-        : [],
       themes: Array.isArray(parsed.themes) ? parsed.themes : [],
       actionItems: Array.isArray(parsed.actionItems)
         ? parsed.actionItems
@@ -405,9 +386,6 @@ export class OkestraLlmService {
       tldr: 'Analysis unavailable - the AI response could not be processed. Please try again.',
       overallSentiment: 'Neutral',
       keyThemes: [],
-      openQuestions: [],
-      consensus: [],
-      disagreements: [],
       themes: [],
       actionItems: [],
       safetyFlags: [],
