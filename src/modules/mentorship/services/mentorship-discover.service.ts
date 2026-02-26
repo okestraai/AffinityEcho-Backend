@@ -678,7 +678,7 @@ export class MentorshipDiscoverService {
     try {
       return this.encryption.decrypt(value);
     } catch {
-      return value;
+      return '';
     }
   }
 

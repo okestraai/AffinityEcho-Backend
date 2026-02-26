@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { CreateMentorProfileDto } from '../dto/create-mentor-profile.dto';
 import { UpdateMentorProfileDto } from '../dto/update-mentor-profile.dto';
 import { CreateMenteeProfileDto } from '../dto/create-mentee-profile.dto';
@@ -15,8 +16,30 @@ import { USER_PROFILE_MENTORSHIP_FIELDS } from '../../../common/constants/select
 export class MentorshipProfileService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private encryption: EncryptionUtil,
+  ) {
     this.admin = supabaseAdmin(config);
+  }
+
+  private decryptField(value: string | null | undefined): string {
+    if (!value) return '';
+    try {
+      return this.encryption.decrypt(value);
+    } catch {
+      return '';
+    }
+  }
+
+  private decryptAffinityTags(value: string | null | undefined): string[] {
+    if (!value) return [];
+    try {
+      const decrypted = this.encryption.decrypt(value);
+      return JSON.parse(decrypted);
+    } catch {
+      try { return JSON.parse(value); } catch { return []; }
+    }
   }
 
   // ========== MENTOR PROFILE METHODS ==========
@@ -461,9 +484,9 @@ export class MentorshipProfileService {
             yearsExperience: profile.years_experience,
             skills: profile.skills || [],
             linkedinUrl: profile.linkedin_url,
-            careerLevel: profile.career_level_encrypted,
-            company: profile.company_encrypted,
-            affinityTags: profile.affinity_tags_encrypted, // Return encrypted string, not array
+            careerLevel: this.decryptField(profile.career_level_encrypted),
+            company: this.decryptField(profile.company_encrypted),
+            affinityTags: this.decryptAffinityTags(profile.affinity_tags_encrypted),
           },
 
           // Mentor profile (if active)

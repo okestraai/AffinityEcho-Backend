@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
 
@@ -16,9 +17,19 @@ export class FollowService {
   constructor(
     private config: ConfigService,
     private notificationsService: NotificationsService,
+    private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
   ) {
     this.admin = supabaseAdmin(config);
+  }
+
+  private decryptField(value: string | null | undefined): string {
+    if (!value) return '';
+    try {
+      return this.encryption.decrypt(value);
+    } catch {
+      return '';
+    }
   }
 
   async followUser(followerId: string, followingId: string) {
@@ -223,7 +234,12 @@ export class FollowService {
           const user = follow.following?.[0] || follow.following || {};
           let affinityTags: string[] = [];
           if (user.affinity_tags_encrypted) {
-            try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+            try {
+              const decrypted = this.decryptField(user.affinity_tags_encrypted);
+              affinityTags = decrypted ? JSON.parse(decrypted) : [];
+            } catch {
+              try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+            }
           }
           return {
             id: follow.id,
@@ -239,7 +255,7 @@ export class FollowService {
               mentor_bio: user.mentor_bio,
               location: user.location,
               years_experience: user.years_experience,
-              career_level: user.career_level_encrypted,
+              career_level: this.decryptField(user.career_level_encrypted),
               affinity_tags: affinityTags,
               first_name_encrypted: user.first_name_encrypted,
               last_name_encrypted: user.last_name_encrypted,
@@ -354,7 +370,12 @@ export class FollowService {
           const user = follow.follower?.[0] || follow.follower || {};
           let affinityTags: string[] = [];
           if (user.affinity_tags_encrypted) {
-            try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+            try {
+              const decrypted = this.decryptField(user.affinity_tags_encrypted);
+              affinityTags = decrypted ? JSON.parse(decrypted) : [];
+            } catch {
+              try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+            }
           }
           return {
             id: follow.id,
@@ -370,7 +391,7 @@ export class FollowService {
               mentor_bio: user.mentor_bio,
               location: user.location,
               years_experience: user.years_experience,
-              career_level: user.career_level_encrypted,
+              career_level: this.decryptField(user.career_level_encrypted),
               affinity_tags: affinityTags,
               first_name_encrypted: user.first_name_encrypted,
               last_name_encrypted: user.last_name_encrypted,
