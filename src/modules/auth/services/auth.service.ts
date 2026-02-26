@@ -12,6 +12,7 @@ import {
   supabaseAdmin,
 } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { AvatarGenerator } from '../../../common/utils/avatar-generator.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { SignupDto } from '../dto/signup.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -1315,7 +1316,7 @@ export class AuthService {
       id: userId,
       username,
       email,
-      avatar: avatar || 'User',
+      avatar: avatar || AvatarGenerator.generate(userId).emoji,
       privacy_level: 'anonymous',
       has_completed_onboarding: false,
       is_willing_to_mentor: false,
@@ -1372,7 +1373,7 @@ export class AuthService {
       id: userId,
       username,
       email,
-      avatar: avatar || 'User',
+      avatar: avatar || AvatarGenerator.generate(userId).emoji,
       privacy_level: 'anonymous',
       has_completed_onboarding: false,
       is_willing_to_mentor: false,
