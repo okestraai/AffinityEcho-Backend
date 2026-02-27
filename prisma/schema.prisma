@@ -14,7 +14,7 @@ model user_profiles {
   id                       String   @id @default(uuid()) @db.Uuid
   username                 String   @unique @db.VarChar(50)
   email                    String?  @db.VarChar(254)
-  avatar                   String   @default("🚀")
+  avatar                   String   @default("User")
   first_name_encrypted     String?   @default("") @db.Text
   last_name_encrypted      String?   @default("") @db.Text
 
