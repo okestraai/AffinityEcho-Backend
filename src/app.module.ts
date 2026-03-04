@@ -19,6 +19,7 @@ import { ReferralModule } from './modules/referral/referral.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { FeedsModule } from './modules/feeds/feeds.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './common/services/redis.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NookCronJobs } from './jobs/nook-cron.jobs';
@@ -55,6 +56,7 @@ import { NookCronJobs } from './jobs/nook-cron.jobs';
     MessagingModule,
     NotificationsModule,
     FeedsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [
