@@ -49,11 +49,16 @@ describe('NookMessagesService', () => {
       createNotification: jest.fn().mockResolvedValue({ success: true }),
     };
 
+    const mockOkestraService = {
+      invalidateCache: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new NookMessagesService(
       mockConfigService as any,
       mockIdentityReveal as any,
       mockMentionService as any,
       mockNotificationsService as any,
+      mockOkestraService as any,
     );
   });
 

@@ -516,6 +516,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MentionService } from '../../mentions/mention.service';
+import { OkestraService } from '../../okestra/services/okestra.service';
 
 interface UserReactionMap {
   [commentId: string]: { helpful: boolean; supportive: boolean };
@@ -531,6 +532,7 @@ export class CommentService {
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
     private mentionService: MentionService,
+    private okestraService: OkestraService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -709,6 +711,9 @@ export class CommentService {
       if (usernames.length > 0) {
         this.mentionService.processMentions(userId, usernames, 'comment', comment.id, topicId);
       }
+
+      // Invalidate AI insights cache for this topic
+      this.okestraService.invalidateCache('topic', topicId).catch(() => {});
 
       logger.info('Comment created', { commentId: comment.id });
       return comment;
@@ -940,6 +945,9 @@ export class CommentService {
         .eq('id', comment.topic_id)
         .gte('comments_count', 1);
     }
+
+    // Invalidate AI insights cache for this topic
+    this.okestraService.invalidateCache('topic', comment.topic_id).catch(() => {});
 
     return { success: true, message: 'Comment deleted' };
   }

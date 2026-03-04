@@ -16,9 +16,10 @@ import { NookActiveGuard } from './guards/nook-active.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
+import { OkestraModule } from '../okestra/okestra.module';
 
 @Module({
-  imports: [JwtModule, ConfigModule, NotificationsModule, EncryptionModule, MentionsModule],
+  imports: [JwtModule, ConfigModule, NotificationsModule, EncryptionModule, MentionsModule, OkestraModule],
   controllers: [
     NooksController,
     NookMessagesController,

@@ -10,6 +10,7 @@ import { NookQueryDto } from '../dto/nook-query.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { RedisService } from '../../../common/services/redis.service';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { OkestraService } from '../../okestra/services/okestra.service';
 
 @Injectable()
 export class NooksService {
@@ -19,6 +20,7 @@ export class NooksService {
     private config: ConfigService,
     private redis: RedisService,
     private identityReveal: IdentityRevealUtil,
+    private okestraService: OkestraService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -237,6 +239,9 @@ export class NooksService {
     if (error) throw new BadRequestException(error.message);
 
     await this.redis.delPattern('nooks:*');
+
+    // Invalidate AI insights cache for this nook
+    this.okestraService.invalidateCache('nook', id).catch(() => {});
 
     return {
       success: true,
