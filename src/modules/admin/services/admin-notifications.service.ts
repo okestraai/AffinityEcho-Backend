@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import { AdminUsersService } from './admin-users.service';
+import PDFDocument from 'pdfkit';
 
 @Injectable()
 export class AdminNotificationsService {
@@ -138,6 +139,95 @@ export class AdminNotificationsService {
     if (error) throw new BadRequestException(error.message);
     await this.adminUsers.logAction(adminId, adminUsername, 'notify_user', 'user', userId, undefined, { title, type }, ip);
     return { success: true, data: null };
+  }
+
+  async exportNotifications(
+    query: { status?: string; audience?: string; type?: string },
+    format: 'csv' | 'pdf',
+  ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+    let q = this.admin
+      .from('admin_notifications')
+      .select('id, title, message, type, audience, status, recipients_count, sent_at, scheduled_at, created_at')
+      .order('created_at', { ascending: false });
+
+    if (query.status) q = q.eq('status', query.status);
+    if (query.audience) q = q.eq('audience', query.audience);
+    if (query.type) q = q.eq('type', query.type);
+
+    const { data, error } = await q;
+    if (error) throw new BadRequestException(error.message);
+    const notifs = data ?? [];
+
+    const date = new Date().toISOString().split('T')[0];
+
+    if (format === 'csv') {
+      const headers = ['ID', 'Title', 'Type', 'Audience', 'Status', 'Recipients', 'Sent At', 'Scheduled At', 'Created At'];
+      const rows = notifs.map((n: any) => [
+        n.id, n.title, n.type || '-', n.audience || 'all', n.status,
+        n.recipients_count ?? 0, n.sent_at || '', n.scheduled_at || '', n.created_at,
+      ]);
+      const csv = [headers.join(','), ...rows.map((r: any[]) => r.map((c) => `"${c}"`).join(','))].join('\n');
+      return {
+        buffer: Buffer.from('\uFEFF' + csv, 'utf-8'),
+        filename: `notifications-${date}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+      };
+    }
+
+    const buffer = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, info: { Title: 'Notifications Export', Author: 'AffinityEcho Admin', CreationDate: new Date() } });
+      const buffers: Buffer[] = [];
+      doc.on('data', (c: Buffer) => buffers.push(c));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      const pw = doc.page.width;
+      const m = 40;
+
+      doc.rect(0, 0, pw, 60).fill('#0369a1');
+      doc.fontSize(16).font('Helvetica-Bold').fillColor('#ffffff').text('Notifications Export', m, 18);
+      doc.fontSize(9).font('Helvetica').fillColor('#bae6fd')
+        .text(`Generated: ${new Date().toLocaleString()}  |  Total: ${notifs.length}`, m, 40);
+
+      let y = 80;
+      const cols = [
+        { label: 'Title', w: 200 },
+        { label: 'Type', w: 80 },
+        { label: 'Audience', w: 80 },
+        { label: 'Status', w: 70 },
+        { label: 'Recipients', w: 80 },
+        { label: 'Sent At', w: pw - m * 2 - 510 },
+      ];
+
+      const drawHeader = () => {
+        doc.rect(m, y, pw - 2 * m, 18).fill('#075985');
+        let x = m;
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#ffffff');
+        cols.forEach((col) => { doc.text(col.label, x + 4, y + 5, { width: col.w - 8 }); x += col.w; });
+        y += 18;
+      };
+      drawHeader();
+
+      const statusColors: Record<string, string> = { sent: '#065f46', scheduled: '#1e40af', draft: '#374151' };
+
+      notifs.forEach((n: any, i: number) => {
+        if (y + 20 > doc.page.height - 40) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; drawHeader(); }
+        doc.rect(m, y, pw - 2 * m, 20).fill(i % 2 === 0 ? '#ffffff' : '#f0f9ff');
+        let x = m;
+        doc.fontSize(7).fillColor('#1f2937');
+        doc.font('Helvetica-Bold').text(n.title || '-', x + 4, y + 6, { width: cols[0].w - 8 }); x += cols[0].w;
+        doc.font('Helvetica').text(n.type || '-', x + 4, y + 6, { width: cols[1].w - 8 }); x += cols[1].w;
+        doc.text(n.audience || 'all', x + 4, y + 6, { width: cols[2].w - 8 }); x += cols[2].w;
+        doc.fillColor(statusColors[n.status] || '#374151').font('Helvetica-Bold').text((n.status || '-').toUpperCase(), x + 4, y + 6, { width: cols[3].w - 8 }); x += cols[3].w;
+        doc.fillColor('#1f2937').font('Helvetica').text(String(n.recipients_count ?? 0), x + 4, y + 6, { width: cols[4].w - 8 }); x += cols[4].w;
+        doc.text(n.sent_at ? new Date(n.sent_at).toLocaleDateString() : '-', x + 4, y + 6, { width: cols[5].w - 8 });
+        y += 20;
+      });
+
+      doc.end();
+    });
+
+    return { buffer, filename: `notifications-${date}.pdf`, contentType: 'application/pdf' };
   }
 
   private async fanOut(adminId: string, notifId: string, title: string, message: string, audience: string, actionUrl?: string | null): Promise<number> {

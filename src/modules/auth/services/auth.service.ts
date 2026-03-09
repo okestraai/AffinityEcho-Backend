@@ -260,7 +260,12 @@ export class AuthService {
       let profileCreated = false;
       try {
         [profileCreated] = await Promise.all([
-          this.createProfile(data.user.id, dto.username, emailLower, dto.avatar),
+          this.createProfile(
+            data.user.id,
+            dto.username,
+            emailLower,
+            dto.avatar,
+          ),
           this.emailService.sendOtpEmail(dto.email, otp, dto.username),
         ]);
       } catch (profileError) {
@@ -275,10 +280,13 @@ export class AuthService {
 
       // If profile creation failed, log a warning (verifyOtp will auto-create)
       if (!profileCreated) {
-        logger.warn('Profile creation failed during signup, will retry on OTP verify', {
-          userId: data.user.id,
-          username: dto.username,
-        });
+        logger.warn(
+          'Profile creation failed during signup, will retry on OTP verify',
+          {
+            userId: data.user.id,
+            username: dto.username,
+          },
+        );
       }
 
       logger.info('Signup successful - OTP sent', {
@@ -383,20 +391,50 @@ export class AuthService {
       // Fetch profile — do NOT auto-create, only signup should create profiles
       let hasCompletedOnboarding = false;
       let isDeactivated = false;
+      let userRole = 'user';
+      let username = '';
+
       try {
         const { data: profile } = await this.admin
           .from('user_profiles')
-          .select('id, has_completed_onboarding, is_deactivated')
+          .select(
+            'id, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted',
+          )
           .eq('id', data.user.id)
           .single();
 
         if (profile) {
+          // Check if account is suspended
+          if (profile.is_suspended) {
+            logger.warn('Login attempt for suspended account', {
+              userId: data.user.id,
+            });
+            throw new UnauthorizedException(
+              'Your account has been suspended. Please contact support for assistance.',
+            );
+          }
+
+          // Check if account is deleted
+          if (profile.is_deleted) {
+            logger.warn('Login attempt for deleted account', {
+              userId: data.user.id,
+            });
+            throw new UnauthorizedException(
+              'This account has been deleted. Please contact support if you believe this is an error.',
+            );
+          }
+
           hasCompletedOnboarding = !!profile.has_completed_onboarding;
           isDeactivated = !!profile.is_deactivated;
+          userRole = profile.role || 'user';
+          username = profile.username || '';
         } else {
-          logger.warn('Login attempt for user without profile — must sign up first', {
-            userId: data.user.id,
-          });
+          logger.warn(
+            'Login attempt for user without profile — must sign up first',
+            {
+              userId: data.user.id,
+            },
+          );
           throw new UnauthorizedException(
             'No profile found. Please sign up first.',
           );
@@ -414,15 +452,31 @@ export class AuthService {
 
       const tokens = this.generateTokens(data.user.id, data.user.email!);
 
+      // Fetch admin permissions for admin users
+      let adminPermissions: string[] | null | undefined = undefined;
+      if (userRole === 'admin') {
+        adminPermissions = await this.fetchAdminPermissions(data.user.id);
+      } else if (userRole === 'super_admin') {
+        adminPermissions = null; // super_admin has all permissions implicitly
+      }
+
       logger.info('Login successful', {
         userId: data.user.id,
+        role: userRole,
         hasCompletedOnboarding,
       });
 
       return {
         ...tokens,
-        has_completed_onboarding: hasCompletedOnboarding,
-        is_deactivated: isDeactivated,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          username: username,
+          role: userRole,
+          has_completed_onboarding: hasCompletedOnboarding,
+          is_deactivated: isDeactivated,
+          ...(adminPermissions !== undefined && { permissions: adminPermissions }),
+        },
       };
     } catch (error) {
       if (
@@ -780,7 +834,8 @@ export class AuthService {
 
       logger.info('OTP sent successfully', {});
       return {
-        message: 'One-time password has been sent to your email. Please check your inbox.',
+        message:
+          'One-time password has been sent to your email. Please check your inbox.',
       };
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -899,7 +954,10 @@ export class AuthService {
     // If profile not found, look up auth user and auto-create profile
     // (handles case where signup created auth user but profile insert failed)
     if (!profile) {
-      logger.warn('Profile not found by email during OTP verify, looking up auth user', {});
+      logger.warn(
+        'Profile not found by email during OTP verify, looking up auth user',
+        {},
+      );
 
       const { data: authUsers } = await this.admin.auth.admin.listUsers();
       const authUser = authUsers?.users?.find(
@@ -911,10 +969,17 @@ export class AuthService {
       }
 
       // Auto-create the missing profile
-      const username = authUser.user_metadata?.username || this.generateUsername();
-      const created = await this.createProfile(authUser.id, username, emailLower);
+      const username =
+        authUser.user_metadata?.username || this.generateUsername();
+      const created = await this.createProfile(
+        authUser.id,
+        username,
+        emailLower,
+      );
       if (!created) {
-        logger.error('Failed to auto-create profile during OTP verify', { userId: authUser.id });
+        logger.error('Failed to auto-create profile during OTP verify', {
+          userId: authUser.id,
+        });
         throw new UnauthorizedException('User not found');
       }
 
@@ -929,7 +994,9 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
       profile = newProfile;
-      logger.info('Auto-created missing profile during OTP verify', { userId: profile.id });
+      logger.info('Auto-created missing profile during OTP verify', {
+        userId: profile.id,
+      });
     }
 
     // Parallelize independent operations
@@ -991,6 +1058,7 @@ export class AuthService {
         last_active_at,
         company_type,
         race_encrypted,
+        role,
         gender_encrypted,
         career_level_encrypted,
         company_encrypted,
@@ -1002,10 +1070,21 @@ export class AuthService {
 
       if (error || !profile) {
         logger.warn('User profile not found — must sign up first', { userId });
-        throw new UnauthorizedException('User profile not found. Please sign up first.');
+        throw new UnauthorizedException(
+          'User profile not found. Please sign up first.',
+        );
       }
 
-      return this.cleanUserData(profile);
+      const userData = this.cleanUserData(profile);
+
+      // Include permissions for admin users
+      if (profile.role === 'admin') {
+        userData.permissions = await this.fetchAdminPermissions(userId);
+      } else if (profile.role === 'super_admin') {
+        userData.permissions = null; // super_admin has all permissions implicitly
+      }
+
+      return userData;
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       logger.error('Failed to fetch user profile', { userId, error });
@@ -1163,6 +1242,20 @@ export class AuthService {
     }
   }
 
+  // PRIVATE: FETCH ADMIN PERMISSIONS
+  private async fetchAdminPermissions(userId: string): Promise<string[]> {
+    try {
+      const { data } = await this.admin
+        .from('admin_permissions')
+        .select('permissions')
+        .eq('admin_id', userId)
+        .maybeSingle();
+      return data?.permissions ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   // PRIVATE METHODS
   private generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -1186,6 +1279,7 @@ export class AuthService {
       skills: p.skills || [],
       linkedin_url: p.linkedin_url ?? null,
       privacy_level: p.privacy_level,
+      role: p.role || 'user',
       is_willing_to_mentor: !!p.is_willing_to_mentor,
       has_completed_onboarding: !!p.has_completed_onboarding,
       reputation_score: p.reputation_score || 0,

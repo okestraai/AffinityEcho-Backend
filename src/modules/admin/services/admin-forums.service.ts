@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { AdminForumQueryDto } from '../dto/admin-forum-query.dto';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import { AdminUsersService } from './admin-users.service';
+import PDFDocument from 'pdfkit';
 
 @Injectable()
 export class AdminForumsService {
@@ -18,9 +19,9 @@ export class AdminForumsService {
 
     let q = this.admin
       .from('forums')
-      .select('id, name, description, icon, category, is_global, company_name, company_id, member_count, topic_count, moderators, is_locked, is_hidden, created_at', { count: 'exact' })
+      .select('id, name, description, icon, category, is_global, company_name, company_id, member_count, topic_count, moderators, rules, is_locked, is_hidden, created_at', { count: 'exact' })
       .is('deleted_at', null)
-      .order('created_at', { ascending: false })
+      .order(query.sortBy ?? 'created_at', { ascending: query.sortOrder === 'asc' })
       .range(offset, offset + pageSize - 1);
 
     if (query.type === 'global') q = q.eq('is_global', true);
@@ -105,5 +106,96 @@ export class AdminForumsService {
     if (error) throw new BadRequestException(error.message);
     await this.adminUsers.logAction(adminId, adminUsername, 'delete_forum', 'forum', forumId, reason, {}, ip);
     return null;
+  }
+
+  async exportForums(
+    query: { search?: string; type?: string },
+    format: 'csv' | 'pdf',
+  ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+    let q = this.admin
+      .from('forums')
+      .select('id, name, description, category, is_global, company_name, member_count, topic_count, is_locked, is_hidden, created_at')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (query.type === 'global') q = q.eq('is_global', true);
+    else if (query.type === 'company') q = q.eq('is_global', false);
+    if (query.search) q = q.ilike('name', `%${query.search}%`);
+
+    const { data, error } = await q;
+    if (error) throw new BadRequestException(error.message);
+    const forums = data ?? [];
+
+    const date = new Date().toISOString().split('T')[0];
+
+    if (format === 'csv') {
+      const headers = ['ID', 'Name', 'Category', 'Scope', 'Company', 'Members', 'Topics', 'Locked', 'Hidden', 'Created At'];
+      const rows = forums.map((f: any) => [
+        f.id, f.name, f.category || '', f.is_global ? 'global' : 'company',
+        f.company_name || '', f.member_count ?? 0, f.topic_count ?? 0,
+        f.is_locked ? 'Yes' : 'No', f.is_hidden ? 'Yes' : 'No', f.created_at,
+      ]);
+      const csv = [headers.join(','), ...rows.map((r) => r.map((c: any) => `"${c}"`).join(','))].join('\n');
+      return {
+        buffer: Buffer.from('\uFEFF' + csv, 'utf-8'),
+        filename: `forums-${date}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+      };
+    }
+
+    // PDFKit
+    const buffer = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, info: { Title: 'Forums Export', Author: 'AffinityEcho Admin', CreationDate: new Date() } });
+      const buffers: Buffer[] = [];
+      doc.on('data', (c: Buffer) => buffers.push(c));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      const pw = doc.page.width;
+      const m = 40;
+
+      doc.rect(0, 0, pw, 60).fill('#2563eb');
+      doc.fontSize(16).font('Helvetica-Bold').fillColor('#ffffff').text('Forums Export', m, 18);
+      doc.fontSize(9).font('Helvetica').fillColor('#bfdbfe')
+        .text(`Generated: ${new Date().toLocaleString()}  |  Total: ${forums.length}`, m, 40);
+
+      let y = 80;
+      const cols = [
+        { label: 'Name', w: 160 },
+        { label: 'Category', w: 100 },
+        { label: 'Scope', w: 70 },
+        { label: 'Members', w: 65 },
+        { label: 'Topics', w: 65 },
+        { label: 'Locked', w: 55 },
+        { label: 'Hidden', w: 55 },
+        { label: 'Created', w: pw - m * 2 - 570 },
+      ];
+
+      const drawHeader = () => {
+        doc.rect(m, y, pw - 2 * m, 18).fill('#1e40af');
+        let x = m;
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#ffffff');
+        cols.forEach((col) => { doc.text(col.label, x + 4, y + 5, { width: col.w - 8 }); x += col.w; });
+        y += 18;
+      };
+      drawHeader();
+
+      forums.forEach((f: any, i: number) => {
+        if (y + 20 > doc.page.height - 40) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; drawHeader(); }
+        doc.rect(m, y, pw - 2 * m, 20).fill(i % 2 === 0 ? '#ffffff' : '#eff6ff');
+        let x = m;
+        doc.fontSize(7).font('Helvetica').fillColor('#1f2937');
+        const vals = [f.name, f.category || '-', f.is_global ? 'global' : 'company',
+          f.member_count ?? 0, f.topic_count ?? 0,
+          f.is_locked ? 'Yes' : 'No', f.is_hidden ? 'Yes' : 'No',
+          f.created_at ? new Date(f.created_at).toLocaleDateString() : '-'];
+        cols.forEach((col, ci) => { doc.text(String(vals[ci]), x + 4, y + 6, { width: col.w - 8 }); x += col.w; });
+        y += 20;
+      });
+
+      doc.end();
+    });
+
+    return { buffer, filename: `forums-${date}.pdf`, contentType: 'application/pdf' };
   }
 }

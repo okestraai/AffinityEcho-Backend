@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import { AdminUsersService } from './admin-users.service';
+import PDFDocument from 'pdfkit';
 
 @Injectable()
 export class AdminNooksService {
@@ -113,5 +114,94 @@ export class AdminNooksService {
     if (error) throw new BadRequestException(error.message);
     await this.adminUsers.logAction(adminId, adminUsername, 'remove_nook_member', 'nook', nookId, reason, { user_id: userId }, ip);
     return { success: true, data: null };
+  }
+
+  async exportNooks(
+    query: { search?: string; scope?: string; is_locked?: string },
+    format: 'csv' | 'pdf',
+  ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+    let q = this.admin
+      .from('nooks')
+      .select('id, title, description, scope, is_locked, is_hidden, members_count, created_at, expires_at')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (query.search) q = q.ilike('title', `%${query.search}%`);
+    if (query.scope) q = q.eq('scope', query.scope);
+    if (query.is_locked !== undefined) q = q.eq('is_locked', query.is_locked === 'true');
+
+    const { data, error } = await q;
+    if (error) throw new BadRequestException(error.message);
+    const nooks = data ?? [];
+
+    const date = new Date().toISOString().split('T')[0];
+
+    if (format === 'csv') {
+      const headers = ['ID', 'Title', 'Scope', 'Members', 'Locked', 'Hidden', 'Created At', 'Expires At'];
+      const rows = nooks.map((n: any) => [
+        n.id, n.title, n.scope || 'public', n.members_count ?? 0,
+        n.is_locked ? 'Yes' : 'No', n.is_hidden ? 'Yes' : 'No',
+        n.created_at, n.expires_at || '',
+      ]);
+      const csv = [headers.join(','), ...rows.map((r: any[]) => r.map((c) => `"${c}"`).join(','))].join('\n');
+      return {
+        buffer: Buffer.from('\uFEFF' + csv, 'utf-8'),
+        filename: `nooks-${date}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+      };
+    }
+
+    const buffer = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, info: { Title: 'Nooks Export', Author: 'AffinityEcho Admin', CreationDate: new Date() } });
+      const buffers: Buffer[] = [];
+      doc.on('data', (c: Buffer) => buffers.push(c));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      const pw = doc.page.width;
+      const m = 40;
+
+      doc.rect(0, 0, pw, 60).fill('#0f766e');
+      doc.fontSize(16).font('Helvetica-Bold').fillColor('#ffffff').text('Nooks Export', m, 18);
+      doc.fontSize(9).font('Helvetica').fillColor('#99f6e4')
+        .text(`Generated: ${new Date().toLocaleString()}  |  Total: ${nooks.length}`, m, 40);
+
+      let y = 80;
+      const cols = [
+        { label: 'Title', w: 200 },
+        { label: 'Scope', w: 70 },
+        { label: 'Members', w: 70 },
+        { label: 'Locked', w: 60 },
+        { label: 'Hidden', w: 60 },
+        { label: 'Created', w: 100 },
+        { label: 'Expires', w: pw - m * 2 - 560 },
+      ];
+
+      const drawHeader = () => {
+        doc.rect(m, y, pw - 2 * m, 18).fill('#134e4a');
+        let x = m;
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#ffffff');
+        cols.forEach((col) => { doc.text(col.label, x + 4, y + 5, { width: col.w - 8 }); x += col.w; });
+        y += 18;
+      };
+      drawHeader();
+
+      nooks.forEach((n: any, i: number) => {
+        if (y + 20 > doc.page.height - 40) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; drawHeader(); }
+        doc.rect(m, y, pw - 2 * m, 20).fill(i % 2 === 0 ? '#ffffff' : '#f0fdfa');
+        let x = m;
+        doc.fontSize(7).font('Helvetica').fillColor('#1f2937');
+        const vals = [n.title, n.scope || 'public', n.members_count ?? 0,
+          n.is_locked ? 'Yes' : 'No', n.is_hidden ? 'Yes' : 'No',
+          n.created_at ? new Date(n.created_at).toLocaleDateString() : '-',
+          n.expires_at ? new Date(n.expires_at).toLocaleDateString() : 'Never'];
+        cols.forEach((col, ci) => { doc.text(String(vals[ci]), x + 4, y + 6, { width: col.w - 8 }); x += col.w; });
+        y += 20;
+      });
+
+      doc.end();
+    });
+
+    return { buffer, filename: `nooks-${date}.pdf`, contentType: 'application/pdf' };
   }
 }

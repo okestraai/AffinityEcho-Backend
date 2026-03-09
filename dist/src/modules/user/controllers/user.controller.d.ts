@@ -497,6 +497,7 @@ export declare class UserController {
             referenceNumber: any;
             status: any;
             immediateRisk: any;
+            reportedUserId: any;
             createdAt: any;
         };
         message: string;
@@ -513,7 +514,9 @@ export declare class UserController {
                 location: any;
                 reporterType: any;
                 immediateRisk: any;
+                priority: string;
                 status: any;
+                reportedUser: any;
                 createdAt: any;
                 updatedAt: any;
             }[];
@@ -538,7 +541,9 @@ export declare class UserController {
             reporterType: any;
             contactEmail: any;
             immediateRisk: any;
+            priority: string;
             status: any;
+            reportedUser: any;
             createdAt: any;
             updatedAt: any;
             resolvedAt: any;
@@ -558,7 +563,9 @@ export declare class UserController {
             reporterType: any;
             contactEmail: any;
             immediateRisk: any;
+            priority: string;
             status: any;
+            reportedUser: any;
             createdAt: any;
             updatedAt: any;
             resolvedAt: any;

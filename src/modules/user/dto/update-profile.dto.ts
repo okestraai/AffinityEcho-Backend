@@ -4,7 +4,10 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsIn,
+  IsNotEmpty,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -260,14 +263,21 @@ export class CreateHarassmentReportDto {
   evidence?: string;
 
   @ApiProperty({
-    description: 'Who is reporting (victim | witness | other)',
-    example: 'victim',
+    description: 'How the report is submitted (anonymous | confidential)',
+    example: 'confidential',
+    enum: ['anonymous', 'confidential'],
   })
-  @IsString()
-  reporterType!: 'victim' | 'witness' | 'other';
+  @IsIn(['anonymous', 'confidential'])
+  reporterType!: 'anonymous' | 'confidential';
 
-  @ApiPropertyOptional({ description: 'Contact email for follow-up' })
-  @IsOptional()
+  @ApiPropertyOptional({
+    description:
+      'Contact email for follow-up (required when reporterType is confidential)',
+  })
+  @ValidateIf(
+    (o: CreateHarassmentReportDto) => o.reporterType === 'confidential',
+  )
+  @IsNotEmpty({ message: 'contactEmail is required for confidential reports' })
   @IsEmail()
   contactEmail?: string;
 
@@ -277,6 +287,14 @@ export class CreateHarassmentReportDto {
   })
   @IsBoolean()
   immediateRisk!: boolean;
+
+  @ApiPropertyOptional({
+    description: 'ID of the user being reported (optional)',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsOptional()
+  @IsString()
+  reportedUserId?: string;
 }
 
 export class ChangePasswordDto {

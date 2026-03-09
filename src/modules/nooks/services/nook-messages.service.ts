@@ -97,45 +97,79 @@ export class NookMessagesService {
       replies: repliesMap.get(message.id) || [],
     }));
 
-    // Collect all unique user IDs from messages and replies (including self)
-    const allUserIds: string[] = [];
+    // Collect all unique OTHER user IDs (exclude current user — no reveal with self)
+    // Use message.user_id (raw column) — never rely on the joined user object's id
+    const otherUserIds: string[] = [];
     messagesWithReplies.forEach((msg: any) => {
-      if (msg.user?.id) allUserIds.push(msg.user.id);
+      if (msg.user_id && msg.user_id !== userId) otherUserIds.push(msg.user_id);
       (msg.replies || []).forEach((reply: any) => {
-        if (reply.user?.id) allUserIds.push(reply.user.id);
+        if (reply.user_id && reply.user_id !== userId) otherUserIds.push(reply.user_id);
       });
     });
 
     // Get revealed user IDs in a single query
-    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, allUserIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherUserIds);
 
-    // Apply identity reveal to messages and replies
+    // Apply identity reveal to messages and replies.
+    // Rules:
+    //   - Own message           → always show real name
+    //   - Identity revealed     → show real name (even if anonymous)
+    //   - Anonymous from others → show '👤' avatar + 'Anonymous' display (anonymity preserved)
+    //   - Non-anonymous others  → show their username
     const processedMessages = messagesWithReplies.map((message: any) => {
-      const msgUser = message.user;
-      const msgDisplayName = message.is_anonymous
-        ? 'Anonymous'
-        : this.resolveDisplayName(msgUser, revealedIds, userId);
+      const msgAuthorId = message.user_id;
+      const msgUser = Array.isArray(message.user) ? message.user[0] : message.user;
+      const msgShowIdentity = msgAuthorId === userId || revealedIds.has(msgAuthorId);
+      const msgDisplayName = this.resolveDisplayName(msgUser, revealedIds, userId, message.is_anonymous, msgAuthorId);
 
       return {
-        ...message,
+        id: message.id,
+        nook_id: message.nook_id,
+        parent_message_id: message.parent_message_id,
+        content: message.content,
+        is_anonymous: message.is_anonymous,
+        is_mine: msgAuthorId === userId,
+        is_removed: message.is_removed,
+        removed_reason: message.removed_reason,
+        is_flagged: message.is_flagged,
+        flagged_count: message.flagged_count,
+        heard_count: message.heard_count,
+        validated_count: message.validated_count,
+        helpful_count: message.helpful_count,
+        created_at: message.created_at,
+        updated_at: message.updated_at,
         user: {
-          id: msgUser?.id,
+          id: msgShowIdentity ? msgAuthorId : null,
           avatar: msgUser?.avatar || 'User',
-          username: message.is_anonymous ? 'Anonymous' : (msgUser?.username || 'User'),
+          username: msgUser?.username || 'Unknown',
           display_name: msgDisplayName,
         },
         replies: (message.replies || []).map((reply: any) => {
-          const replyUser = reply.user;
-          const replyDisplayName = reply.is_anonymous
-            ? 'Anonymous'
-            : this.resolveDisplayName(replyUser, revealedIds, userId);
+          const replyAuthorId = reply.user_id;
+          const replyUser = Array.isArray(reply.user) ? reply.user[0] : reply.user;
+          const replyShowIdentity = replyAuthorId === userId || revealedIds.has(replyAuthorId);
+          const replyDisplayName = this.resolveDisplayName(replyUser, revealedIds, userId, reply.is_anonymous, replyAuthorId);
 
           return {
-            ...reply,
+            id: reply.id,
+            nook_id: reply.nook_id,
+            parent_message_id: reply.parent_message_id,
+            content: reply.content,
+            is_anonymous: reply.is_anonymous,
+            is_mine: replyAuthorId === userId,
+            is_removed: reply.is_removed,
+            removed_reason: reply.removed_reason,
+            is_flagged: reply.is_flagged,
+            flagged_count: reply.flagged_count,
+            heard_count: reply.heard_count,
+            validated_count: reply.validated_count,
+            helpful_count: reply.helpful_count,
+            created_at: reply.created_at,
+            updated_at: reply.updated_at,
             user: {
-              id: replyUser?.id,
+              id: replyShowIdentity ? replyAuthorId : null,
               avatar: replyUser?.avatar || 'User',
-              username: reply.is_anonymous ? 'Anonymous' : (replyUser?.username || 'User'),
+              username: replyUser?.username || 'Unknown',
               display_name: replyDisplayName,
             },
           };
@@ -293,7 +327,7 @@ export class NookMessagesService {
 
     return {
       success: true,
-      data: { message },
+      data: { message: { ...message, is_mine: true } },
       message: 'Message posted successfully',
     };
   }
@@ -359,18 +393,65 @@ export class NookMessagesService {
     };
   }
 
+  async editMessage(nookId: string, messageId: string, userId: string, content: string) {
+    const { data: message, error: fetchError } = await this.admin
+      .from('nook_messages')
+      .select('id, user_id, nook_id, is_removed')
+      .eq('id', messageId)
+      .eq('nook_id', nookId)
+      .single();
+
+    if (fetchError || !message) throw new NotFoundException('Message not found');
+    if (message.user_id !== userId) throw new ForbiddenException('Only the message author can edit');
+    if (message.is_removed) throw new BadRequestException('Cannot edit a removed message');
+
+    const { data: nook } = await this.admin
+      .from('nooks')
+      .select('id, is_active, is_locked, expires_at')
+      .eq('id', nookId)
+      .single();
+
+    if (!nook?.is_active || nook.is_locked) {
+      throw new BadRequestException('Nook is not active or is locked');
+    }
+    if (new Date(nook.expires_at) < new Date()) {
+      throw new BadRequestException('Nook has expired');
+    }
+
+    const { data: updated, error: updateError } = await this.admin
+      .from('nook_messages')
+      .update({ content, updated_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .select('id, content, updated_at')
+      .single();
+
+    if (updateError) throw new BadRequestException(updateError.message);
+
+    return {
+      success: true,
+      data: { message: updated },
+      message: 'Message updated successfully',
+    };
+  }
+
   /**
-   * Resolve display name: real name if revealed, otherwise username.
+   * Resolve display name with identity reveal awareness.
+   * - Own message or identity revealed → real name (falls back to username)
+   * - Anonymous from others            → 'Anonymous'
+   * - Non-anonymous from others        → username
    */
   private resolveDisplayName(
     user: any,
     revealedIds: Set<string>,
     currentUserId: string,
+    isAnonymous: boolean = false,
+    authorId?: string,
   ): string {
-    if (!user) return 'User';
+    if (!user) return 'Unknown';
 
-    const isOwnMessage = user.id === currentUserId;
-    const isRevealed = revealedIds.has(user.id);
+    const effectiveId = authorId || user.id;
+    const isOwnMessage = effectiveId === currentUserId;
+    const isRevealed = revealedIds.has(effectiveId);
 
     if (isOwnMessage || isRevealed) {
       const realName = this.identityReveal.decryptRealName(
@@ -379,7 +460,9 @@ export class NookMessagesService {
       );
       if (realName) return realName;
     }
-    return user.username || 'User';
+
+    // Always fall back to username — anonymous hides the real name, not the username
+    return user.username || 'Unknown';
   }
 
   private async updateNookTemperature(nookId: string) {

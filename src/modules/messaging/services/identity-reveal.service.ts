@@ -339,6 +339,48 @@ export class IdentityRevealService {
     }
   }
 
+  async cancelReveal(userId: string, revealId: string) {
+    logger.info('Cancelling identity reveal', { userId, revealId });
+
+    try {
+      const { data: reveal, error } = await this.admin
+        .from('identity_reveals')
+        .select('id, status, requester_id')
+        .eq('id', revealId)
+        .single();
+
+      if (error || !reveal) throw new NotFoundException('Identity reveal request not found');
+
+      if (reveal.requester_id !== userId) {
+        throw new ForbiddenException('Only the requester can cancel a reveal request');
+      }
+
+      if (reveal.status !== 'pending') {
+        throw new BadRequestException('Only pending requests can be cancelled');
+      }
+
+      await this.admin
+        .from('identity_reveals')
+        .update({ status: 'cancelled', responded_at: new Date().toISOString() })
+        .eq('id', revealId);
+
+      return {
+        success: true,
+        message: 'Identity reveal request cancelled',
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      logger.error('Failed to cancel identity reveal', { error, userId });
+      throw new BadRequestException('Failed to cancel identity reveal');
+    }
+  }
+
   async getReveals(userId: string, dto: GetIdentityRevealsDto) {
     try {
       let query = this.admin

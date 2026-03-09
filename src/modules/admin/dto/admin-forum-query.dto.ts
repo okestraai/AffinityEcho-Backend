@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumberString } from 'class-validator';
+import { IsOptional, IsString, IsNumberString, IsIn } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AdminForumQueryDto {
@@ -17,4 +17,10 @@ export class AdminForumQueryDto {
 
   @ApiPropertyOptional({ description: 'Filter by forum name (partial match)', example: 'career' })
   @IsOptional() @IsString() search?: string;
+
+  @ApiPropertyOptional({ description: 'Column to sort by', example: 'created_at' })
+  @IsOptional() @IsString() sortBy?: string;
+
+  @ApiPropertyOptional({ description: 'Sort direction', enum: ['asc', 'desc'], example: 'desc' })
+  @IsOptional() @IsIn(['asc', 'desc']) sortOrder?: 'asc' | 'desc';
 }
