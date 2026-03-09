@@ -43,6 +43,8 @@ describe('FeedsService', () => {
     mockFeedRanking = {
       rankByEngagement: jest.fn((items: any[]) => items),
       rankByTrending: jest.fn((items: any[]) => items),
+      applyDiversityConstraints: jest.fn((items: any[], limit: number) => items.slice(0, limit)),
+      applySuppression: jest.fn((items: any[]) => items),
     };
 
     mockEncryption = {

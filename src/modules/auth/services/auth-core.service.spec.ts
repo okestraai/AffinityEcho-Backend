@@ -268,12 +268,12 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
           refresh_token: 'mock-jwt-token',
           token_type: 'Bearer',
           expires_in: 86400,
-          has_completed_onboarding: true,
-          is_deactivated: false,
-          user: {
+          user: expect.objectContaining({
             id: 'user-123',
             email: 'user@example.com',
-          },
+            has_completed_onboarding: true,
+            is_deactivated: false,
+          }),
         }),
       );
       expect(

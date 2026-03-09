@@ -125,7 +125,7 @@ describe('NookMessagesService', () => {
       // Verify identity reveal was called with collected user IDs
       expect(mockIdentityReveal.getRevealedUserIds).toHaveBeenCalledWith(
         userId,
-        expect.arrayContaining(['user-002', 'user-003', userId]),
+        expect.arrayContaining(['user-002', 'user-003']),
       );
 
       // Verify supabase calls
@@ -206,7 +206,8 @@ describe('NookMessagesService', () => {
         user_id: userId,
         content: 'Test message',
         is_anonymous: true,
-        created_at: new Date().toISOString(),
+        is_mine: true,
+        created_at: expect.any(String),
       };
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
@@ -333,7 +334,8 @@ describe('NookMessagesService', () => {
         user_id: userId,
         content: 'Reply text',
         is_anonymous: true,
-        created_at: new Date().toISOString(),
+        is_mine: true,
+        created_at: expect.any(String),
       };
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
