@@ -265,35 +265,72 @@ let AuthService = class AuthService {
             }
             let hasCompletedOnboarding = false;
             let isDeactivated = false;
+            let userRole = 'user';
+            let username = '';
             try {
                 const { data: profile } = await this.admin
                     .from('user_profiles')
-                    .select('id, has_completed_onboarding, is_deactivated')
+                    .select('id, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted')
                     .eq('id', data.user.id)
                     .single();
                 if (profile) {
+                    if (profile.is_suspended) {
+                        logger_util_1.default.warn('Login attempt for suspended account', {
+                            userId: data.user.id,
+                        });
+                        throw new common_1.UnauthorizedException('Your account has been suspended. Please contact support for assistance.');
+                    }
+                    if (profile.is_deleted) {
+                        logger_util_1.default.warn('Login attempt for deleted account', {
+                            userId: data.user.id,
+                        });
+                        throw new common_1.UnauthorizedException('This account has been deleted. Please contact support if you believe this is an error.');
+                    }
                     hasCompletedOnboarding = !!profile.has_completed_onboarding;
                     isDeactivated = !!profile.is_deactivated;
+                    userRole = profile.role || 'user';
+                    username = profile.username || '';
                 }
                 else {
-                    await this.ensureProfileExists(data.user.id, data.user.email);
+                    logger_util_1.default.warn('Login attempt for user without profile — must sign up first', {
+                        userId: data.user.id,
+                    });
+                    throw new common_1.UnauthorizedException('No profile found. Please sign up first.');
                 }
             }
             catch (err) {
-                logger_util_1.default.warn('Could not fetch onboarding status, ensuring profile exists', {
+                if (err instanceof common_1.UnauthorizedException)
+                    throw err;
+                logger_util_1.default.error('Could not fetch profile during login', {
                     userId: data.user.id,
+                    error: err?.message,
                 });
-                await this.ensureProfileExists(data.user.id, data.user.email);
+                throw new common_1.UnauthorizedException('No profile found. Please sign up first.');
             }
             const tokens = this.generateTokens(data.user.id, data.user.email);
+            let adminPermissions = undefined;
+            if (userRole === 'admin') {
+                adminPermissions = await this.fetchAdminPermissions(data.user.id);
+            }
+            else if (userRole === 'super_admin') {
+                adminPermissions = null;
+            }
             logger_util_1.default.info('Login successful', {
                 userId: data.user.id,
+                role: userRole,
                 hasCompletedOnboarding,
             });
             return {
                 ...tokens,
-                has_completed_onboarding: hasCompletedOnboarding,
-                is_deactivated: isDeactivated,
+                user: {
+                    id: data.user.id,
+                    email: data.user.email,
+                    username: username,
+                    role: userRole,
+                    has_completed_onboarding: hasCompletedOnboarding,
+                    is_deactivated: isDeactivated,
+                    ...(adminPermissions !== undefined && { permissions: adminPermissions }),
+                },
             };
         }
         catch (error) {
@@ -638,7 +675,9 @@ let AuthService = class AuthService {
             const username = authUser.user_metadata?.username || this.generateUsername();
             const created = await this.createProfile(authUser.id, username, emailLower);
             if (!created) {
-                logger_util_1.default.error('Failed to auto-create profile during OTP verify', { userId: authUser.id });
+                logger_util_1.default.error('Failed to auto-create profile during OTP verify', {
+                    userId: authUser.id,
+                });
                 throw new common_1.UnauthorizedException('User not found');
             }
             const { data: newProfile } = await this.admin
@@ -650,7 +689,9 @@ let AuthService = class AuthService {
                 throw new common_1.UnauthorizedException('User not found');
             }
             profile = newProfile;
-            logger_util_1.default.info('Auto-created missing profile during OTP verify', { userId: profile.id });
+            logger_util_1.default.info('Auto-created missing profile during OTP verify', {
+                userId: profile.id,
+            });
         }
         await Promise.all([
             this.admin.auth.admin.updateUserById(profile.id, {
@@ -698,6 +739,7 @@ let AuthService = class AuthService {
         last_active_at,
         company_type,
         race_encrypted,
+        role,
         gender_encrypted,
         career_level_encrypted,
         company_encrypted,
@@ -706,16 +748,17 @@ let AuthService = class AuthService {
                 .eq('id', userId)
                 .single();
             if (error || !profile) {
-                logger_util_1.default.warn('User profile not found, attempting auto-create', {
-                    userId,
-                });
-                const created = await this.ensureProfileExists(userId, '');
-                if (created) {
-                    return this.getCurrentUser(userId);
-                }
-                throw new common_1.UnauthorizedException('User profile not found');
+                logger_util_1.default.warn('User profile not found — must sign up first', { userId });
+                throw new common_1.UnauthorizedException('User profile not found. Please sign up first.');
             }
-            return this.cleanUserData(profile);
+            const userData = this.cleanUserData(profile);
+            if (profile.role === 'admin') {
+                userData.permissions = await this.fetchAdminPermissions(userId);
+            }
+            else if (profile.role === 'super_admin') {
+                userData.permissions = null;
+            }
+            return userData;
         }
         catch (error) {
             if (error instanceof common_1.UnauthorizedException)
@@ -834,6 +877,19 @@ let AuthService = class AuthService {
             throw new common_1.InternalServerErrorException('Password change service temporarily unavailable');
         }
     }
+    async fetchAdminPermissions(userId) {
+        try {
+            const { data } = await this.admin
+                .from('admin_permissions')
+                .select('permissions')
+                .eq('admin_id', userId)
+                .maybeSingle();
+            return data?.permissions ?? [];
+        }
+        catch {
+            return [];
+        }
+    }
     generateOtp() {
         return Math.floor(100000 + Math.random() * 900000).toString();
     }
@@ -853,6 +909,7 @@ let AuthService = class AuthService {
             skills: p.skills || [],
             linkedin_url: p.linkedin_url ?? null,
             privacy_level: p.privacy_level,
+            role: p.role || 'user',
             is_willing_to_mentor: !!p.is_willing_to_mentor,
             has_completed_onboarding: !!p.has_completed_onboarding,
             reputation_score: p.reputation_score || 0,

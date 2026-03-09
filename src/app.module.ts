@@ -19,6 +19,7 @@ import { ReferralModule } from './modules/referral/referral.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { FeedsModule } from './modules/feeds/feeds.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './common/services/redis.module';
 import { BullModule } from '@nestjs/bullmq';
 import { getBullConfig } from './config/bull.config';
@@ -59,7 +60,7 @@ import { OkestraModule } from './modules/okestra/okestra.module';
     MessagingModule,
     NotificationsModule,
     FeedsModule,
-    OkestraModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

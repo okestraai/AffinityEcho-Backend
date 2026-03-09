@@ -326,6 +326,17 @@ export class UserController {
     return this.userProfileService.getUserBadges(userId);
   }
 
+  @Get(':userId/full-profile')
+  @ApiOperation({
+    summary: 'Get full user profile',
+    description: 'Single endpoint: profile + stats + recent posts/topics/nooks/comments + identity reveal status + viewer engagement. Badges excluded for other users.',
+  })
+  @ApiParam({ name: 'userId', description: 'User ID' })
+  getFullUserProfile(@Req() req: any, @Param('userId') userId: string) {
+    const currentUserId = req.user.sub;
+    return this.userProfileService.getFullUserProfile(userId, currentUserId);
+  }
+
   @Get(':userId/activity')
   @ApiOperation({ summary: 'Get user activity' })
   @ApiParam({ name: 'userId', description: 'User ID' })

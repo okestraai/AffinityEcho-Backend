@@ -2,10 +2,10 @@ name: Deploy
 
 on:
   push:
-    branches: [develop, main]
+    branches: [main]
 
 concurrency:
-  group: deploy-backend-${{ github.ref_name }}
+  group: deploy-backend
   cancel-in-progress: false
 
 permissions:
@@ -58,22 +58,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine environment tag
-        id: env-tag
-        run: |
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "tag=production" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=staging" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ steps.env-tag.outputs.tag }}
+            type=raw,value=production
             type=sha,prefix=sha-
 
       - name: Build and push
@@ -91,57 +82,14 @@ jobs:
         uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.env-tag.outputs.tag }}
+          image-ref: ${{ env.IMAGE_NAME }}:production
           format: table
           exit-code: 0
           severity: CRITICAL
 
-  # ─── DEPLOY STAGING ───────────────────────────────────────
-  deploy-staging:
-    name: Deploy to Staging
-    if: github.ref_name == 'develop'
-    runs-on: [self-hosted, affinityecho-deploy]
-    needs: build-and-push
-    environment:
-      name: staging
-      url: https://staging-api.affinityecho.com
-    steps:
-      - name: Ensure vLLM env vars in staging .env
-        working-directory: /home/okestraailabs/affinityecho/staging
-        run: |
-          if ! grep -q "VLLM_CHAT_URL" .env.staging 2>/dev/null; then
-            printf '\n# ── vLLM (Okestra AI Insights — direct call) ─────────────\nVLLM_CHAT_URL=https://chat.affinityecho.com\nCF_ACCESS_CLIENT_ID=c83bd82878c8a1937d64ba223324b615.access\nCF_ACCESS_CLIENT_SECRET=d71737956553bccdb12403d5512b8b87a9244815fc9685bd5efe970f3138f9dd\n' >> .env.staging
-            echo "Added vLLM env vars to .env.staging"
-          else
-            echo "vLLM env vars already present in .env.staging"
-          fi
-
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Pull latest staging image
-        run: docker pull ${{ env.IMAGE_NAME }}:staging
-
-      - name: Deploy staging stack
-        working-directory: /home/okestraailabs/affinityecho/staging
-        run: |
-          docker compose --env-file .env.staging -f docker-compose.staging.yml -p affinityecho-staging up -d --no-build api redis cloudflared
-          echo "Waiting for API healthcheck..."
-          for i in $(seq 1 30); do
-            if docker inspect --format='{{.State.Health.Status}}' affinityecho-staging-api 2>/dev/null | grep -q healthy; then
-              echo "API is healthy!"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "ERROR: API did not become healthy within 150s"
-          docker logs affinityecho-staging-api --tail 50
-          exit 1
-
   # ─── DEPLOY PRODUCTION ────────────────────────────────────
-  deploy-production:
+  deploy:
     name: Deploy to Production
-    if: github.ref_name == 'main'
     runs-on: [self-hosted, affinityecho-deploy]
     needs: build-and-push
     environment:

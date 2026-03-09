@@ -24,6 +24,7 @@ export interface UserProfileResponse {
   created_at: string;
   updated_at: string;
   last_active_at: string;
+  role: string;
 
   // Encrypted sensitive fields (sent to frontend as-is)
   company_type: string | null,
@@ -32,4 +33,7 @@ export interface UserProfileResponse {
   career_level_encrypted: string | null;
   company_encrypted: string | null;
   affinity_tags_encrypted: string | null;
+
+  // Admin permissions (only present for admin role; null for super_admin; undefined for other roles)
+  permissions?: string[] | null;
 }

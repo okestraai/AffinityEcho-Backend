@@ -17,16 +17,19 @@ export declare class AuthController {
         profileCreated: boolean;
     }>;
     login(dto: LoginDto): Promise<{
-        has_completed_onboarding: boolean;
-        is_deactivated: boolean;
+        user: {
+            permissions?: string[] | null | undefined;
+            id: string;
+            email: string | undefined;
+            username: string;
+            role: string;
+            has_completed_onboarding: boolean;
+            is_deactivated: boolean;
+        };
         access_token: string;
         refresh_token: string;
         token_type: string;
         expires_in: number;
-        user: {
-            id: string;
-            email: string;
-        };
     }>;
     socialLogin(provider: 'google' | 'facebook'): Promise<{
         url: string;

@@ -64,7 +64,8 @@ export class UserProfileService {
           show_company,
           show_location,
           show_activity,
-          show_connections
+          show_connections,
+          years_experience
         `,
         )
         .eq('id', userId)
@@ -168,7 +169,8 @@ export class UserProfileService {
         display_name: displayName,
         avatar: profile.avatar,
         bio: profile.bio,
-        jobTitle: profile.job_title,
+        job_title: profile.job_title,
+        years_experience: (profile as any).years_experience ?? null,
         skills: profile.skills,
         linkedinUrl: profile.linkedin_url,
         badges: profile.badges,
@@ -242,6 +244,273 @@ export class UserProfileService {
       logger.error('Failed to fetch user profile', { error });
       throw new BadRequestException('Failed to fetch user profile');
     }
+  }
+
+  /**
+   * Full user profile — single endpoint combining profile, stats, recent content,
+   * identity reveal status, and the viewer's engagement with this user.
+   * Badges are excluded for non-own profiles.
+   */
+  async getFullUserProfile(targetUserId: string, currentUserId: string) {
+    const isOwnProfile = currentUserId === targetUserId;
+
+    // Base profile (handles privacy, blocks, and visibility checks)
+    const baseResult = await this.getUserProfileById(targetUserId, currentUserId);
+    const now = new Date().toISOString();
+
+    const [
+      { data: recentPosts },
+      { data: recentTopics },
+      { data: recentNooks },
+      { data: recentComments },
+      identityRevealed,
+      viewerEngagement,
+      { data: encryptedNameFields },
+    ] = await Promise.all([
+      this.admin
+        .from('feed_posts')
+        .select('id, content, tags, likes_count, comments_count, shares_count, views_count, created_at, is_anonymous')
+        .eq('user_id', targetUserId)
+        .eq('is_archived', false)
+        .order('created_at', { ascending: false })
+        .limit(5),
+
+      this.admin
+        .from('forum_topics')
+        .select('id, title, content, tags, scope, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, is_anonymous, forum:forums(id, name)')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(5),
+
+      this.admin
+        .from('nooks')
+        .select('id, title, description, urgency, scope, temperature, hashtags, members_count, messages_count, expires_at, created_at')
+        .eq('creator_id', targetUserId)
+        .eq('is_active', true)
+        .gt('expires_at', now)
+        .order('created_at', { ascending: false })
+        .limit(5),
+
+      this.admin
+        .from('feed_comments')
+        .select('id, content_type, content_id, content, is_anonymous, created_at')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(5),
+
+      isOwnProfile
+        ? Promise.resolve(false)
+        : this.identityReveal.isRevealed(currentUserId, targetUserId),
+
+      isOwnProfile
+        ? Promise.resolve(null)
+        : this.getViewerEngagementSummary(currentUserId, targetUserId),
+
+      this.admin
+        .from('user_profiles')
+        .select('first_name_encrypted, last_name_encrypted')
+        .eq('id', targetUserId)
+        .single(),
+    ]);
+
+    const formattedPosts = (recentPosts || []).map((p: any) => ({
+      id: p.id,
+      content_id: p.id,
+      content_type: 'post' as const,
+      is_anonymous: p.is_anonymous,
+      content: { text: p.content, tags: p.tags },
+      engagement: { likes: p.likes_count, comments: p.comments_count, shares: p.shares_count, views: p.views_count },
+      reaction_counts: { heard: 0, validated: 0, inspired: 0 },
+      user_liked: false,
+      user_bookmarked: false,
+      user_reactions: { heard: false, validated: false, inspired: false },
+      created_at: p.created_at,
+    }));
+
+    const formattedTopics = (recentTopics || []).map((t: any) => {
+      const totalReactions =
+        (t.reaction_seen_count || 0) + (t.reaction_validated_count || 0) +
+        (t.reaction_inspired_count || 0) + (t.reaction_heard_count || 0);
+      return {
+        id: t.id,
+        content_id: t.id,
+        content_type: 'topic' as const,
+        is_anonymous: t.is_anonymous,
+        content: { title: t.title, text: t.content, forum_name: t.forum?.name || null, tags: t.tags },
+        engagement: { likes: totalReactions, comments: t.comments_count },
+        reaction_counts: {
+          seen: t.reaction_seen_count || 0,
+          validated: t.reaction_validated_count || 0,
+          inspired: t.reaction_inspired_count || 0,
+          heard: t.reaction_heard_count || 0,
+        },
+        user_liked: false,
+        user_bookmarked: false,
+        user_reactions: { seen: false, validated: false, inspired: false, heard: false },
+        created_at: t.created_at,
+      };
+    });
+
+    const formattedNooks = (recentNooks || []).map((n: any) => ({
+      id: n.id,
+      content_type: 'nook' as const,
+      content: {
+        title: n.title,
+        text: n.description,
+        urgency: n.urgency || 'medium',
+        scope: n.scope || 'company',
+        temperature: n.temperature || 'cool',
+        hashtags: n.hashtags || [],
+      },
+      engagement: { members: n.members_count || 0, messages: n.messages_count || 0 },
+      members_count: n.members_count || 0,
+      messages_count: n.messages_count || 0,
+      expires_at: n.expires_at,
+      time_left: this.calculateTimeLeft(n.expires_at),
+      created_at: n.created_at,
+    }));
+
+    const formattedComments = (recentComments || []).map((c: any) => ({
+      id: c.id,
+      content_type: c.content_type,
+      content_id: c.content_id,
+      is_anonymous: c.is_anonymous,
+      content: c.content,
+      created_at: c.created_at,
+    }));
+
+    // Enrich posts and topics with viewer's per-item reaction/like/bookmark state
+    if (!isOwnProfile) {
+      await this.enrichProfileActivityItems(currentUserId, formattedPosts, formattedTopics);
+    }
+
+    // Inject real name when identity is revealed between viewer and viewee
+    if ((identityRevealed || isOwnProfile) && encryptedNameFields) {
+      const fullName = this.identityReveal.decryptRealName(
+        encryptedNameFields.first_name_encrypted,
+        encryptedNameFields.last_name_encrypted,
+      );
+      if (fullName) {
+        baseResult.data.full_name = fullName;
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        profile: baseResult.data,
+        identity_revealed: identityRevealed,
+        recent_activity: {
+          posts: formattedPosts,
+          topics: formattedTopics,
+          nooks: formattedNooks,
+          comments: formattedComments,
+        },
+        viewer_engagement: viewerEngagement,
+      },
+    };
+  }
+
+  private async enrichProfileActivityItems(viewerId: string, posts: any[], topics: any[]): Promise<void> {
+    const postIds = posts.map((p) => p.content_id);
+    const topicIds = topics.map((t) => t.content_id);
+    const allIds = [...postIds, ...topicIds];
+    if (allIds.length === 0) return;
+
+    const [
+      { data: likes },
+      { data: bookmarks },
+      { data: feedUserReactions },
+      { data: feedAllReactions },
+      { data: topicUserReactions },
+    ] = await Promise.all([
+      this.admin.from('feed_likes').select('content_id').eq('user_id', viewerId).in('content_id', allIds),
+      this.admin.from('feed_bookmarks').select('content_id').eq('user_id', viewerId).in('content_id', allIds),
+      postIds.length > 0
+        ? this.admin.from('feed_reactions').select('content_id, reaction_type').eq('user_id', viewerId).in('content_id', postIds)
+        : Promise.resolve({ data: [] }),
+      postIds.length > 0
+        ? this.admin.from('feed_reactions').select('content_id, reaction_type').in('content_id', postIds)
+        : Promise.resolve({ data: [] }),
+      topicIds.length > 0
+        ? this.admin.from('topic_reactions').select('topic_id, reaction_type').eq('user_id', viewerId).in('topic_id', topicIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const likeSet = new Set((likes || []).map((l: any) => l.content_id));
+    const bookmarkSet = new Set((bookmarks || []).map((b: any) => b.content_id));
+
+    const feedUserReactionMap = new Map<string, Set<string>>();
+    (feedUserReactions || []).forEach((r: any) => {
+      if (!feedUserReactionMap.has(r.content_id)) feedUserReactionMap.set(r.content_id, new Set());
+      feedUserReactionMap.get(r.content_id)!.add(r.reaction_type);
+    });
+
+    const feedReactionCounts = new Map<string, Record<string, number>>();
+    (feedAllReactions || []).forEach((r: any) => {
+      if (!feedReactionCounts.has(r.content_id)) feedReactionCounts.set(r.content_id, { heard: 0, validated: 0, inspired: 0 });
+      const counts = feedReactionCounts.get(r.content_id)!;
+      if (counts[r.reaction_type] !== undefined) counts[r.reaction_type]++;
+    });
+
+    const topicUserReactionMap = new Map<string, Set<string>>();
+    (topicUserReactions || []).forEach((r: any) => {
+      if (!topicUserReactionMap.has(r.topic_id)) topicUserReactionMap.set(r.topic_id, new Set());
+      topicUserReactionMap.get(r.topic_id)!.add(r.reaction_type);
+    });
+
+    posts.forEach((p) => {
+      const id = p.content_id;
+      const reactions = feedUserReactionMap.get(id);
+      p.user_liked = likeSet.has(id);
+      p.user_bookmarked = bookmarkSet.has(id);
+      p.user_reactions = {
+        heard: reactions?.has('heard') || false,
+        validated: reactions?.has('validated') || false,
+        inspired: reactions?.has('inspired') || false,
+      };
+      p.reaction_counts = feedReactionCounts.get(id) || { heard: 0, validated: 0, inspired: 0 };
+    });
+
+    topics.forEach((t) => {
+      const id = t.content_id;
+      const reactions = topicUserReactionMap.get(id);
+      t.user_liked = likeSet.has(id);
+      t.user_bookmarked = bookmarkSet.has(id);
+      t.user_reactions = {
+        seen: reactions?.has('seen') || false,
+        validated: reactions?.has('validated') || false,
+        inspired: reactions?.has('inspired') || false,
+        heard: reactions?.has('heard') || false,
+      };
+    });
+  }
+
+  private async getViewerEngagementSummary(viewerId: string, targetUserId: string): Promise<any> {
+    const [{ data: posts }, { data: topics }] = await Promise.all([
+      this.admin.from('feed_posts').select('id').eq('user_id', targetUserId).eq('is_archived', false).limit(100),
+      this.admin.from('forum_topics').select('id').eq('user_id', targetUserId).limit(100),
+    ]);
+
+    const postIds = (posts || []).map((p: any) => p.id);
+    const topicIds = (topics || []).map((t: any) => t.id);
+    const allIds = [...postIds, ...topicIds];
+
+    if (allIds.length === 0) return { liked_count: 0, commented_count: 0, reaction_count: 0 };
+
+    const [likesResult, commentsResult, reactionsResult] = await Promise.all([
+      this.admin.from('feed_likes').select('id', { count: 'exact', head: true }).eq('user_id', viewerId).in('content_id', allIds),
+      this.admin.from('feed_comments').select('id', { count: 'exact', head: true }).eq('user_id', viewerId).in('content_id', allIds),
+      postIds.length > 0
+        ? this.admin.from('feed_reactions').select('id', { count: 'exact', head: true }).eq('user_id', viewerId).in('content_id', postIds)
+        : Promise.resolve({ count: 0 }),
+    ]);
+
+    return {
+      liked_count: likesResult.count || 0,
+      commented_count: commentsResult.count || 0,
+      reaction_count: reactionsResult.count || 0,
+    };
   }
 
   async updateAvatar(userId: string, avatar: string) {

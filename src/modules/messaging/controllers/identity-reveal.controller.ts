@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   UseGuards,
   Query,
@@ -181,6 +182,24 @@ export class IdentityRevealController {
       user.userId,
       conversationId,
     );
+  }
+
+  @Delete(':revealId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cancel an identity reveal request',
+    description: 'Cancel a pending identity reveal request (requester only)',
+  })
+  @ApiParam({ name: 'revealId', description: 'Identity reveal request ID' })
+  @ApiResponse({ status: 200, description: 'Request cancelled successfully' })
+  @ApiResponse({ status: 400, description: 'Request is not pending' })
+  @ApiResponse({ status: 403, description: 'Only the requester can cancel' })
+  @ApiResponse({ status: 404, description: 'Reveal request not found' })
+  async cancelReveal(
+    @CurrentUser() user: any,
+    @Param('revealId') revealId: string,
+  ) {
+    return this.identityRevealService.cancelReveal(user.userId, revealId);
   }
 
   @Get('analytics')

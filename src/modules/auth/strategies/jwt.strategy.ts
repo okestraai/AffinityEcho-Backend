@@ -35,7 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Query with the new email column
       const { data: user, error } = await this.admin
         .from('user_profiles')
-        .select('id, username, email, privacy_level, has_completed_onboarding')
+        .select('id, username, email, privacy_level, has_completed_onboarding, role, is_suspended')
         .eq('id', payload.sub)
         .single();
 
@@ -111,6 +111,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         username: user.username,
         privacyLevel: user.privacy_level,
         hasCompletedOnboarding: user.has_completed_onboarding,
+        role: user.role ?? 'user',
+        isSuspended: user.is_suspended ?? false,
         ...payload,
       };
     } catch (error: any) {

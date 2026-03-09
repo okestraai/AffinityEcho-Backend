@@ -74,6 +74,13 @@ export class MentorshipQueryDto {
   @IsIn(['immediate', 'within_week', 'within_month', 'all'])
   availability?: string;
 
+  @ApiProperty({ description: 'Languages spoken', type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (typeof value === 'string' ? [value] : value))
+  languages?: string[];
+
   @ApiProperty({ description: 'Location', required: false })
   @IsOptional()
   @IsString()

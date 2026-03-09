@@ -63,6 +63,7 @@ export class MentorshipDiscoverService {
         affinityTags,
         availability,
         location,
+        languages,
         page = 1,
         limit = 20,
         sortBy = 'recent',
@@ -83,6 +84,7 @@ export class MentorshipDiscoverService {
       mentor_industries,
       mentor_availability,
       mentor_response_time,
+      mentor_languages,
       is_active_mentor,
       is_active_mentee,
       mentoring_as,
@@ -133,6 +135,10 @@ export class MentorshipDiscoverService {
 
       if (industries?.length) {
         supabaseQuery = supabaseQuery.overlaps('mentor_industries', industries);
+      }
+
+      if (languages?.length) {
+        supabaseQuery = supabaseQuery.filter('mentor_languages', 'ov', `{${languages.join(',')}}`);
       }
 
       // Location filter
@@ -678,7 +684,7 @@ export class MentorshipDiscoverService {
     try {
       return this.encryption.decrypt(value);
     } catch {
-      return value;
+      return '';
     }
   }
 

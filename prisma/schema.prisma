@@ -105,6 +105,14 @@ model user_profiles {
   deleted_at               DateTime? @db.Timestamptz(3)
   deletion_reason          String?  @db.Text
 
+  // Admin / RBAC
+  role                     String   @default("user") @db.Text
+  is_suspended             Boolean  @default(false)
+  suspended_at             DateTime? @db.Timestamptz(3)
+  suspension_reason        String?  @db.Text
+  suspension_expires_at    DateTime? @db.Timestamptz(3)
+  suspended_by             String?  @db.Uuid
+
   // Stats
   reputation_score         Int      @default(0)
   total_posts              Int      @default(0)
@@ -162,7 +170,14 @@ model user_profiles {
   harassment_reports     harassment_reports[] @relation("harassment_reports")
   mentions_sent         mentions[] @relation("mentions_sent")
   mentions_received     mentions[] @relation("mentions_received")
+  admin_logs_performed  admin_logs[] @relation("admin_log_performer")
+  report_timelines      report_timeline_events[] @relation("timeline_performer")
+  content_moderated     content_moderation[] @relation("content_moderator")
+  admin_notifications   admin_notifications[] @relation("notification_creator")
+  reports_against       harassment_reports[] @relation("harassment_reported_user")
 
+  @@index([role])
+  @@index([is_suspended])
   @@map("user_profiles")
 }
 
@@ -176,14 +191,22 @@ model forums {
   icon            String
   is_global       Boolean  @default(false)
   company_name    String?
+  company_id      String?  @db.Uuid
   category        String   @db.VarChar(20)
   topic_count     Int      @default(0)
   member_count    Int      @default(0)
   last_activity   DateTime @default(now()) @db.Timestamptz(3)
-  created_at      DateTime @default(now()) @db.Timestamptz(3)
-  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   rules           String[]
   moderators      String[]
+
+  // Admin
+  is_locked       Boolean  @default(false)
+  is_hidden       Boolean  @default(false)
+  created_by      String?  @db.Uuid
+  deleted_at      DateTime? @db.Timestamptz(3)
+
+  created_at      DateTime @default(now()) @db.Timestamptz(3)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(3)
 
   // Relations
   forum_topics    forum_topics[]
@@ -232,6 +255,12 @@ model forum_topics {
   reaction_inspired_count  Int @default(0)
   reaction_heard_count     Int @default(0)
 
+  // Admin moderation
+  is_hidden          Boolean  @default(false)
+  hidden_by          String?  @db.Uuid
+  hidden_at          DateTime? @db.Timestamptz(3)
+  hidden_reason      String?  @db.Text
+
   created_at         DateTime @default(now()) @db.Timestamptz(3)
   updated_at         DateTime @updatedAt @db.Timestamptz(3)
   last_activity_at   DateTime @default(now()) @db.Timestamptz(3)
@@ -258,6 +287,12 @@ model forum_comments {
 
   helpful_count      Int      @default(0)
   supportive_count   Int      @default(0)
+
+  // Admin moderation
+  is_hidden          Boolean  @default(false)
+  hidden_by          String?  @db.Uuid
+  hidden_at          DateTime? @db.Timestamptz(3)
+  hidden_reason      String?  @db.Text
 
   created_at         DateTime @default(now()) @db.Timestamptz(3)
   updated_at         DateTime @updatedAt @db.Timestamptz(3)
@@ -758,7 +793,11 @@ model nooks {
   is_active           Boolean  @default(true)
   is_locked           Boolean  @default(false)
   locked_reason       String?
-  
+
+  // Admin moderation
+  is_hidden           Boolean  @default(false)
+  deleted_at          DateTime? @db.Timestamptz(3)
+
   // Timestamps
   created_at          DateTime @default(now()) @db.Timestamptz(3)
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
@@ -816,7 +855,12 @@ model nook_messages {
   removed_reason      String?
   is_flagged          Boolean  @default(false)
   flagged_count       Int      @default(0)
-  
+
+  // Admin moderation
+  is_hidden           Boolean  @default(false)
+  hidden_by           String?  @db.Uuid
+  hidden_at           DateTime? @db.Timestamptz(3)
+
   // Reaction counts
   heard_count         Int      @default(0)
   validated_count     Int      @default(0)
@@ -893,6 +937,12 @@ model feed_posts {
   // Metadata
   is_pinned           Boolean  @default(false)
   is_archived         Boolean  @default(false)
+
+  // Admin moderation
+  is_hidden           Boolean  @default(false)
+  hidden_by           String?  @db.Uuid
+  hidden_at           DateTime? @db.Timestamptz(3)
+  hidden_reason       String?  @db.Text
 
   created_at          DateTime @default(now()) @db.Timestamptz(3)
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
@@ -1056,17 +1106,110 @@ model harassment_reports {
   admin_notes         String?  @db.Text
   resolved_at         DateTime? @db.Timestamptz(3)
 
+  // Admin fields
+  assigned_to         String?  @db.Uuid
+  resolution_action   String?  @db.Text
+  resolved_by         String?  @db.Uuid
+  reported_user_id    String?  @db.Uuid
+
   created_at          DateTime @default(now()) @db.Timestamptz(3)
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
 
   // Relations
   reporter            user_profiles @relation("harassment_reports", fields: [reporter_id], references: [id], onDelete: Cascade)
+  reported_user       user_profiles? @relation("harassment_reported_user", fields: [reported_user_id], references: [id], onDelete: SetNull)
+  timeline_events     report_timeline_events[]
 
   @@index([reporter_id])
+  @@index([reported_user_id])
+  @@index([assigned_to])
   @@index([status])
   @@index([reference_number])
   @@index([created_at(sort: Desc)])
   @@map("harassment_reports")
+}
+
+//
+// ADMIN SYSTEM
+//
+
+model admin_logs {
+  id             String   @id @default(uuid()) @db.Uuid
+  admin_id       String   @db.Uuid
+  admin_username String   @default("") @db.Text
+  action         String   @db.Text
+  target_type    String   @db.Text
+  target_id      String   @db.Text
+  reason         String?  @db.Text
+  metadata       Json     @default("{}")
+  ip_address     String?  @db.Text
+  created_at     DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  admin          user_profiles @relation("admin_log_performer", fields: [admin_id], references: [id])
+
+  @@index([admin_id])
+  @@index([target_type, target_id])
+  @@index([created_at(sort: Desc)])
+  @@map("admin_logs")
+}
+
+model report_timeline_events {
+  id           String   @id @default(uuid()) @db.Uuid
+  report_id    String   @db.Uuid
+  event_type   String   @db.Text
+  performed_by String?  @db.Uuid
+  created_at   DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  report       harassment_reports @relation(fields: [report_id], references: [id], onDelete: Cascade)
+  performer    user_profiles?     @relation("timeline_performer", fields: [performed_by], references: [id], onDelete: SetNull)
+
+  @@index([report_id])
+  @@map("report_timeline_events")
+}
+
+model content_moderation {
+  id                String   @id @default(uuid()) @db.Uuid
+  content_type      String   @db.Text
+  content_id        String   @db.Uuid
+  moderation_status String   @default("visible") @db.Text
+  moderation_reason String?  @db.Text
+  reports_count     Int      @default(0)
+  moderated_by      String?  @db.Uuid
+  moderated_at      DateTime? @db.Timestamptz(3)
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+  updated_at        DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  moderator         user_profiles? @relation("content_moderator", fields: [moderated_by], references: [id], onDelete: SetNull)
+
+  @@unique([content_type, content_id])
+  @@index([content_type, content_id])
+  @@index([moderation_status])
+  @@map("content_moderation")
+}
+
+model admin_notifications {
+  id               String   @id @default(uuid()) @db.Uuid
+  title            String   @db.Text
+  message          String   @db.Text
+  type             String   @default("system") @db.Text
+  audience         String   @default("all") @db.Text
+  status           String   @default("draft") @db.Text
+  action_url       String?  @db.Text
+  scheduled_at     DateTime? @db.Timestamptz(3)
+  sent_at          DateTime? @db.Timestamptz(3)
+  recipients_count Int      @default(0)
+  created_by       String   @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz(3)
+  updated_at       DateTime @default(now()) @db.Timestamptz(3)
+
+  // Relations
+  creator          user_profiles @relation("notification_creator", fields: [created_by], references: [id])
+
+  @@index([status])
+  @@map("admin_notifications")
 }
 
 //

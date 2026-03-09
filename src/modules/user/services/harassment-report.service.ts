@@ -24,7 +24,10 @@ export class HarassmentReportService {
   }
 
   async createReport(userId: string, dto: CreateHarassmentReportDto) {
-    logger.info('Creating harassment report', { userId, incidentType: dto.incidentType });
+    logger.info('Creating harassment report', {
+      userId,
+      incidentType: dto.incidentType,
+    });
 
     try {
       const referenceNumber = this.generateReferenceNumber();
@@ -43,6 +46,7 @@ export class HarassmentReportService {
           reporter_type: dto.reporterType,
           contact_email: dto.contactEmail || null,
           immediate_risk: dto.immediateRisk,
+          reported_user_id: dto.reportedUserId || null,
           status: 'submitted',
         })
         .select()
@@ -57,6 +61,7 @@ export class HarassmentReportService {
         reportId: data.id,
         referenceNumber,
         immediateRisk: dto.immediateRisk,
+        reportedUserId: dto.reportedUserId,
       });
 
       return {
@@ -66,6 +71,7 @@ export class HarassmentReportService {
           referenceNumber: data.reference_number,
           status: data.status,
           immediateRisk: data.immediate_risk,
+          reportedUserId: data.reported_user_id,
           createdAt: data.created_at,
         },
         message: dto.immediateRisk
@@ -88,7 +94,11 @@ export class HarassmentReportService {
       // Build filtered query
       let query = this.admin
         .from('harassment_reports')
-        .select('*', { count: 'exact' })
+        .select(
+          `*,
+          reported_user:user_profiles!reported_user_id(id, username, avatar)`,
+          { count: 'exact' },
+        )
         .eq('reporter_id', userId);
 
       if (status && status !== 'all') {
@@ -106,31 +116,63 @@ export class HarassmentReportService {
       // Get summary counts (unfiltered, grouped by status)
       const { data: allReports } = await this.admin
         .from('harassment_reports')
-        .select('status')
+        .select('status, immediate_risk')
         .eq('reporter_id', userId);
 
-      const summary: Record<string, number> = { total: 0 };
+      const summary: Record<string, number> = {
+        total: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      };
+
       (allReports || []).forEach((r: any) => {
         summary.total++;
         summary[r.status] = (summary[r.status] || 0) + 1;
+
+        // Calculate priority counts
+        if (r.immediate_risk) {
+          summary.critical++;
+        } else if (r.status === 'submitted') {
+          summary.high++;
+        } else if (r.status === 'under_review') {
+          summary.medium++;
+        } else if (r.status === 'resolved' || r.status === 'declined') {
+          summary.low++;
+        }
       });
 
       return {
         success: true,
         data: {
-          reports: (data || []).map((report: any) => ({
-            id: report.id,
-            referenceNumber: report.reference_number,
-            incidentType: report.incident_type,
-            description: report.description,
-            date: report.date,
-            location: report.location,
-            reporterType: report.reporter_type,
-            immediateRisk: report.immediate_risk,
-            status: report.status,
-            createdAt: report.created_at,
-            updatedAt: report.updated_at,
-          })),
+          reports: (data || []).map((report: any) => {
+            // Determine priority
+            let priority = 'low';
+            if (report.immediate_risk) {
+              priority = 'critical';
+            } else if (report.status === 'submitted') {
+              priority = 'high';
+            } else if (report.status === 'under_review') {
+              priority = 'medium';
+            }
+
+            return {
+              id: report.id,
+              referenceNumber: report.reference_number,
+              incidentType: report.incident_type,
+              description: report.description,
+              date: report.date,
+              location: report.location,
+              reporterType: report.reporter_type,
+              immediateRisk: report.immediate_risk,
+              priority,
+              status: report.status,
+              reportedUser: report.reported_user,
+              createdAt: report.created_at,
+              updatedAt: report.updated_at,
+            };
+          }),
           summary,
           total: count || 0,
           page,
@@ -146,18 +188,34 @@ export class HarassmentReportService {
   }
 
   async getReportByReference(userId: string, referenceNumber: string) {
-    logger.info('Fetching harassment report by reference', { userId, referenceNumber });
+    logger.info('Fetching harassment report by reference', {
+      userId,
+      referenceNumber,
+    });
 
     try {
       const { data, error } = await this.admin
         .from('harassment_reports')
-        .select('*')
+        .select(
+          `*,
+          reported_user:user_profiles!reported_user_id(id, username, avatar)`,
+        )
         .eq('reporter_id', userId)
         .eq('reference_number', referenceNumber)
         .single();
 
       if (error || !data) {
         throw new NotFoundException('Report not found');
+      }
+
+      // Determine priority
+      let priority = 'low';
+      if (data.immediate_risk) {
+        priority = 'critical';
+      } else if (data.status === 'submitted') {
+        priority = 'high';
+      } else if (data.status === 'under_review') {
+        priority = 'medium';
       }
 
       return {
@@ -174,7 +232,9 @@ export class HarassmentReportService {
           reporterType: data.reporter_type,
           contactEmail: data.contact_email,
           immediateRisk: data.immediate_risk,
+          priority,
           status: data.status,
+          reportedUser: data.reported_user,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
           resolvedAt: data.resolved_at,
@@ -193,13 +253,26 @@ export class HarassmentReportService {
     try {
       const { data, error } = await this.admin
         .from('harassment_reports')
-        .select('*')
+        .select(
+          `*,
+          reported_user:user_profiles!reported_user_id(id, username, avatar, email, role)`,
+        )
         .eq('reporter_id', userId)
         .eq('id', reportId)
         .single();
 
       if (error || !data) {
         throw new NotFoundException('Report not found');
+      }
+
+      // Determine priority
+      let priority = 'low';
+      if (data.immediate_risk) {
+        priority = 'critical';
+      } else if (data.status === 'submitted') {
+        priority = 'high';
+      } else if (data.status === 'under_review') {
+        priority = 'medium';
       }
 
       // Build timeline from available timestamp fields
@@ -213,8 +286,9 @@ export class HarassmentReportService {
       if (data.resolved_at) {
         timeline.push({ event: 'Report resolved', date: data.resolved_at });
       }
-      // Sort timeline chronologically
-      timeline.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      timeline.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      );
 
       return {
         success: true,
@@ -230,7 +304,9 @@ export class HarassmentReportService {
           reporterType: data.reporter_type,
           contactEmail: data.contact_email,
           immediateRisk: data.immediate_risk,
+          priority,
           status: data.status,
+          reportedUser: data.reported_user,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
           resolvedAt: data.resolved_at,

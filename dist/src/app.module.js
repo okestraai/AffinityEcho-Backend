@@ -29,7 +29,10 @@ const referral_module_1 = require("./modules/referral/referral.module");
 const messaging_module_1 = require("./modules/messaging/messaging.module");
 const notifications_module_1 = require("./modules/notifications/notifications.module");
 const feeds_module_1 = require("./modules/feeds/feeds.module");
+const admin_module_1 = require("./modules/admin/admin.module");
 const redis_module_1 = require("./common/services/redis.module");
+const bullmq_1 = require("@nestjs/bullmq");
+const bull_config_1 = require("./config/bull.config");
 const schedule_1 = require("@nestjs/schedule");
 const nook_cron_jobs_1 = require("./jobs/nook-cron.jobs");
 let AppModule = class AppModule {
@@ -58,6 +61,7 @@ exports.AppModule = AppModule = __decorate([
                     limit: 50,
                 },
             ]),
+            bullmq_1.BullModule.forRoot((0, bull_config_1.getBullConfig)()),
             schedule_1.ScheduleModule.forRoot(),
             redis_module_1.RedisModule,
             auth_module_1.AuthModule,
@@ -70,6 +74,7 @@ exports.AppModule = AppModule = __decorate([
             messaging_module_1.MessagingModule,
             notifications_module_1.NotificationsModule,
             feeds_module_1.FeedsModule,
+            admin_module_1.AdminModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

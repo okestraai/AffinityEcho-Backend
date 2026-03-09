@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Delete,
@@ -79,6 +80,23 @@ export class NookMessagesController {
       createMessageDto,
       user.userId,
     );
+  }
+
+  @Put(':messageId')
+  @ApiOperation({
+    summary: 'Edit a message',
+    description: 'Edit message content (author only, nook must still be active)',
+  })
+  @ApiParam({ name: 'nookId', description: 'Nook ID' })
+  @ApiParam({ name: 'messageId', description: 'Message ID' })
+  @ApiBody({ schema: { properties: { content: { type: 'string' } }, required: ['content'] } })
+  async editMessage(
+    @Param('nookId', ParseUUIDPipe) nookId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Body('content') content: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.messagesService.editMessage(nookId, messageId, user.userId, content);
   }
 
   @Delete(':messageId')
