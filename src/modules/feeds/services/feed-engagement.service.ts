@@ -253,7 +253,7 @@ export class FeedEngagementService {
         };
       }
 
-      // Step 3: Fetch all comments (top-level + their replies) for this content
+      // Step 3: Fetch all comments for this content (top-level + all nested replies)
       const { data: allComments, error } = await this.admin
         .from('feed_comments')
         .select(
@@ -270,7 +270,6 @@ export class FeedEngagementService {
         )
         .eq('content_type', contentType)
         .eq('content_id', contentId)
-        .or(`parent_comment_id.is.null,parent_comment_id.in.(${topLevelIds.join(',')})`)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -295,7 +294,6 @@ export class FeedEngagementService {
 
       for (const comment of comments) {
         const formatted = this.formatComment(comment);
-        formatted.replies = [];
 
         // Apply identity reveal
         if (!comment.is_anonymous) {
@@ -963,6 +961,7 @@ export class FeedEngagementService {
           : comment.user_profile?.username || 'Unknown',
         avatar: comment.is_anonymous ? '👤' : comment.user_profile?.avatar || 'User',
       },
+      replies: [] as any[],
     };
   }
 
