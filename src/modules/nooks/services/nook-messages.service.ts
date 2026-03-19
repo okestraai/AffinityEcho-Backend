@@ -71,41 +71,51 @@ export class NookMessagesService {
 
     if (error) throw new BadRequestException(error.message);
 
-    // Batch-fetch ALL replies for these messages in a single query (instead of N queries)
+    // Fetch ALL replies in this nook (all descendants, not just direct children)
     const messageIds = (messages || []).map((m) => m.id);
-    let repliesMap = new Map<string, any[]>();
+    let allReplyMessages: any[] = [];
 
     if (messageIds.length > 0) {
       const { data: allReplies } = await this.admin
         .from('nook_messages')
         .select(messageSelect)
-        .in('parent_message_id', messageIds)
+        .eq('nook_id', nookId)
+        .not('parent_message_id', 'is', null)
         .order('created_at', { ascending: true });
 
-      // Group replies by parent_message_id
-      (allReplies || []).forEach((reply: any) => {
-        const parentId = reply.parent_message_id;
-        if (!repliesMap.has(parentId)) {
-          repliesMap.set(parentId, []);
-        }
-        repliesMap.get(parentId)!.push(reply);
-      });
+      allReplyMessages = allReplies || [];
     }
 
-    const messagesWithReplies = (messages || []).map((message) => ({
-      ...message,
-      replies: repliesMap.get(message.id) || [],
-    }));
+    // Build a map of all messages (top-level + replies) for tree building
+    const messageMap = new Map<string, any>();
+    for (const msg of (messages || [])) {
+      messageMap.set(msg.id, { ...msg, replies: [] });
+    }
+    for (const reply of allReplyMessages) {
+      messageMap.set(reply.id, { ...reply, replies: [] });
+    }
 
-    // Collect all unique OTHER user IDs (exclude current user — no reveal with self)
-    // Use message.user_id (raw column) — never rely on the joined user object's id
+    // Build tree: attach each reply to its parent
+    const rootMessages: any[] = [];
+    for (const msg of (messages || [])) {
+      rootMessages.push(messageMap.get(msg.id));
+    }
+    for (const reply of allReplyMessages) {
+      const parent = messageMap.get(reply.parent_message_id);
+      if (parent) {
+        parent.replies.push(messageMap.get(reply.id));
+      }
+    }
+
+    // Collect all unique OTHER user IDs from the full tree
     const otherUserIds: string[] = [];
-    messagesWithReplies.forEach((msg: any) => {
-      if (msg.user_id && msg.user_id !== userId) otherUserIds.push(msg.user_id);
-      (msg.replies || []).forEach((reply: any) => {
-        if (reply.user_id && reply.user_id !== userId) otherUserIds.push(reply.user_id);
-      });
-    });
+    const collectUserIds = (msgs: any[]) => {
+      for (const msg of msgs) {
+        if (msg.user_id && msg.user_id !== userId) otherUserIds.push(msg.user_id);
+        if (msg.replies?.length) collectUserIds(msg.replies);
+      }
+    };
+    collectUserIds(rootMessages);
 
     // Get revealed user IDs in a single query
     const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherUserIds);
@@ -116,11 +126,12 @@ export class NookMessagesService {
     //   - Identity revealed     → show real name (even if anonymous)
     //   - Anonymous from others → show '👤' avatar + 'Anonymous' display (anonymity preserved)
     //   - Non-anonymous others  → show their username
-    const processedMessages = messagesWithReplies.map((message: any) => {
-      const msgAuthorId = message.user_id;
-      const msgUser = Array.isArray(message.user) ? message.user[0] : message.user;
-      const msgShowIdentity = msgAuthorId === userId || revealedIds.has(msgAuthorId);
-      const msgDisplayName = this.resolveDisplayName(msgUser, revealedIds, userId, message.is_anonymous, msgAuthorId);
+    // Recursively process a message and its nested replies
+    const processMessage = (message: any): any => {
+      const authorId = message.user_id;
+      const user = Array.isArray(message.user) ? message.user[0] : message.user;
+      const showIdentity = authorId === userId || revealedIds.has(authorId);
+      const displayName = this.resolveDisplayName(user, revealedIds, userId, message.is_anonymous, authorId);
 
       return {
         id: message.id,
@@ -128,7 +139,7 @@ export class NookMessagesService {
         parent_message_id: message.parent_message_id,
         content: message.content,
         is_anonymous: message.is_anonymous,
-        is_mine: msgAuthorId === userId,
+        is_mine: authorId === userId,
         is_removed: message.is_removed,
         removed_reason: message.removed_reason,
         is_flagged: message.is_flagged,
@@ -139,43 +150,16 @@ export class NookMessagesService {
         created_at: message.created_at,
         updated_at: message.updated_at,
         user: {
-          id: msgShowIdentity ? msgAuthorId : null,
-          avatar: msgUser?.avatar || 'User',
-          username: msgUser?.username || 'Unknown',
-          display_name: msgDisplayName,
+          id: showIdentity ? authorId : null,
+          avatar: user?.avatar || 'User',
+          username: user?.username || 'Unknown',
+          display_name: displayName,
         },
-        replies: (message.replies || []).map((reply: any) => {
-          const replyAuthorId = reply.user_id;
-          const replyUser = Array.isArray(reply.user) ? reply.user[0] : reply.user;
-          const replyShowIdentity = replyAuthorId === userId || revealedIds.has(replyAuthorId);
-          const replyDisplayName = this.resolveDisplayName(replyUser, revealedIds, userId, reply.is_anonymous, replyAuthorId);
-
-          return {
-            id: reply.id,
-            nook_id: reply.nook_id,
-            parent_message_id: reply.parent_message_id,
-            content: reply.content,
-            is_anonymous: reply.is_anonymous,
-            is_mine: replyAuthorId === userId,
-            is_removed: reply.is_removed,
-            removed_reason: reply.removed_reason,
-            is_flagged: reply.is_flagged,
-            flagged_count: reply.flagged_count,
-            heard_count: reply.heard_count,
-            validated_count: reply.validated_count,
-            helpful_count: reply.helpful_count,
-            created_at: reply.created_at,
-            updated_at: reply.updated_at,
-            user: {
-              id: replyShowIdentity ? replyAuthorId : null,
-              avatar: replyUser?.avatar || 'User',
-              username: replyUser?.username || 'Unknown',
-              display_name: replyDisplayName,
-            },
-          };
-        }),
+        replies: (message.replies || []).map(processMessage),
       };
-    });
+    };
+
+    const processedMessages = rootMessages.map(processMessage);
 
     return {
       success: true,
