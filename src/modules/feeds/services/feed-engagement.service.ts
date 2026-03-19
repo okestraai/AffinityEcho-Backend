@@ -216,7 +216,45 @@ export class FeedEngagementService {
     const offset = (page - 1) * limit;
 
     try {
-      const { data: comments, error, count } = await this.admin
+      // Step 1: Get paginated top-level comments count for pagination
+      const { count: topLevelCount } = await this.admin
+        .from('feed_comments')
+        .select('id', { count: 'exact', head: true })
+        .eq('content_type', contentType)
+        .eq('content_id', contentId)
+        .is('parent_comment_id', null);
+
+      // Step 2: Get paginated top-level comment IDs
+      const { data: topLevelComments, error: topLevelError } = await this.admin
+        .from('feed_comments')
+        .select('id')
+        .eq('content_type', contentType)
+        .eq('content_id', contentId)
+        .is('parent_comment_id', null)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (topLevelError) {
+        throw new BadRequestException('Failed to fetch comments');
+      }
+
+      const topLevelIds = (topLevelComments || []).map((c: any) => c.id);
+
+      if (topLevelIds.length === 0) {
+        return {
+          success: true,
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total: topLevelCount || 0,
+            hasMore: false,
+          },
+        };
+      }
+
+      // Step 3: Fetch all comments (top-level + their replies) for this content
+      const { data: allComments, error } = await this.admin
         .from('feed_comments')
         .select(
           `
@@ -229,33 +267,38 @@ export class FeedEngagementService {
             last_name_encrypted
           )
         `,
-          { count: 'exact' },
         )
         .eq('content_type', contentType)
         .eq('content_id', contentId)
-        .is('parent_comment_id', null) // Top-level comments only
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .or(`parent_comment_id.is.null,parent_comment_id.in.(${topLevelIds.join(',')})`)
+        .order('created_at', { ascending: true });
 
       if (error) {
         throw new BadRequestException('Failed to fetch comments');
       }
 
-      const formatted = (comments || []).map((c) => this.formatComment(c));
+      const comments = allComments || [];
 
-      // Apply identity reveal to comment authors
-      if (formatted.length > 0 && comments) {
-        const authorIds = comments
-          .map((c: any) => c.user_id)
-          .filter((id: string) => id && id !== userId);
-        const uniqueAuthorIds = [...new Set(authorIds)] as string[];
+      // Step 4: Apply identity reveal to all comment authors
+      const authorIds = comments
+        .map((c: any) => c.user_id)
+        .filter((id: string) => id && id !== userId);
+      const uniqueAuthorIds = [...new Set(authorIds)] as string[];
 
-        const revealedIds = uniqueAuthorIds.length > 0
-          ? await this.identityReveal.getRevealedUserIds(userId, uniqueAuthorIds)
-          : new Set<string>();
+      const revealedIds = uniqueAuthorIds.length > 0
+        ? await this.identityReveal.getRevealedUserIds(userId, uniqueAuthorIds)
+        : new Set<string>();
 
-        comments.forEach((comment: any, index: number) => {
-          if (comment.is_anonymous) return;
+      // Step 5: Format all comments and build a map
+      const commentMap = new Map<string, any>();
+      const formattedComments: any[] = [];
+
+      for (const comment of comments) {
+        const formatted = this.formatComment(comment);
+        formatted.replies = [];
+
+        // Apply identity reveal
+        if (!comment.is_anonymous) {
           const isOwn = comment.user_id === userId;
           const isRevealed = revealedIds.has(comment.user_id);
 
@@ -264,19 +307,37 @@ export class FeedEngagementService {
               comment.user_profile?.first_name_encrypted,
               comment.user_profile?.last_name_encrypted,
             );
-            if (realName) formatted[index].author.display_name = realName;
+            if (realName) formatted.author.display_name = realName;
           }
-        });
+        }
+
+        commentMap.set(comment.id, formatted);
+        formattedComments.push({ raw: comment, formatted });
       }
+
+      // Step 6: Build tree structure - attach replies to their parents
+      const rootComments: any[] = [];
+      for (const { raw, formatted } of formattedComments) {
+        if (!raw.parent_comment_id) {
+          rootComments.push(formatted);
+        } else if (commentMap.has(raw.parent_comment_id)) {
+          commentMap.get(raw.parent_comment_id).replies.push(formatted);
+        }
+      }
+
+      // Step 7: Filter to only the paginated top-level comments, preserve order (newest first)
+      const paginatedRoots = topLevelIds
+        .map((id: string) => commentMap.get(id))
+        .filter(Boolean);
 
       return {
         success: true,
-        data: formatted,
+        data: paginatedRoots,
         pagination: {
           page,
           limit,
-          total: count || 0,
-          hasMore: (count || 0) > offset + limit,
+          total: topLevelCount || 0,
+          hasMore: (topLevelCount || 0) > offset + limit,
         },
       };
     } catch (error) {
