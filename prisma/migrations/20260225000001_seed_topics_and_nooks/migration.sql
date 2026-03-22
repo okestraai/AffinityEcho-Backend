@@ -1189,9 +1189,9 @@ BEGIN
         5 + (i * 5) % 40,
         8 + (i * 2) % 35,
         12 + (i * 4) % 45,
-        now_ts - ((200 - i) || ' hours')::interval,
-        now_ts - ((100 - i/2) || ' hours')::interval,
-        now_ts - ((50 - i/4) || ' hours')::interval
+        now_ts - (GREATEST(200 - i, 1) || ' hours')::interval,
+        now_ts - (GREATEST(100 - i/2, 1) || ' hours')::interval,
+        now_ts - (GREATEST(50 - i/4, 1) || ' hours')::interval
       );
 
       -- Insert 3-5 comments from different users
@@ -1207,8 +1207,8 @@ BEGIN
           true,
           (i + j) % 15,
           (i + j * 2) % 12,
-          now_ts - ((200 - i) || ' hours')::interval + (j || ' hours')::interval,
-          now_ts - ((200 - i) || ' hours')::interval + (j || ' hours')::interval
+          LEAST(now_ts - (GREATEST(200 - i, 1) || ' hours')::interval + (j || ' hours')::interval, now_ts - interval '10 minutes'),
+          LEAST(now_ts - (GREATEST(200 - i, 1) || ' hours')::interval + (j || ' hours')::interval, now_ts - interval '10 minutes')
         );
       END LOOP;
 
@@ -1220,7 +1220,7 @@ BEGIN
           t_id,
           user_ids[1 + ((u_idx + j + 1) % user_ct)],
           topic_rxn_types[1 + ((i + j) % 4)],
-          now_ts - ((200 - i) || ' hours')::interval + ((j * 2) || ' hours')::interval
+          LEAST(now_ts - (GREATEST(200 - i, 1) || ' hours')::interval + ((j * 2) || ' hours')::interval, now_ts - interval '10 minutes')
         )
         ON CONFLICT DO NOTHING;
       END LOOP;
@@ -1263,9 +1263,9 @@ BEGIN
         20 + (i * 3) % 80,
         true,
         false,
-        now_ts - ((200 - i) * interval '1 hour'),
-        now_ts - ((100 - i/2) * interval '1 hour'),
-        now_ts - ((i % 12) * interval '1 hour'),
+        now_ts - (GREATEST(200 - i, 1) * interval '1 hour'),
+        now_ts - (GREATEST(100 - i/2, 1) * interval '1 hour'),
+        now_ts - ((i % 12 + 1) * interval '1 hour'),
         now_ts + ((i % 24 + 1) * interval '1 hour')
       );
 
@@ -1280,8 +1280,8 @@ BEGIN
           user_ids[1 + ((u_idx + j) % user_ct)],
           true, true,
           CASE WHEN j < 3 THEN 1 + (j % 3) ELSE 0 END,
-          now_ts - ((200 - i) * interval '1 hour') + (j || ' hours')::interval,
-          now_ts - ((i % 6) * interval '1 hour')
+          LEAST(now_ts - (GREATEST(200 - i, 1) * interval '1 hour') + (j || ' hours')::interval, now_ts - interval '10 minutes'),
+          now_ts - ((i % 6 + 1) * interval '1 hour')
         )
         ON CONFLICT DO NOTHING;
       END LOOP;
@@ -1302,8 +1302,8 @@ BEGIN
           (i + j * 2) % 8,
           (i + j * 3) % 12,
           (i + j) % 6,
-          now_ts - ((200 - i) * interval '1 hour') + ((j * 2) || ' hours')::interval,
-          now_ts - ((200 - i) * interval '1 hour') + ((j * 2) || ' hours')::interval
+          LEAST(now_ts - (GREATEST(200 - i, 1) * interval '1 hour') + ((j * 2) || ' hours')::interval, now_ts - interval '10 minutes'),
+          LEAST(now_ts - (GREATEST(200 - i, 1) * interval '1 hour') + ((j * 2) || ' hours')::interval, now_ts - interval '10 minutes')
         );
       END LOOP;
 
@@ -1315,7 +1315,7 @@ BEGIN
           n_id,
           user_ids[1 + ((u_idx + j + 2) % user_ct)],
           nook_rxn_types[1 + ((i + j) % 3)],
-          now_ts - ((200 - i) * interval '1 hour') + ((j * 3) || ' hours')::interval
+          LEAST(now_ts - (GREATEST(200 - i, 1) * interval '1 hour') + ((j * 3) || ' hours')::interval, now_ts - interval '10 minutes')
         )
         ON CONFLICT DO NOTHING;
       END LOOP;
@@ -1364,8 +1364,8 @@ BEGIN
           10 + (k % 100),               -- views_count
           false,
           false,
-          now_ts - ((user_ct * 10 - k) || ' hours')::interval,
-          now_ts - ((user_ct * 5 - k/2) || ' hours')::interval
+          now_ts - (GREATEST(user_ct * 10 - k, 1) || ' hours')::interval,
+          now_ts - (GREATEST(user_ct * 5 - k/2, 1) || ' hours')::interval
         );
 
         -- Add 2-4 feed likes from different users
@@ -1376,7 +1376,7 @@ BEGIN
             user_ids[1 + ((u_idx + i) % user_ct)],
             'post',
             fp_id,
-            now_ts - ((user_ct * 10 - k) || ' hours')::interval + (i || ' hours')::interval
+            LEAST(now_ts - (GREATEST(user_ct * 10 - k, 1) || ' hours')::interval + (i || ' hours')::interval, now_ts - interval '10 minutes')
           )
           ON CONFLICT DO NOTHING;
         END LOOP;
@@ -1393,8 +1393,8 @@ BEGIN
             fp_id,
             comment_templates[1 + ((u_idx + i + j) % 30)],
             i % 3 = 0,
-            now_ts - ((user_ct * 10 - k) || ' hours')::interval + ((i * 2) || ' hours')::interval,
-            now_ts - ((user_ct * 10 - k) || ' hours')::interval + ((i * 2) || ' hours')::interval
+            LEAST(now_ts - (GREATEST(user_ct * 10 - k, 1) || ' hours')::interval + ((i * 2) || ' hours')::interval, now_ts - interval '10 minutes'),
+            LEAST(now_ts - (GREATEST(user_ct * 10 - k, 1) || ' hours')::interval + ((i * 2) || ' hours')::interval, now_ts - interval '10 minutes')
           );
         END LOOP;
 
