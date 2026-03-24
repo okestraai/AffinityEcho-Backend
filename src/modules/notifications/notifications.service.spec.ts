@@ -43,7 +43,7 @@ describe('NotificationsService', () => {
 
     mockChatGateway = { emitToUser: jest.fn() };
     const mockConfig = createMockConfigService();
-    const mockPushService = { sendPushNotification: jest.fn(), sendPushToUser: jest.fn() };
+    const mockPushService = { sendPushNotification: jest.fn(), sendToUser: jest.fn() };
 
     service = new NotificationsService(
       mockConfig as any,
