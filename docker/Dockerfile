@@ -29,6 +29,7 @@ COPY prisma.config.ts ./
 RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/common/templates ./templates
 
 RUN chown -R appuser:appgroup /app
 USER appuser

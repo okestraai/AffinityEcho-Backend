@@ -7,6 +7,7 @@ import { QueryNotificationDto } from './dto/query-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { NOTIFICATION_FIELDS, NOTIFICATION_FIELDS_WITH_ACTOR } from '../../common/constants/select-fields';
 import { ChatGateway } from '../messaging/services/websocket.gateway';
+import { PushNotificationService } from './push-notification.service';
 
 @Injectable()
 export class NotificationsService {
@@ -35,6 +36,7 @@ export class NotificationsService {
   constructor(
     private config: ConfigService,
     @Inject(forwardRef(() => ChatGateway)) private chatGateway: ChatGateway,
+    private pushService: PushNotificationService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -115,6 +117,18 @@ export class NotificationsService {
       } catch (wsError) {
         this.logger.warn('WebSocket push failed (user may be offline):', wsError);
       }
+
+      // Send push notification to mobile devices (fire-and-forget)
+      this.pushService
+        .sendToUser(dto.user_id, dto.title, dto.message, {
+          type: dto.type,
+          action_url: dto.action_url,
+          reference_id: dto.reference_id,
+          notification_id: data.id,
+        })
+        .catch((pushError) => {
+          this.logger.warn('Push notification failed:', pushError);
+        });
 
       return {
         success: true,

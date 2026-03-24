@@ -79,11 +79,11 @@ export class EmailService {
     data: any,
   ): Promise<string> {
     try {
-      const templatePath = path.join(
-        __dirname,
-        '../../templates/emails',
-        `${templateName}.ejs`,
-      );
+      // Try src/ first (dev), then templates/ (production Docker)
+      const devPath = path.resolve(process.cwd(), 'src', 'common', 'templates', 'emails', `${templateName}.ejs`);
+      const prodPath = path.resolve(process.cwd(), 'templates', 'emails', `${templateName}.ejs`);
+      const fs = await import('fs');
+      const templatePath = fs.existsSync(devPath) ? devPath : prodPath;
 
       return await ejs.renderFile(templatePath, data);
     } catch (error: any) {
@@ -204,8 +204,18 @@ export class EmailService {
     username: string,
     referralId: string,
   ) {
-    logger.info(`Connection request email to ${email} for user ${username}`);
-    // TODO: Implement template and send logic
+    const viewUrl = `${this.config.get('FRONTEND_URL')}/referrals/${referralId}`;
+
+    return this.sendEmail(
+      email,
+      'New Connection Request - Affinity Echo',
+      'connection-request',
+      {
+        username,
+        viewUrl,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
+    );
   }
 
   async sendConnectionAcceptedEmail(
@@ -213,8 +223,18 @@ export class EmailService {
     username: string,
     referralId: string,
   ) {
-    logger.info(`Connection accepted email to ${email} for user ${username}`);
-    // TODO: Implement template and send logic
+    const viewUrl = `${this.config.get('FRONTEND_URL')}/referrals/${referralId}`;
+
+    return this.sendEmail(
+      email,
+      'Connection Accepted - Affinity Echo',
+      'connection-accepted',
+      {
+        username,
+        viewUrl,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
+    );
   }
 
   async sendIdentityRevealRequestEmail(
@@ -222,10 +242,18 @@ export class EmailService {
     username: string,
     connectionId: string,
   ) {
-    logger.info(
-      `Identity reveal request email to ${email} for connection ${connectionId}`,
+    const viewUrl = `${this.config.get('FRONTEND_URL')}/connections/${connectionId}`;
+
+    return this.sendEmail(
+      email,
+      'Identity Reveal Request - Affinity Echo',
+      'identity-reveal-request',
+      {
+        username,
+        viewUrl,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
     );
-    // TODO: Implement template and send logic
   }
 
   async sendIdentityRevealAcceptedEmail(
@@ -233,9 +261,17 @@ export class EmailService {
     username: string,
     connectionId: string,
   ) {
-    logger.info(
-      `Identity reveal accepted email to ${email} for connection ${connectionId}`,
+    const viewUrl = `${this.config.get('FRONTEND_URL')}/connections/${connectionId}`;
+
+    return this.sendEmail(
+      email,
+      'Identity Revealed - Affinity Echo',
+      'identity-reveal-accepted',
+      {
+        username,
+        viewUrl,
+        supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
     );
-    // TODO: Implement template and send logic
   }
 }
