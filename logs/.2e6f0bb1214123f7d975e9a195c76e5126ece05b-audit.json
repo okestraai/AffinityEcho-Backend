@@ -6,41 +6,6 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.2e6f0bb1214123f7d975e9a195c76e5126ece05b-audit.json",
     "files": [
         {
-            "date": 1771168792300,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-15.log",
-            "hash": "95686e4db5f1a6874211593cdd879175cd64148c613e86af9ea0c45c370ee608"
-        },
-        {
-            "date": 1771196742928,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-16.log",
-            "hash": "454471d6577efd5a347272e04bfcd7cf56086d32a4b0b1948ecf701a1c68c480"
-        },
-        {
-            "date": 1771283016041,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-17.log",
-            "hash": "b8200bf57904cf126a3e912d888cbff42a905486a8c8929ea605b34a23599d1a"
-        },
-        {
-            "date": 1771371395712,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-18.log",
-            "hash": "e5dbb7354ba27ff6366cecec31cf8873c04e6af4e618bf014f2aab6df896266f"
-        },
-        {
-            "date": 1771528308662,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-19.log",
-            "hash": "12e5aa4d403de5be772ea42a0fb53d0d288ad131a150d825d75ad94628d974e4"
-        },
-        {
-            "date": 1771550735431,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-20.log",
-            "hash": "47c85d26848d605f5a70ac16469b9a3c4ecec37fc2a104a6f8e8a45f6cabb00b"
-        },
-        {
-            "date": 1771673623619,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-21.log",
-            "hash": "9bfcff6e386a01dd53051c7ed2d62196c7993ab6b80d043df4d0c7e6baccbdd7"
-        },
-        {
             "date": 1771880162664,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-23.log",
             "hash": "e78f878c4f16729db623f9c6a38bdf92a03f49dd55b31ac9d28f6a9a4fed0d6a"
@@ -89,6 +54,11 @@
             "date": 1773675630386,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-16.log",
             "hash": "a1d94b1f685eaedad068e9c9aef094bc5e366c894152b1ad00d8a6c90b2b452c"
+        },
+        {
+            "date": 1774382752052,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-24.log",
+            "hash": "8cad8914e17974ad621a94ca0ed5248009e4a4a222dd27f2320dd4fa7f0f95b6"
         }
     ],
     "hashType": "sha256"

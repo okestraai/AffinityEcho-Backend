@@ -861,7 +861,9 @@ export class UserProfileService {
         if (type === 'posts') totalCount = count || 0;
 
         activities.push(
-          ...(posts || []).map((p: any) => ({
+          ...(posts || []).map((p: any) => {
+            const userProfile = Array.isArray(p.user_profile) ? p.user_profile[0] : p.user_profile;
+            return {
             type: 'post',
             content_type: 'post',
             id: p.id,
@@ -869,12 +871,12 @@ export class UserProfileService {
             user_id: p.user_id,
             is_anonymous: p.is_anonymous,
             author: {
-              display_name: p.user_profile?.username || 'Unknown',
-              username: p.user_profile?.username || 'Unknown',
-              bio: p.user_profile?.bio || null,
-              avatar: p.user_profile?.avatar || 'User',
-              first_name_encrypted: p.user_profile?.first_name_encrypted,
-              last_name_encrypted: p.user_profile?.last_name_encrypted,
+              display_name: userProfile?.username || 'Unknown',
+              username: userProfile?.username || 'Unknown',
+              bio: userProfile?.bio || null,
+              avatar: userProfile?.avatar || 'User',
+              first_name_encrypted: userProfile?.first_name_encrypted,
+              last_name_encrypted: userProfile?.last_name_encrypted,
             },
             content: {
               text: p.content,
@@ -888,7 +890,8 @@ export class UserProfileService {
               views: p.views_count,
             },
             created_at: p.created_at,
-          })),
+          };
+          }),
         );
       }
 
@@ -915,6 +918,7 @@ export class UserProfileService {
               (t.reaction_validated_count || 0) +
               (t.reaction_inspired_count || 0) +
               (t.reaction_heard_count || 0);
+            const userProfile = Array.isArray(t.user_profile) ? t.user_profile[0] : t.user_profile;
 
             return {
               type: 'topic',
@@ -924,12 +928,12 @@ export class UserProfileService {
               user_id: t.user_id,
               is_anonymous: t.is_anonymous,
               author: {
-                display_name: t.user_profile?.username || 'Unknown',
-                username: t.user_profile?.username || 'Unknown',
-                bio: t.user_profile?.bio || null,
-                avatar: t.user_profile?.avatar || 'User',
-                first_name_encrypted: t.user_profile?.first_name_encrypted,
-                last_name_encrypted: t.user_profile?.last_name_encrypted,
+                display_name: userProfile?.username || 'Unknown',
+                username: userProfile?.username || 'Unknown',
+                bio: userProfile?.bio || null,
+                avatar: userProfile?.avatar || 'User',
+                first_name_encrypted: userProfile?.first_name_encrypted,
+                last_name_encrypted: userProfile?.last_name_encrypted,
               },
               content: {
                 title: t.title,
@@ -1188,7 +1192,9 @@ export class UserProfileService {
       const isOwnContent = item.user_id === userId;
       const isRevealed = revealedIds.has(item.user_id);
 
-      if (!item.is_anonymous && (isOwnContent || isRevealed)) {
+      // Own content: always show real name (even if anonymous — it's YOUR activity page)
+      // Revealed non-anonymous: show real name
+      if (isOwnContent || (!item.is_anonymous && isRevealed)) {
         const realName = this.identityReveal.decryptRealName(
           item.author.first_name_encrypted,
           item.author.last_name_encrypted,

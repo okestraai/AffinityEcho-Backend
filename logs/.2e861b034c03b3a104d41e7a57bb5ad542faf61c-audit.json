@@ -6,41 +6,6 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.2e861b034c03b3a104d41e7a57bb5ad542faf61c-audit.json",
     "files": [
         {
-            "date": 1771168792187,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-15.log",
-            "hash": "119de0acef437777ddef880720b316b026200e8ed9501919d98ca2db08bc927f"
-        },
-        {
-            "date": 1771196742923,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-16.log",
-            "hash": "5436728ce6d22f77d403cf586e47d6d3b3cfa701739ca907ddcec2b7e8ef441f"
-        },
-        {
-            "date": 1771283016020,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-17.log",
-            "hash": "d5ec7fc77b5c0e38ed960308290f8ee5e3e72b2c3f8298f8f03f9a13c5eaba8c"
-        },
-        {
-            "date": 1771371395682,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-18.log",
-            "hash": "9d804b7cad0dd3b725306df2a0ec70174b21621974c65a1edd88bc6deb3c596c"
-        },
-        {
-            "date": 1771528308643,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-19.log",
-            "hash": "2ba2ba354397d9f025440e194a1ad6b550806b502c6ca5e93efdb9cce659497a"
-        },
-        {
-            "date": 1771550735416,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-20.log",
-            "hash": "43d2541b3e1a4b8c4c269073c9ca5f25de47cde62ac5703c3cf26145581b88dc"
-        },
-        {
-            "date": 1771673623582,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-21.log",
-            "hash": "d1d918805d5af26b8d1fff836ef61eeb60c03b3c815bbd1d62482eed3ac27afe"
-        },
-        {
             "date": 1771880162652,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-02-23.log",
             "hash": "fb3f41c71c7dc5965ad41d6b5b04d767e45fd7a6a00045409e2e173e4829ff78"
@@ -89,6 +54,11 @@
             "date": 1773675630280,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-03-16.log",
             "hash": "51ea46a5f80f3b332da44b06bd720c4776cf7fc8a7fe1f224cc9023fa2eaeb45"
+        },
+        {
+            "date": 1774382752033,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\exceptions-2026-03-24.log",
+            "hash": "4fa8d54e06ab4c96d15fe17a21c19b55cd097ea23f5cbee1cfa4c8344fe821eb"
         }
     ],
     "hashType": "sha256"
