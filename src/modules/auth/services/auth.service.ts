@@ -505,12 +505,16 @@ export class AuthService {
     }
 
     try {
-      const redirectTo = `${this.config.get('FRONTEND_URL')}/auth/callback`;
+      const backendUrl = this.config.get('BACKEND_URL') || `http://localhost:${this.config.get('PORT') || 3000}`;
+      const redirectTo = `${backendUrl}/api/v1/auth/google/callback`;
       const { data, error } = await this.supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
           redirectTo,
           skipBrowserRedirect: false,
+          queryParams: {
+            response_type: 'code',
+          },
         },
       });
 
@@ -541,6 +545,44 @@ export class AuthService {
       throw new InternalServerErrorException(
         'Social login service temporarily unavailable',
       );
+    }
+  }
+
+  // GOOGLE OAUTH CALLBACK
+  async googleCallback(code: string): Promise<{ redirectUrl: string }> {
+    const frontendUrl = this.config.get('FRONTEND_URL');
+
+    if (!code) {
+      return { redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent('Missing authorization code')}` };
+    }
+
+    try {
+      const { data: sessionData, error } = await this.supabase.auth.exchangeCodeForSession(code);
+
+      if (error || !sessionData.session) {
+        logger.error('Google OAuth code exchange failed', { error: error?.message });
+        return { redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent(error?.message || 'Session exchange failed')}` };
+      }
+
+      const { user: supabaseUser } = sessionData;
+
+      // Ensure user profile exists (creates if new Google signup)
+      await this.ensureProfileExists(supabaseUser.id, supabaseUser.email || '');
+
+      // Generate app tokens (same as regular login) so all guards work consistently
+      const tokens = this.generateTokens(supabaseUser.id, supabaseUser.email || '');
+
+      // Redirect to frontend with tokens
+      const params = new URLSearchParams({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+
+      logger.info('Google OAuth callback successful', { userId: supabaseUser.id });
+      return { redirectUrl: `${frontendUrl}/auth/callback?${params.toString()}` };
+    } catch (err) {
+      logger.error('Google OAuth callback error', { error: err });
+      return { redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent('Authentication failed')}` };
     }
   }
 

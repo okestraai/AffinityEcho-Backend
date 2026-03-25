@@ -30,6 +30,8 @@ export class JwtAuthGuard {
         logger.warn('Token validation failed', {
           message: error.message,
           status: error.status,
+          tokenPrefix: token?.substring(0, 20) + '...',
+          tokenLength: token?.length,
         });
         throw new UnauthorizedException(
           `Token validation failed: ${error.message}`,

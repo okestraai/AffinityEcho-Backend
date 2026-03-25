@@ -5,10 +5,13 @@ import {
   Body,
   Get,
   Param,
+  Query,
+  Res,
   UseGuards,
   Put,
   Patch,
 } from '@nestjs/common';
+import { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -125,6 +128,20 @@ export class AuthController {
   }
 
   @Public()
+  @Get('google/callback')
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description: 'Handles the redirect from Supabase after Google auth. Exchanges code for session and redirects to frontend with tokens.',
+  })
+  async googleCallback(
+    @Query('code') code: string,
+    @Res() res: Response,
+  ) {
+    const { redirectUrl } = await this.authService.googleCallback(code);
+    return res.redirect(redirectUrl);
+  }
+
+  @Public()
   @Post('forgot-password')
   @ApiOperation({
     summary: 'Request password reset',
@@ -171,7 +188,7 @@ export class AuthController {
   }
 
   @Public()
-  @Post('refresh')
+  @Post('refresh-token')
   @ApiOperation({
     summary: 'Refresh access token',
     description:

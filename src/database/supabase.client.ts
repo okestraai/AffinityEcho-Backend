@@ -11,7 +11,11 @@ export const supabaseClient = (config: ConfigService) => {
     );
   }
 
-  return createClient(url, anonKey);
+  return createClient(url, anonKey, {
+    auth: {
+      flowType: 'pkce',
+    },
+  });
 };
 
 export const supabaseAdmin = (config: ConfigService) => {
