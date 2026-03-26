@@ -497,16 +497,25 @@ export class AuthService {
   }
 
   // SOCIAL LOGIN (GOOGLE / FACEBOOK)
-  async socialLogin(provider: 'google' | 'facebook') {
+  async socialLogin(provider: 'google' | 'facebook', redirectUri?: string) {
     logger.info('Social login initiated', { provider });
 
     if (!['google', 'facebook'].includes(provider)) {
       throw new BadRequestException('Unsupported social login provider');
     }
 
+    // Validate redirect_uri if provided (only allow our deep link scheme)
+    if (redirectUri && !redirectUri.startsWith('affinityecho://')) {
+      throw new BadRequestException('Invalid redirect_uri');
+    }
+
     try {
       const backendUrl = this.config.get('BACKEND_URL') || `http://localhost:${this.config.get('PORT') || 3000}`;
-      const redirectTo = `${backendUrl}/api/v1/auth/google/callback`;
+      let redirectTo = `${backendUrl}/api/v1/auth/google/callback`;
+      // Pass mobile redirect_uri through the callback URL so it survives the OAuth round-trip
+      if (redirectUri) {
+        redirectTo += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
+      }
       const { data, error } = await this.supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
@@ -549,11 +558,17 @@ export class AuthService {
   }
 
   // GOOGLE OAUTH CALLBACK
-  async googleCallback(code: string): Promise<{ redirectUrl: string }> {
+  async googleCallback(code: string, redirectUri?: string): Promise<{ redirectUrl: string }> {
     const frontendUrl = this.config.get('FRONTEND_URL');
 
+    // Validate redirect_uri if provided (only allow our deep link scheme)
+    if (redirectUri && !redirectUri.startsWith('affinityecho://')) {
+      redirectUri = undefined;
+    }
+
     if (!code) {
-      return { redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent('Missing authorization code')}` };
+      const errorTarget = redirectUri || `${frontendUrl}/auth/callback`;
+      return { redirectUrl: `${errorTarget}?error=${encodeURIComponent('Missing authorization code')}` };
     }
 
     try {
@@ -572,17 +587,20 @@ export class AuthService {
       // Generate app tokens (same as regular login) so all guards work consistently
       const tokens = this.generateTokens(supabaseUser.id, supabaseUser.email || '');
 
-      // Redirect to frontend with tokens
+      // Redirect with tokens — mobile deep link or web callback
       const params = new URLSearchParams({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
       });
 
-      logger.info('Google OAuth callback successful', { userId: supabaseUser.id });
-      return { redirectUrl: `${frontendUrl}/auth/callback?${params.toString()}` };
+      const target = redirectUri || `${frontendUrl}/auth/callback`;
+
+      logger.info('Google OAuth callback successful', { userId: supabaseUser.id, mobile: !!redirectUri });
+      return { redirectUrl: `${target}?${params.toString()}` };
     } catch (err) {
       logger.error('Google OAuth callback error', { error: err });
-      return { redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent('Authentication failed')}` };
+      const errorTarget = redirectUri || `${frontendUrl}/auth/callback`;
+      return { redirectUrl: `${errorTarget}?error=${encodeURIComponent('Authentication failed')}` };
     }
   }
 

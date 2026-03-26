@@ -123,8 +123,11 @@ export class AuthController {
     status: 400,
     description: 'Unsupported provider',
   })
-  async socialLogin(@Param('provider') provider: 'google' | 'facebook') {
-    return this.authService.socialLogin(provider);
+  async socialLogin(
+    @Param('provider') provider: 'google' | 'facebook',
+    @Query('redirect_uri') redirectUri?: string,
+  ) {
+    return this.authService.socialLogin(provider, redirectUri);
   }
 
   @Public()
@@ -135,9 +138,10 @@ export class AuthController {
   })
   async googleCallback(
     @Query('code') code: string,
+    @Query('redirect_uri') redirectUri: string,
     @Res() res: Response,
   ) {
-    const { redirectUrl } = await this.authService.googleCallback(code);
+    const { redirectUrl } = await this.authService.googleCallback(code, redirectUri);
     return res.redirect(redirectUrl);
   }
 
