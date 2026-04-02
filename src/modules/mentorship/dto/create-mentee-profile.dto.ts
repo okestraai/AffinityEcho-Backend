@@ -29,15 +29,6 @@ export class CreateMenteeProfileDto {
   @IsNumber()
   yearsExperience!: number;
 
-  @ApiProperty({ description: 'Career level' })
-  @IsString()
-  @IsNotEmpty()
-  careerLevel!: string;
-
-  @ApiProperty({ description: 'Company' })
-  @IsString()
-  company!: string;
-
   // MENTEE-SPECIFIC FIELDS (Required)
   @ApiProperty({ description: 'Mentee goals' })
   @IsString()
@@ -94,11 +85,6 @@ export class CreateMenteeProfileDto {
   @IsArray()
   @IsString({ each: true })
   menteeLanguages?: string[];
-
-  @ApiPropertyOptional({ description: 'Affinity tags' })
-  @IsOptional()
-  @IsString()
-  affinityTags?: string;
 
   @ApiPropertyOptional({ description: 'Skills', type: [String] })
   @IsOptional()

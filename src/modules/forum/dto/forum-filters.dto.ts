@@ -74,6 +74,14 @@ export class ForumFiltersDto {
   category?: string;
 
   @ApiPropertyOptional({
+    description: 'Filter topics by hashtag (matched against tags array)',
+    example: 'career-growth',
+  })
+  @IsOptional()
+  @IsString()
+  hashtag?: string;
+
+  @ApiPropertyOptional({
     description: 'Page number for pagination',
     example: 1,
     default: 1,

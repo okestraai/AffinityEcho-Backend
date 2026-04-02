@@ -18,6 +18,12 @@ export class QueryNotificationDto {
   @IsString()
   type?: string;
 
+  @ApiProperty({ example: false, required: false, description: 'Group notifications by type and reference' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  grouped?: boolean;
+
   @ApiProperty({ example: 1, default: 1, required: false })
   @IsOptional()
   @Type(() => Number)

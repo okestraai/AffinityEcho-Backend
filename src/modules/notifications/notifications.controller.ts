@@ -67,6 +67,22 @@ export class NotificationsController {
     return this.notificationsService.markAllAsRead(userId);
   }
 
+  @Post('mark-group-read')
+  @ApiOperation({ summary: 'Mark a group of notifications as read by IDs' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        notification_ids: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['notification_ids'],
+    },
+  })
+  async markGroupAsRead(@Req() req: any, @Body() body: { notification_ids: string[] }) {
+    const userId = req.user.sub;
+    return this.notificationsService.markGroupAsRead(userId, body.notification_ids);
+  }
+
   // Static delete route MUST come before parameterized :id route
   @Delete('read/all')
   @ApiOperation({ summary: 'Delete all read notifications' })

@@ -23,6 +23,7 @@ export const USER_PROFILE_OWN_FIELDS = `
   mentee_availability, mentee_urgency, mentee_topic, mentored_style,
   mentee_languages, mentee_profile_created_at,
   communication_method, badges,
+  is_company_verified, company_verified_at,
   created_at, updated_at, last_active_at,
   is_deleted, is_deactivated
 `;
@@ -38,7 +39,7 @@ export const USER_PROFILE_MENTORSHIP_FIELDS = `
   mentee_bio, mentee_goals, mentee_interests, mentee_industries,
   mentee_availability, mentee_urgency, mentee_topic, mentored_style,
   mentee_languages, mentee_profile_created_at,
-  communication_method, updated_at
+  communication_method, is_company_verified, updated_at
 `;
 
 /** Notification fields (no PII in notifications table). */

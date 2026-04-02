@@ -187,6 +187,39 @@ export class ConversationsController {
     );
   }
 
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete conversation',
+    description: 'Soft delete a conversation for the current user only',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Conversation ID',
+  })
+  @UseGuards(ChatParticipantGuard)
+  @ApiResponse({
+    status: 200,
+    description: 'Conversation deleted successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          conversation_id: 'uuid',
+          deleted_at: '2024-01-01T12:00:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  async deleteConversation(
+    @CurrentUser() user: any,
+    @Param('id') conversationId: string,
+  ) {
+    return this.conversationsService.deleteConversation(user.userId, conversationId);
+  }
+
   @Delete(':id/clear')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

@@ -8,6 +8,7 @@ import {
   Query,
   Param,
   Put,
+  Delete,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -31,6 +32,8 @@ import {
   GetMessagesDto,
   ChatType,
   TypingStatusDto,
+  DeleteMessageDto,
+  EditMessageDto,
 } from '../dto/messaging.dto';
 
 @ApiTags('Messaging')
@@ -133,6 +136,85 @@ export class MessagingController {
     @Query('chat_type') chatType?: ChatType,
   ) {
     return this.messagingService.getUnreadCount(user.userId, chatType);
+  }
+
+  @Delete('messages/:messageId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete a message',
+    description: 'Soft delete a message for the current user only',
+  })
+  @ApiParam({
+    name: 'messageId',
+    description: 'Message ID to delete',
+  })
+  @ApiBody({ type: DeleteMessageDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Message deleted successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          message_id: 'uuid',
+          conversation_id: 'uuid',
+          deleted_at: '2024-01-01T12:00:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Message not found' })
+  async deleteMessage(
+    @CurrentUser() user: any,
+    @Param('messageId') messageId: string,
+    @Body() dto: DeleteMessageDto,
+  ) {
+    return this.messagingService.deleteMessage(
+      user.userId,
+      messageId,
+      dto.conversation_id,
+    );
+  }
+
+  @Put('messages/:messageId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Edit a message',
+    description: 'Edit a text message in a conversation (only own messages)',
+  })
+  @ApiParam({
+    name: 'messageId',
+    description: 'Message ID to edit',
+  })
+  @ApiBody({ type: EditMessageDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Message edited successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          message_id: 'uuid',
+          conversation_id: 'uuid',
+          content_encrypted: 'encrypted_content',
+          is_edited: true,
+          edited_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-01T12:00:00Z',
+          recipient_id: 'uuid',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Message not found' })
+  async editMessage(
+    @CurrentUser() user: any,
+    @Param('messageId') messageId: string,
+    @Body() dto: EditMessageDto,
+  ) {
+    return this.messagingService.editMessage(user.userId, messageId, dto);
   }
 
   // NEW: Typing status endpoints

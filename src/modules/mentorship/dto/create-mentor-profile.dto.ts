@@ -29,15 +29,6 @@ export class CreateMentorProfileDto {
   @IsNumber()
   yearsExperience!: number;
 
-  @ApiProperty({ description: 'Career level' })
-  @IsString()
-  @IsNotEmpty()
-  careerLevel!: string;
-
-  @ApiProperty({ description: 'Company' })
-  @IsString()
-  company!: string;
-
   // MENTOR-SPECIFIC FIELDS (Optional)
   @ApiProperty({ description: 'User is willing to mentor' })
   @IsBoolean()
@@ -93,11 +84,6 @@ export class CreateMentorProfileDto {
   @IsArray()
   @IsString({ each: true })
   languages?: string[];
-
-  @ApiPropertyOptional({ description: 'Affinity tags' })
-  @IsOptional()
-  @IsString()
-  affinityTags?: string;
 
   @ApiProperty({ description: 'Skills', type: [String], required: false })
   @IsOptional()

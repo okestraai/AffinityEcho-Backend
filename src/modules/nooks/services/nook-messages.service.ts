@@ -53,7 +53,8 @@ export class NookMessagesService {
         username,
         avatar,
         first_name_encrypted,
-        last_name_encrypted
+        last_name_encrypted,
+        is_company_verified
       )
     `;
 
@@ -154,12 +155,21 @@ export class NookMessagesService {
           avatar: user?.avatar || 'User',
           username: user?.username || 'Unknown',
           display_name: displayName,
+          is_company_verified: user?.is_company_verified || false,
         },
         replies: (message.replies || []).map(processMessage),
       };
     };
 
     const processedMessages = rootMessages.map(processMessage);
+
+    // Sort: user's messages first (newest first), then others (newest first)
+    processedMessages.sort((a: any, b: any) => {
+      const aIsMine = a.is_mine ? 0 : 1;
+      const bIsMine = b.is_mine ? 0 : 1;
+      if (aIsMine !== bIsMine) return aIsMine - bIsMine;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
     return {
       success: true,

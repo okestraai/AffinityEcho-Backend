@@ -13,7 +13,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import logger from '../../../common/utils/logger.util';
-import { SendMessageDto } from '../dto/messaging.dto';
+import { SendMessageDto, EditMessageDto } from '../dto/messaging.dto';
 
 @Injectable()
 export class MessagingService {
@@ -296,6 +296,181 @@ export class MessagingService {
     } catch (error) {
       logger.error('Failed to get unread count', { error, userId });
       throw new BadRequestException('Failed to get unread count');
+    }
+  }
+
+  async deleteMessage(userId: string, messageId: string, conversationId: string) {
+    try {
+      logger.info('Deleting message', { userId, messageId, conversationId });
+
+      // Verify conversation exists and user is participant
+      const { data: conversation, error: convError } = await this.admin
+        .from('conversations')
+        .select('id, user1_id, user2_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      if (
+        conversation.user1_id !== userId &&
+        conversation.user2_id !== userId
+      ) {
+        throw new ForbiddenException(
+          'Not authorized to delete messages in this conversation',
+        );
+      }
+
+      // Verify message exists in this conversation
+      const { data: message, error: msgError } = await this.admin
+        .from('messages')
+        .select('id, conversation_id')
+        .eq('id', messageId)
+        .eq('conversation_id', conversationId)
+        .single();
+
+      if (msgError || !message) {
+        throw new NotFoundException('Message not found');
+      }
+
+      // Determine if user is user1 or user2 and set the appropriate flag
+      const deleteField =
+        conversation.user1_id === userId
+          ? 'deleted_by_user1'
+          : 'deleted_by_user2';
+
+      const { error: updateError } = await this.admin
+        .from('messages')
+        .update({ [deleteField]: true })
+        .eq('id', messageId);
+
+      if (updateError) throw updateError;
+
+      logger.info('Successfully deleted message', {
+        messageId,
+        conversationId,
+        userId,
+        deleteField,
+      });
+
+      return {
+        success: true,
+        data: {
+          message_id: messageId,
+          conversation_id: conversationId,
+          deleted_at: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+      logger.error('Failed to delete message', { error, userId, messageId });
+      throw new BadRequestException('Failed to delete message');
+    }
+  }
+
+  async editMessage(userId: string, messageId: string, dto: EditMessageDto) {
+    try {
+      logger.info('Editing message', { userId, messageId, conversationId: dto.conversation_id });
+
+      // Verify conversation exists and user is participant and conversation is active
+      const { data: conversation, error: convError } = await this.admin
+        .from('conversations')
+        .select('id, user1_id, user2_id, is_active')
+        .eq('id', dto.conversation_id)
+        .single();
+
+      if (convError || !conversation) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      if (
+        conversation.user1_id !== userId &&
+        conversation.user2_id !== userId
+      ) {
+        throw new ForbiddenException(
+          'Not authorized to edit messages in this conversation',
+        );
+      }
+
+      if (!conversation.is_active) {
+        throw new BadRequestException('Conversation is not active');
+      }
+
+      // Verify message exists and belongs to this conversation
+      const { data: message, error: msgError } = await this.admin
+        .from('messages')
+        .select('id, conversation_id, sender_id, content_type')
+        .eq('id', messageId)
+        .eq('conversation_id', dto.conversation_id)
+        .single();
+
+      if (msgError || !message) {
+        throw new NotFoundException('Message not found');
+      }
+
+      // Only the sender can edit their own message
+      if (message.sender_id !== userId) {
+        throw new ForbiddenException('You can only edit your own messages');
+      }
+
+      // Only allow editing text messages
+      if (message.content_type !== 'text') {
+        throw new BadRequestException('Only text messages can be edited');
+      }
+
+      // Update the message
+      const now = new Date().toISOString();
+      const { data: updatedMessage, error: updateError } = await this.admin
+        .from('messages')
+        .update({
+          content_encrypted: dto.content_encrypted,
+          is_edited: true,
+          edited_at: now,
+          updated_at: now,
+        })
+        .eq('id', messageId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // Get recipient ID
+      const recipientId =
+        conversation.user1_id === userId
+          ? conversation.user2_id
+          : conversation.user1_id;
+
+      logger.info('Successfully edited message', { messageId, conversationId: dto.conversation_id, userId });
+
+      return {
+        success: true,
+        data: {
+          message_id: updatedMessage.id,
+          conversation_id: updatedMessage.conversation_id,
+          content_encrypted: updatedMessage.content_encrypted,
+          is_edited: updatedMessage.is_edited,
+          edited_at: updatedMessage.edited_at,
+          updated_at: updatedMessage.updated_at,
+          recipient_id: recipientId,
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      logger.error('Failed to edit message', { error, userId, messageId });
+      throw new BadRequestException('Failed to edit message');
     }
   }
 

@@ -172,7 +172,8 @@ export class FeedEngagementService {
           user_profile:user_id(
             id,
             username,
-            avatar
+            avatar,
+            is_company_verified
           )
         `,
         )
@@ -264,7 +265,8 @@ export class FeedEngagementService {
             username,
             avatar,
             first_name_encrypted,
-            last_name_encrypted
+            last_name_encrypted,
+            is_company_verified
           )
         `,
         )
@@ -327,6 +329,14 @@ export class FeedEngagementService {
       const paginatedRoots = topLevelIds
         .map((id: string) => commentMap.get(id))
         .filter(Boolean);
+
+      // Sort: user's comments first (newest first), then others (newest first)
+      paginatedRoots.sort((a: any, b: any) => {
+        const aIsMine = a.user_id === userId ? 0 : 1;
+        const bIsMine = b.user_id === userId ? 0 : 1;
+        if (aIsMine !== bIsMine) return aIsMine - bIsMine;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
 
       return {
         success: true,
@@ -499,19 +509,19 @@ export class FeedEngagementService {
         postIds.length > 0
           ? this.admin
               .from('feed_posts')
-              .select(`*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`)
+              .select(`*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`)
               .in('id', postIds)
           : Promise.resolve({ data: [] }),
         topicIds.length > 0
           ? this.admin
               .from('forum_topics')
-              .select(`*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted), forum:forums(id, name)`)
+              .select(`*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified), forum:forums(id, name)`)
               .in('id', topicIds)
           : Promise.resolve({ data: [] }),
         nookIds.length > 0
           ? this.admin
               .from('nooks')
-              .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`)
+              .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`)
               .in('id', nookIds)
               .gt('expires_at', new Date().toISOString())
           : Promise.resolve({ data: [] }),
@@ -609,6 +619,7 @@ export class FeedEngagementService {
               avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || 'User',
               first_name_encrypted: post.user_profile?.first_name_encrypted,
               last_name_encrypted: post.user_profile?.last_name_encrypted,
+              is_company_verified: post.is_anonymous ? false : post.user_profile?.is_company_verified || false,
             },
             is_anonymous: post.is_anonymous,
             reaction_counts: postReactionCounts.get(bmKey) || { heard: 0, validated: 0, inspired: 0 },
@@ -640,6 +651,7 @@ export class FeedEngagementService {
               avatar: topic.is_anonymous ? '👤' : topic.user_profile?.avatar || 'User',
               first_name_encrypted: topic.user_profile?.first_name_encrypted,
               last_name_encrypted: topic.user_profile?.last_name_encrypted,
+              is_company_verified: topic.is_anonymous ? false : topic.user_profile?.is_company_verified || false,
             },
             is_anonymous: topic.is_anonymous,
             reaction_counts: {
@@ -685,6 +697,7 @@ export class FeedEngagementService {
               avatar: userProfile?.avatar || 'User',
               first_name_encrypted: userProfile?.first_name_encrypted,
               last_name_encrypted: userProfile?.last_name_encrypted,
+              is_company_verified: userProfile?.is_company_verified || false,
             },
             is_anonymous: false,
             expires_at: nook.expires_at,
@@ -960,6 +973,7 @@ export class FeedEngagementService {
           ? 'Anonymous User'
           : comment.user_profile?.username || 'Unknown',
         avatar: comment.is_anonymous ? '👤' : comment.user_profile?.avatar || 'User',
+        is_company_verified: comment.is_anonymous ? false : comment.user_profile?.is_company_verified || false,
       },
       replies: [] as any[],
     };

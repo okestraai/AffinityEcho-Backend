@@ -78,21 +78,6 @@ export class UpdateMentorProfileDto {
   @IsNumber()
   yearsExperience?: number;
 
-  @ApiPropertyOptional({ description: 'Career level' })
-  @IsOptional()
-  @IsString()
-  careerLevel?: string;
-
-  @ApiPropertyOptional({ description: 'Company' })
-  @IsOptional()
-  @IsString()
-  company?: string;
-
-  @ApiPropertyOptional({ description: 'Affinity tags', required: false })
-  @IsOptional()
-  @IsString()
-  affinityTags?: string; // This is correct for encrypted string
-
   @ApiPropertyOptional({ description: 'Skills', type: [String] })
   @IsOptional()
   @IsArray()

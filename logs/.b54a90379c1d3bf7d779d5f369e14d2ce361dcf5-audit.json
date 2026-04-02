@@ -6,16 +6,6 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.b54a90379c1d3bf7d779d5f369e14d2ce361dcf5-audit.json",
     "files": [
         {
-            "date": 1773435744671,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-03-13.log",
-            "hash": "97c01a545d9d7333a0fb3e6bf3c0031eae875f42c6c3239a8581ee8f907df501"
-        },
-        {
-            "date": 1773675630187,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-03-16.log",
-            "hash": "47dcf1569295c3b6bba4b0389c7898021ef92dadfb51094880f26fcc86446fd3"
-        },
-        {
             "date": 1774382751890,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-03-24.log",
             "hash": "252e6e68d99755c6f190ad63d1f9f262e5a4023d5d22fb5f3422fe32d14c99cf"
@@ -24,6 +14,21 @@
             "date": 1774394992152,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-03-25.log",
             "hash": "3460ffe81be6845c3d8b9f553135af70d638121718c2a80069cb01c5872ffdbd"
+        },
+        {
+            "date": 1774620681836,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-03-27.log",
+            "hash": "1d155987c631af23ff308f82bf46fa95ec7d16543ae49c8313479f76d0461789"
+        },
+        {
+            "date": 1775079752051,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-04-01.log",
+            "hash": "a868811151d3e259fe7efe3fe1814c7530bf8da0440771e3786309a02c70a501"
+        },
+        {
+            "date": 1775084408410,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\application-2026-04-02.log",
+            "hash": "85914629b85637be157ceef5f0838236725cba356d4693facaf4d4f1410816f5"
         }
     ],
     "hashType": "sha256"

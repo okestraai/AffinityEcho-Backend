@@ -102,6 +102,23 @@ export class GetMessagesDto {
   before?: string;
 }
 
+export class DeleteMessageDto {
+  @ApiProperty({ description: 'Conversation ID the message belongs to' })
+  @IsUUID()
+  conversation_id!: string;
+}
+
+export class EditMessageDto {
+  @ApiProperty({ description: 'Conversation ID the message belongs to' })
+  @IsUUID()
+  conversation_id!: string;
+
+  @ApiProperty({ description: 'New encrypted message content' })
+  @IsString()
+  @IsNotEmpty()
+  content_encrypted!: string;
+}
+
 export class TypingStatusDto {
   @ApiProperty({
     description: 'Conversation ID',

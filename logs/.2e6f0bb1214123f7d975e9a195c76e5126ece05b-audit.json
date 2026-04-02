@@ -6,16 +6,6 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.2e6f0bb1214123f7d975e9a195c76e5126ece05b-audit.json",
     "files": [
         {
-            "date": 1771880162664,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-23.log",
-            "hash": "e78f878c4f16729db623f9c6a38bdf92a03f49dd55b31ac9d28f6a9a4fed0d6a"
-        },
-        {
-            "date": 1771889554283,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-02-24.log",
-            "hash": "63ab130f49423a1b96ed2c7ca8789566c7a3818dfe31d82df28832b39699d155"
-        },
-        {
             "date": 1772623862744,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-04.log",
             "hash": "1bd4bf8e56a40bff19228d176adc199b0bcca742a02f4484bb0a93608ea70521"
@@ -64,6 +54,21 @@
             "date": 1774394992268,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-25.log",
             "hash": "e7a798428869b8245648bc6532400b54ee994c10a602098f467f44b3222ef513"
+        },
+        {
+            "date": 1774620681979,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-27.log",
+            "hash": "790d1ec37d43a08ed13d8ad3fe29b4f6e1ae0b5a813da628297e5baddb3db2ef"
+        },
+        {
+            "date": 1775079752215,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-04-01.log",
+            "hash": "6d6dc2b35ae27da54d65862f8b2f0547d7aaed6f6935dafee45670cf7dd494f7"
+        },
+        {
+            "date": 1775094732035,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-04-02.log",
+            "hash": "7fc7343a4767f66bd16d23d9f6de42579ff14d091c6cab9b398cdcadecbaaa87"
         }
     ],
     "hashType": "sha256"

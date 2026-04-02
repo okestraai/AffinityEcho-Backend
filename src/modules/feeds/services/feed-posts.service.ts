@@ -49,7 +49,8 @@ export class FeedPostsService {
             id,
             username,
             avatar,
-            bio
+            bio,
+            is_company_verified
           )
         `,
         )
@@ -106,7 +107,8 @@ export class FeedPostsService {
               avatar,
               bio,
               first_name_encrypted,
-              last_name_encrypted
+              last_name_encrypted,
+              is_company_verified
             )
           `,
           )
@@ -218,7 +220,8 @@ export class FeedPostsService {
             avatar,
             bio,
             first_name_encrypted,
-            last_name_encrypted
+            last_name_encrypted,
+            is_company_verified
           )
         `,
           { count: 'exact' },
@@ -315,7 +318,8 @@ export class FeedPostsService {
             id,
             username,
             avatar,
-            bio
+            bio,
+            is_company_verified
           )
         `,
         )
@@ -573,6 +577,7 @@ export class FeedPostsService {
           : post.user_profile?.username || 'Unknown',
         bio: post.is_anonymous ? null : post.user_profile?.bio || null,
         avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || 'User',
+        is_company_verified: post.is_anonymous ? false : post.user_profile?.is_company_verified || false,
       },
     };
   }

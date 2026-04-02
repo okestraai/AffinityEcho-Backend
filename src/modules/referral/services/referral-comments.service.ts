@@ -38,7 +38,7 @@ export class ReferralCommentsService {
       const userIds = [...new Set(data.map((c) => c.user_id))];
       const { data: profiles } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar')
+        .select('id, username, avatar, is_company_verified')
         .in('id', userIds);
 
       const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);

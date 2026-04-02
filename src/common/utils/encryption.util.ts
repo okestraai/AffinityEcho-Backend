@@ -19,6 +19,10 @@ export class EncryptionUtil {
 
     this.key = Buffer.from(key, 'base64');
 
+    // Log key fingerprint (first 6 chars only) for cross-environment debugging
+    const keyFingerprint = key.substring(0, 6) + '...' + key.substring(key.length - 4);
+    console.log(`[EncryptionUtil] Key fingerprint: ${keyFingerprint}, length: ${key.length}, bytes: ${this.key.length}`);
+
     // Verify the key is exactly 32 bytes
     if (this.key.length !== 32) {
       throw new Error(

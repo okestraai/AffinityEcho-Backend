@@ -274,6 +274,73 @@ export class ChatGateway
     }
   }
 
+  /* -------------------- EDIT MESSAGE -------------------- */
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('edit_message')
+  async editMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: any,
+  ) {
+    try {
+      const user = client.data.user;
+      if (!user) {
+        this.logger.error('❌ edit_message: User not authenticated');
+        client.emit('message_error', { message: 'User not authenticated' });
+        return;
+      }
+
+      this.logger.log(`✏️ edit_message received from ${user.username}`, {
+        payload,
+        socketId: client.id,
+      });
+
+      const result = await this.messagingService.editMessage(
+        user.userId,
+        payload.messageId,
+        {
+          conversation_id: payload.conversationId || payload.conversation_id,
+          content_encrypted: payload.content_encrypted,
+        },
+      );
+
+      const room = `conversation:${result.data.conversation_id}`;
+
+      // Emit message_edited event to all participants in the conversation
+      this.server.to(room).emit('message_edited', {
+        success: true,
+        data: {
+          message_id: result.data.message_id,
+          conversation_id: result.data.conversation_id,
+          content_encrypted: result.data.content_encrypted,
+          is_edited: result.data.is_edited,
+          edited_at: result.data.edited_at,
+        },
+      });
+
+      // Confirm to sender
+      client.emit('message_edit_confirmed', {
+        success: true,
+        message_id: result.data.message_id,
+        conversation_id: result.data.conversation_id,
+        edited_at: result.data.edited_at,
+      });
+
+      this.logger.log(
+        `✅ Message edited by ${user.username} in conversation ${result.data.conversation_id}`,
+      );
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to edit message';
+      this.logger.error('❌ Error editing message:', {
+        error: error.message,
+        stack: error.stack,
+      });
+      client.emit('message_error', {
+        message: errorMessage,
+      });
+    }
+  }
+
   /* -------------------- READ RECEIPTS -------------------- */
 
   @UseGuards(WsJwtGuard)

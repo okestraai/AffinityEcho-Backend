@@ -206,7 +206,8 @@ export class FeedsService {
           bio,
           first_name_encrypted,
           last_name_encrypted,
-          has_completed_onboarding
+          has_completed_onboarding,
+          is_company_verified
         )
       `,
       )
@@ -257,6 +258,7 @@ export class FeedsService {
         avatar: post.user_profile?.avatar || 'User',
         first_name_encrypted: post.user_profile?.first_name_encrypted,
         last_name_encrypted: post.user_profile?.last_name_encrypted,
+        is_company_verified: post.user_profile?.is_company_verified || false,
       },
       content: {
         text: post.content,
@@ -310,7 +312,8 @@ export class FeedsService {
           bio,
           first_name_encrypted,
           last_name_encrypted,
-          has_completed_onboarding
+          has_completed_onboarding,
+          is_company_verified
         ),
         forum:forums(
           id,
@@ -375,6 +378,7 @@ export class FeedsService {
           avatar: topic.user_profile?.avatar || 'User',
           first_name_encrypted: topic.user_profile?.first_name_encrypted,
           last_name_encrypted: topic.user_profile?.last_name_encrypted,
+          is_company_verified: topic.user_profile?.is_company_verified || false,
         },
         content: {
           title: topic.title,
@@ -434,7 +438,8 @@ export class FeedsService {
           bio,
           first_name_encrypted,
           last_name_encrypted,
-          has_completed_onboarding
+          has_completed_onboarding,
+          is_company_verified
         )
       `,
       )
@@ -486,6 +491,7 @@ export class FeedsService {
           avatar: userProfile?.avatar || 'User',
           first_name_encrypted: userProfile?.first_name_encrypted,
           last_name_encrypted: userProfile?.last_name_encrypted,
+          is_company_verified: userProfile?.is_company_verified || false,
         },
         content: {
           title: nook.title,

@@ -80,22 +80,6 @@ export class UpdateMenteeProfileDto {
   @IsNumber()
   yearsExperience?: number;
 
-  @ApiPropertyOptional({ description: 'Career level' })
-  @IsOptional()
-  @IsString()
-  careerLevel?: string;
-
-  @ApiPropertyOptional({ description: 'Company' })
-  @IsOptional()
-  @IsString()
-  company?: string;
-
-  // Change to:
-  @ApiPropertyOptional({ description: 'Affinity tags' })
-  @IsOptional()
-  @IsString()
-  affinityTags?: string;
-
   @ApiPropertyOptional({ description: 'Skills', type: [String] })
   @IsOptional()
   @IsArray()

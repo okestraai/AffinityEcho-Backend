@@ -20,6 +20,8 @@ import { UserBlockingService } from '../services/user-blocking.service';
 import { UserResourcesService } from '../services/user-resources.service';
 import { HarassmentReportService } from '../services/harassment-report.service';
 import { FeedEngagementService } from '../../feeds/services/feed-engagement.service';
+import { CompanyVerificationService } from '../services/company-verification.service';
+import { VerifyCompanyEmailDto } from '../dto/company-verification.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
@@ -52,6 +54,7 @@ export class UserController {
     private userResourcesService: UserResourcesService,
     private harassmentReportService: HarassmentReportService,
     private feedEngagementService: FeedEngagementService,
+    private companyVerificationService: CompanyVerificationService,
   ) {}
 
   // ============ STATIC ROUTES FIRST (must come before :userId) ============
@@ -300,6 +303,23 @@ export class UserController {
   ) {
     const userId = req.user.sub;
     return this.harassmentReportService.getReportById(userId, id);
+  }
+
+  // ============ COMPANY VERIFICATION ============
+
+  @Post('verify-company-email')
+  @ApiOperation({ summary: 'Request company email verification' })
+  async requestCompanyVerification(
+    @Req() req: any,
+    @Body() dto: VerifyCompanyEmailDto,
+  ) {
+    return this.companyVerificationService.requestVerification(req.user.sub, dto.email);
+  }
+
+  @Get('company-verification-status')
+  @ApiOperation({ summary: 'Get company verification status' })
+  async getCompanyVerificationStatus(@Req() req: any) {
+    return this.companyVerificationService.getVerificationStatus(req.user.sub);
   }
 
   // ============ DYNAMIC :userId ROUTES LAST ============

@@ -37,7 +37,7 @@ export class NooksService {
     // Build query
     let supabaseQuery = this.admin
       .from('nooks')
-      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`, { count: 'exact' })
+      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`, { count: 'exact' })
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())
       .neq('creator_id', userId);
@@ -383,7 +383,7 @@ export class NooksService {
 
     const { data: nooks, error, count } = await this.admin
       .from('nooks')
-      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`, { count: 'exact' })
+      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`, { count: 'exact' })
       .eq('creator_id', userId)
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())
@@ -441,7 +441,7 @@ export class NooksService {
 
     const { data: nooks, error, count } = await this.admin
       .from('nooks')
-      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`, { count: 'exact' })
+      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`, { count: 'exact' })
       .in('id', nookIds)
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())

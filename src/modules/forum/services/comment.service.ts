@@ -592,7 +592,8 @@ export class CommentService {
             username,
             avatar,
             first_name_encrypted,
-            last_name_encrypted
+            last_name_encrypted,
+            is_company_verified
           )
         `,
         )
@@ -755,7 +756,7 @@ export class CommentService {
         helpful_count,
         supportive_count,
         user_id,
-        user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted)
+        user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
       `,
       )
       .eq('topic_id', topicId)
@@ -818,6 +819,16 @@ export class CommentService {
       await this.applyIdentityReveals(userId, allEnriched);
     }
 
+    // Sort: user's comments first (newest first), then others (newest first)
+    if (userId) {
+      rootComments.sort((a: any, b: any) => {
+        const aIsMine = a.user_id === userId ? 0 : 1;
+        const bIsMine = b.user_id === userId ? 0 : 1;
+        if (aIsMine !== bIsMine) return aIsMine - bIsMine;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+    }
+
     return rootComments;
   }
 
@@ -854,7 +865,7 @@ export class CommentService {
 
       const { data: comment } = await this.admin
         .from('forum_comments')
-        .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted)')
+        .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)')
         .eq('id', commentId)
         .single();
 
@@ -915,7 +926,7 @@ export class CommentService {
 
     const { data: comment } = await this.admin
       .from('forum_comments')
-      .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted)')
+      .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)')
       .eq('id', commentId)
       .single();
 

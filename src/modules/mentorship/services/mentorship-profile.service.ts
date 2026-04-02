@@ -49,7 +49,7 @@ export class MentorshipProfileService {
       // Check if user exists
       const { data: user, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, mentoring_as, is_active_mentee')
+        .select('id, username, mentoring_as, is_active_mentee, career_level_encrypted, company_encrypted, affinity_tags_encrypted')
         .eq('id', userId)
         .single();
 
@@ -57,15 +57,13 @@ export class MentorshipProfileService {
         throw new NotFoundException('User not found');
       }
 
-      // Build update data
+      // Build update data — careerLevel, company, affinityTags are read from the user's base profile (set during onboarding)
       const updateData: any = {
         // SHARED FIELDS (Required)
         bio: dto.bio,
         job_title: dto.jobTitle,
         location: dto.location,
         years_experience: dto.yearsExperience,
-        career_level_encrypted: dto.careerLevel,
-        company_encrypted: dto.company,
         updated_at: new Date().toISOString(),
 
         // MENTOR-SPECIFIC FIELDS
@@ -85,9 +83,6 @@ export class MentorshipProfileService {
       };
 
       // OPTIONAL SHARED FIELDS
-      if (dto.affinityTags) {
-        updateData.affinity_tags_encrypted = dto.affinityTags;
-      }
       if (dto.skills?.length) {
         updateData.skills = dto.skills;
       }
@@ -176,15 +171,9 @@ export class MentorshipProfileService {
       if (dto.location !== undefined) updateData.location = dto.location;
       if (dto.yearsExperience !== undefined)
         updateData.years_experience = dto.yearsExperience;
-      if (dto.careerLevel !== undefined)
-        updateData.career_level_encrypted = dto.careerLevel;
-      if (dto.company !== undefined) updateData.company_encrypted = dto.company;
       if (dto.skills !== undefined) updateData.skills = dto.skills;
       if (dto.linkedinUrl !== undefined)
         updateData.linkedin_url = dto.linkedinUrl;
-      if (dto.affinityTags !== undefined) {
-        updateData.affinity_tags_encrypted = dto.affinityTags;
-      }
 
       // Update user profile
       const { data: updatedProfile, error: updateError } = await this.admin
@@ -223,7 +212,7 @@ export class MentorshipProfileService {
       // Check if user exists
       const { data: user, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, mentoring_as, is_active_mentor')
+        .select('id, username, mentoring_as, is_active_mentor, career_level_encrypted, company_encrypted, affinity_tags_encrypted')
         .eq('id', userId)
         .single();
 
@@ -231,15 +220,13 @@ export class MentorshipProfileService {
         throw new NotFoundException('User not found');
       }
 
-      // Build update data
+      // Build update data — careerLevel, company, affinityTags are read from the user's base profile (set during onboarding)
       const updateData: any = {
         // SHARED FIELDS (Required)
         bio: dto.bio,
         job_title: dto.jobTitle,
         location: dto.location,
         years_experience: dto.yearsExperience,
-        career_level_encrypted: dto.careerLevel,
-        company_encrypted: dto.company,
         communication_method: dto.communicationMethod,
         updated_at: new Date().toISOString(),
 
@@ -258,9 +245,6 @@ export class MentorshipProfileService {
       };
 
       // OPTIONAL SHARED FIELDS
-      if (dto.affinityTags) {
-        updateData.affinity_tags_encrypted = dto.affinityTags;
-      }
       if (dto.skills?.length) {
         updateData.skills = dto.skills;
       }
@@ -346,15 +330,9 @@ export class MentorshipProfileService {
       if (dto.location !== undefined) updateData.location = dto.location;
       if (dto.yearsExperience !== undefined)
         updateData.years_experience = dto.yearsExperience;
-      if (dto.careerLevel !== undefined)
-        updateData.career_level_encrypted = dto.careerLevel;
-      if (dto.company !== undefined) updateData.company_encrypted = dto.company;
       if (dto.skills !== undefined) updateData.skills = dto.skills;
       if (dto.linkedinUrl !== undefined)
         updateData.linkedin_url = dto.linkedinUrl;
-      if (dto.affinityTags !== undefined) {
-        updateData.affinity_tags_encrypted = dto.affinityTags;
-      }
 
       // Update user profile
       const { data: updatedProfile, error: updateError } = await this.admin

@@ -163,6 +163,7 @@ export class ReferralService {
                   bio: profile.bio,
                   skills: profile.skills,
                   yearsExperience: profile.years_experience,
+                  is_company_verified: profile.is_company_verified || false,
                 }
               : null,
             isLiked: likedIds.has(post.id),
@@ -387,6 +388,7 @@ export class ReferralService {
                   bio: profile.bio,
                   skills: profile.skills,
                   yearsExperience: profile.years_experience,
+                  is_company_verified: profile.is_company_verified || false,
                 };
               })()
             : null,
@@ -746,7 +748,7 @@ export class ReferralService {
       const [profilesResult, interactionsResult] = await Promise.all([
         this.admin
           .from('user_profiles')
-          .select('id, username, avatar, job_title, company_encrypted, first_name_encrypted, last_name_encrypted')
+          .select('id, username, avatar, job_title, company_encrypted, first_name_encrypted, last_name_encrypted, is_company_verified')
           .in('id', userIds),
         this.getUserInteractions(userId),
       ]);
@@ -810,6 +812,7 @@ export class ReferralService {
                   avatar: profile.avatar,
                   jobTitle: profile.job_title,
                   company: this.encryption.decrypt(profile.company_encrypted),
+                  is_company_verified: profile.is_company_verified || false,
                 }
               : null,
             isLiked: likedIds.has(post.id),

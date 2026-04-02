@@ -85,6 +85,7 @@ export class ForumController {
   })
   @ApiQuery({ name: 'isGlobal', required: false, type: Boolean })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'hashtag', required: false, type: String, description: 'Filter topics by hashtag' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({
@@ -99,6 +100,7 @@ export class ForumController {
     @Query('timeFilter') timeFilter?: string,
     @Query('isGlobal') isGlobal?: string,
     @Query('category') category?: string,
+    @Query('hashtag') hashtag?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -109,6 +111,7 @@ export class ForumController {
       companyName, // Use the provided companyName from path parameter
       isGlobal: isGlobal ? isGlobal === 'true' : undefined,
       category,
+      hashtag,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 10,
     };

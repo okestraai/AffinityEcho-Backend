@@ -250,7 +250,8 @@ export class ForumService {
             user_profile:user_id(
               id,
               username,
-              avatar
+              avatar,
+              is_company_verified
             )
           )
         `,

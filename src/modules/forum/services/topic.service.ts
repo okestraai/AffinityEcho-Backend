@@ -127,7 +127,7 @@ export class TopicService {
         .select(
           `
           *,
-          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified),
           forum:forum_id(id, name, icon)
         `,
         )
@@ -178,7 +178,7 @@ export class TopicService {
     let query = this.admin.from('forum_topics').select(
       `
       *,
-      user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
+      user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified),
       forum:forum_id(id, name, icon, is_global),
       topic_reactions!topic_id(count)
     `,
@@ -203,6 +203,10 @@ export class TopicService {
 
     if (filters.companyName) {
       query = query.ilike('company_name', `%${filters.companyName}%`);
+    }
+
+    if (filters.hashtag) {
+      query = query.contains('tags', [filters.hashtag.toLowerCase()]);
     }
 
     // Sorting logic
@@ -337,11 +341,11 @@ export class TopicService {
         .select(
           `
           *,
-          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified),
           forum:forum_id(id, name, description, icon),
           forum_comments(
             id, content, created_at,
-            user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted),
+            user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified),
             helpful_count, supportive_count, parent_comment_id
           )
         `,
@@ -683,6 +687,10 @@ export class TopicService {
         query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
       }
 
+      if (filters.hashtag) {
+        query = query.contains('tags', [filters.hashtag.toLowerCase()]);
+      }
+
       if (timeFilter && timeFilter !== 'all') {
         const now = new Date();
         const timeMap = {
@@ -813,7 +821,7 @@ export class TopicService {
         reaction_inspired_count, reaction_heard_count,
         is_pinned, is_locked, created_at, updated_at,
         forum:forums(id, name),
-        user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
+        user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)
       `, { count: 'exact' })
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -877,7 +885,7 @@ export class TopicService {
         reaction_inspired_count, reaction_heard_count,
         is_pinned, is_locked, created_at, updated_at,
         forum:forums(id, name),
-        user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
+        user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)
       `, { count: 'exact' })
       .in('id', topicIds)
       .range(from, to);

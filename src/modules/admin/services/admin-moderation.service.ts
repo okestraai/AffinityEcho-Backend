@@ -119,7 +119,7 @@ export class AdminModerationService {
         if (chunk.length > 0) {
           const { data } = await this.admin
             .from('user_profiles')
-            .select('id, username, avatar')
+            .select('id, username, avatar, is_company_verified')
             .in('id', chunk);
 
           if (data) usersData.push(...data);
@@ -250,7 +250,7 @@ export class AdminModerationService {
     if (sourceAuthorId) {
       const { data: userData } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar, email')
+        .select('id, username, avatar, email, is_company_verified')
         .eq('id', sourceAuthorId)
         .maybeSingle();
       author = userData;
@@ -270,7 +270,7 @@ export class AdminModerationService {
     if (moderatorId) {
       const { data: modData } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar')
+        .select('id, username, avatar, is_company_verified')
         .eq('id', moderatorId)
         .maybeSingle();
       moderatedBy = modData;
@@ -642,7 +642,7 @@ export class AdminModerationService {
         if (chunk.length > 0) {
           const { data } = await this.admin
             .from('user_profiles')
-            .select('id, username, email, avatar')
+            .select('id, username, email, avatar, is_company_verified')
             .in('id', chunk);
 
           if (data) usersData.push(...data);

@@ -1,0 +1,3 @@
+ALTER TABLE messages ADD COLUMN is_edited BOOLEAN DEFAULT false;
+ALTER TABLE messages ADD COLUMN edited_at TIMESTAMPTZ;
+ALTER TABLE messages ADD COLUMN updated_at TIMESTAMPTZ DEFAULT now();

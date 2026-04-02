@@ -42,7 +42,7 @@ export class ConversationsService {
       // Check if user exists and get their messaging preference
       const { data: otherUser, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar, allow_messages_from')
+        .select('id, username, avatar, allow_messages_from, is_company_verified')
         .eq('id', dto.other_user_id)
         .single();
 
@@ -113,6 +113,7 @@ export class ConversationsService {
               id: otherUser.id,
               username: otherUser.username,
               avatar: otherUser.avatar,
+              is_company_verified: otherUser.is_company_verified || false,
             },
           },
         };
@@ -158,6 +159,7 @@ export class ConversationsService {
             id: otherUser.id,
             username: otherUser.username,
             avatar: otherUser.avatar,
+            is_company_verified: otherUser.is_company_verified || false,
           },
           chat_type: dto.context_type,
           context_id: dto.context_id,
@@ -214,6 +216,8 @@ export class ConversationsService {
         updated_at,
         user1_cleared_at,
         user2_cleared_at,
+        user1_deleted_at,
+        user2_deleted_at,
         user1_identity_revealed,
         user2_identity_revealed
       `,
@@ -245,8 +249,21 @@ export class ConversationsService {
         `Found ${conversations?.length || 0} conversations for user ${userId}`,
       );
 
+      // Filter out conversations soft-deleted by this user (unless new messages arrived after deletion)
+      const visibleConversations = (conversations || []).filter((conv) => {
+        const deletedAt =
+          conv.user1_id === userId
+            ? conv.user1_deleted_at
+            : conv.user2_deleted_at;
+
+        if (!deletedAt) return true; // Not deleted by this user
+
+        // If there are new messages after the deletion timestamp, show the conversation
+        return conv.last_message_at && new Date(conv.last_message_at) > new Date(deletedAt);
+      });
+
       // If no conversations, return empty array
-      if (!conversations || conversations.length === 0) {
+      if (!visibleConversations || visibleConversations.length === 0) {
         return {
           success: true,
           data: {
@@ -260,7 +277,7 @@ export class ConversationsService {
       }
 
       // Get all other user IDs first
-      const otherUserIds = conversations.map((conv) =>
+      const otherUserIds = visibleConversations.map((conv) =>
         conv.user1_id === userId ? conv.user2_id : conv.user1_id,
       );
 
@@ -272,7 +289,7 @@ export class ConversationsService {
       const { data: otherUsers, error: usersError } = await this.admin
         .from('user_profiles')
         .select(
-          'id, username, avatar, job_title, company_encrypted, mentoring_as, first_name_encrypted, last_name_encrypted',
+          'id, username, avatar, job_title, company_encrypted, mentoring_as, first_name_encrypted, last_name_encrypted, is_company_verified',
         )
         .in('id', otherUserIds);
 
@@ -297,7 +314,7 @@ export class ConversationsService {
 
       // Batch-fetch last messages, unread counts, and mentorship contexts
       // instead of querying per-conversation in a loop (eliminates 3N queries)
-      const conversationIds = conversations.map((c) => c.id);
+      const conversationIds = visibleConversations.map((c) => c.id);
 
       // Fetch last messages for ALL conversations in one query using DISTINCT ON
       // Supabase doesn't support DISTINCT ON, so we fetch recent messages and deduplicate
@@ -339,7 +356,7 @@ export class ConversationsService {
       });
 
       // Batch-fetch mentorship relationships for mentorship conversations
-      const mentorshipConvs = conversations.filter((c) => c.context_type === 'mentorship' && c.context_id);
+      const mentorshipConvs = visibleConversations.filter((c) => c.context_type === 'mentorship' && c.context_id);
       const mentorshipContextIds = mentorshipConvs.map((c) => c.context_id);
       const mentorshipMap = new Map<string, any>();
 
@@ -355,7 +372,7 @@ export class ConversationsService {
       }
 
       // Now build enhanced conversations without any per-conversation queries
-      const enhancedConversations = conversations.map((conv) => {
+      const enhancedConversations = visibleConversations.map((conv) => {
           const otherUserId =
             conv.user1_id === userId ? conv.user2_id : conv.user1_id;
 
@@ -452,6 +469,7 @@ export class ConversationsService {
               company: companyDecrypted || null,
               career_level: careerLevelDecrypted || null,
               mentoring_as: otherUser?.mentoring_as,
+              is_company_verified: otherUser?.is_company_verified || false,
             },
             last_message: lastMessage
               ? {
@@ -611,10 +629,10 @@ export class ConversationsService {
         before,
       });
 
-      // Verify conversation access and get identity reveal flags
+      // Verify conversation access and get identity reveal flags + deletion timestamps
       const { data: conversation, error: convError } = await this.admin
         .from('conversations')
-        .select('user1_id, user2_id, user1_identity_revealed, user2_identity_revealed')
+        .select('user1_id, user2_id, user1_identity_revealed, user2_identity_revealed, user1_deleted_at, user2_deleted_at')
         .eq('id', conversationId)
         .single();
 
@@ -683,22 +701,41 @@ export class ConversationsService {
         `Found ${messages?.length || 0} messages for conversation ${conversationId}`,
       );
 
+      // Filter out messages soft-deleted by this user or sent before their deletion timestamp
+      const isUser1 = conversation.user1_id === userId;
+      const userDeletedAt = isUser1
+        ? conversation.user1_deleted_at
+        : conversation.user2_deleted_at;
+      const deleteFlag = isUser1 ? 'deleted_by_user1' : 'deleted_by_user2';
+
+      const filteredMessages = (messages || []).filter((msg: any) => {
+        // Exclude individually deleted messages
+        if (msg[deleteFlag] === true) return false;
+
+        // Exclude messages created before the user's conversation deletion timestamp
+        if (userDeletedAt && new Date(msg.created_at) <= new Date(userDeletedAt)) {
+          return false;
+        }
+
+        return true;
+      });
+
       // Determine if identity is revealed (mutual — both flags set together)
       const isRevealed =
         conversation.user1_identity_revealed && conversation.user2_identity_revealed;
 
       // Batch fetch unique sender profiles
-      const senderIds = [...new Set(messages.map((msg: any) => msg.sender_id))];
+      const senderIds = [...new Set(filteredMessages.map((msg: any) => msg.sender_id))];
       const { data: senderProfiles } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar, first_name_encrypted, last_name_encrypted')
+        .select('id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified')
         .in('id', senderIds);
 
       const sendersMap = new Map<string, any>();
       (senderProfiles || []).forEach((s: any) => sendersMap.set(s.id, s));
 
       // Build enhanced messages with display_name
-      const enhancedMessages = messages.map((msg: any) => {
+      const enhancedMessages = filteredMessages.map((msg: any) => {
         const sender = sendersMap.get(msg.sender_id);
         let displayName = sender?.username || 'Anonymous';
 
@@ -722,18 +759,21 @@ export class ConversationsService {
           is_read: msg.is_read,
           read_at: msg.read_at,
           is_delivered: msg.is_delivered,
+          is_edited: msg.is_edited || false,
+          edited_at: msg.edited_at || null,
           sent_at: msg.created_at,
           sender_info: {
             username: sender?.username || 'Anonymous',
             display_name: displayName,
             avatar: sender?.avatar || '👤',
+            is_company_verified: sender?.is_company_verified || false,
           },
         };
       });
 
       // Mark messages as delivered if they were sent to this user
-      const undeliveredMessages = messages.filter(
-        (msg) => !msg.is_delivered && msg.sender_id !== userId,
+      const undeliveredMessages = filteredMessages.filter(
+        (msg: any) => !msg.is_delivered && msg.sender_id !== userId,
       );
 
       if (undeliveredMessages.length > 0) {
@@ -769,7 +809,7 @@ export class ConversationsService {
           .eq('conversation_id', conversationId);
 
         totalCount = count || 0;
-        hasMore = totalCount > messages.length;
+        hasMore = totalCount > filteredMessages.length;
       } catch (countError) {
         logger.warn('Failed to get total message count', {
           conversationId,
@@ -784,7 +824,7 @@ export class ConversationsService {
       logger.info('Successfully processed messages', {
         conversationId,
         totalCount,
-        displayedCount: messages.length,
+        displayedCount: filteredMessages.length,
         hasMore,
       });
 
@@ -835,6 +875,79 @@ export class ConversationsService {
         }
       }
       throw new BadRequestException('Failed to get messages');
+    }
+  }
+
+  async deleteConversation(userId: string, conversationId: string) {
+    try {
+      logger.info('Deleting conversation', { userId, conversationId });
+
+      const { data: conversation, error: convError } = await this.admin
+        .from('conversations')
+        .select('user1_id, user2_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      if (
+        conversation.user1_id !== userId &&
+        conversation.user2_id !== userId
+      ) {
+        throw new ForbiddenException('Not authorized');
+      }
+
+      // Set deleted_at for this user
+      const deleteField =
+        conversation.user1_id === userId
+          ? 'user1_deleted_at'
+          : 'user2_deleted_at';
+
+      const { error } = await this.admin
+        .from('conversations')
+        .update({ [deleteField]: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      if (error) throw error;
+
+      logger.info('Successfully deleted conversation', {
+        conversationId,
+        userId,
+        deleteField,
+      });
+
+      return {
+        success: true,
+        data: {
+          conversation_id: conversationId,
+          deleted_at: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      if (error instanceof Error) {
+        logger.error('Failed to delete conversation', {
+          error: error.message,
+          stack: error.stack,
+          userId,
+          conversationId,
+        });
+      } else {
+        logger.error('Failed to delete conversation', {
+          error: String(error),
+          userId,
+          conversationId,
+        });
+      }
+      throw new BadRequestException('Failed to delete conversation');
     }
   }
 

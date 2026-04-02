@@ -9,6 +9,17 @@ import { NOTIFICATION_FIELDS, NOTIFICATION_FIELDS_WITH_ACTOR } from '../../commo
 import { ChatGateway } from '../messaging/services/websocket.gateway';
 import { PushNotificationService } from './push-notification.service';
 
+const ACTION_VERBS: Record<string, string> = {
+  'forum_like': 'reacted to your topic',
+  'feed_like': 'liked your post',
+  'post_reaction': 'reacted to your post',
+  'forum_comment': 'commented on your topic',
+  'topic_comment': 'commented on your topic',
+  'feed_comment': 'commented on your post',
+  'user_followed': 'followed you',
+  'nook_reply': 'replied to your message',
+};
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -197,12 +208,108 @@ export class NotificationsService {
   }
 
   /**
+   * Build aggregated message for a group of notifications
+   */
+  private buildAggregatedMessage(group: any[]): string {
+    const actors = this.getUniqueActors(group);
+    const verb = ACTION_VERBS[group[0].type] || 'sent you a notification';
+
+    if (actors.length === 1) {
+      return `${actors[0].display_name} ${verb}`;
+    }
+    if (actors.length === 2) {
+      return `${actors[0].display_name} and ${actors[1].display_name} ${verb}`;
+    }
+    return `${actors[0].display_name} and ${actors.length - 1} others ${verb}`;
+  }
+
+  /**
+   * Extract unique actors from a group of notifications
+   */
+  private getUniqueActors(group: any[]): { display_name: string; avatar: string | null }[] {
+    const seen = new Set<string>();
+    const actors: { display_name: string; avatar: string | null }[] = [];
+
+    for (const n of group) {
+      const actor = n.actor;
+      if (!actor || seen.has(actor.id)) continue;
+      seen.add(actor.id);
+      actors.push({
+        display_name: actor.username || 'Unknown',
+        avatar: actor.avatar || null,
+      });
+    }
+
+    return actors;
+  }
+
+  /**
+   * Group notifications by type and reference_id
+   */
+  private aggregateNotifications(notifications: any[], limit: number): any[] {
+    const groups = new Map<string, any[]>();
+    const ungrouped: any[] = [];
+
+    for (const n of notifications) {
+      if (!n.reference_id) {
+        ungrouped.push(n);
+        continue;
+      }
+      const key = `${n.type}:${n.reference_id}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(n);
+    }
+
+    const result: any[] = [];
+
+    for (const [, group] of groups) {
+      if (group.length === 1) {
+        result.push({
+          ...group[0],
+          notification_ids: [group[0].id],
+        });
+      } else {
+        const latest = group[0]; // already sorted newest first
+        const uniqueActors = this.getUniqueActors(group);
+        result.push({
+          id: latest.id,
+          type: group[0].type,
+          reference_id: group[0].reference_id,
+          reference_type: group[0].reference_type,
+          title: group[0].title,
+          message: this.buildAggregatedMessage(group),
+          actors: uniqueActors,
+          count: group.length,
+          is_read: group.every((n: any) => n.is_read),
+          action_url: group[0].action_url,
+          created_at: latest.created_at,
+          notification_ids: group.map((n: any) => n.id),
+        });
+      }
+    }
+
+    for (const n of ungrouped) {
+      result.push({
+        ...n,
+        notification_ids: [n.id],
+      });
+    }
+
+    // Sort by created_at desc and slice to limit
+    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return result.slice(0, limit);
+  }
+
+  /**
    * Get user notifications with filters and pagination
    */
   async getUserNotifications(userId: string, query: QueryNotificationDto) {
     try {
-      const { is_read, type, page = 1, limit = 20 } = query;
-      const offset = (page - 1) * limit;
+      const { is_read, type, page = 1, limit = 20, grouped = false } = query;
+      const fetchLimit = grouped ? limit * 3 : limit;
+      const offset = (page - 1) * (grouped ? fetchLimit : limit);
 
       let supabaseQuery = this.admin
         .from('notifications')
@@ -224,7 +331,7 @@ export class NotificationsService {
       // Apply pagination
       const { data, error, count } = await supabaseQuery.range(
         offset,
-        offset + limit - 1,
+        offset + fetchLimit - 1,
       );
 
       if (error) {
@@ -232,10 +339,27 @@ export class NotificationsService {
         throw error;
       }
 
+      const notifications = data || [];
+
+      if (grouped) {
+        const aggregated = this.aggregateNotifications(notifications, limit);
+        return {
+          success: true,
+          message: 'Notifications retrieved successfully',
+          data: aggregated,
+          pagination: {
+            total: count || 0,
+            page,
+            limit,
+            totalPages: Math.ceil((count || 0) / limit),
+          },
+        };
+      }
+
       return {
         success: true,
         message: 'Notifications retrieved successfully',
-        data: data || [],
+        data: notifications,
         pagination: {
           total: count || 0,
           page,
@@ -245,6 +369,37 @@ export class NotificationsService {
       };
     } catch (error: any) {
       this.logger.error('Error fetching notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark a group of notifications as read by their IDs
+   */
+  async markGroupAsRead(userId: string, notificationIds: string[]) {
+    try {
+      const { data, error } = await this.admin
+        .from('notifications')
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .in('id', notificationIds)
+        .select(NOTIFICATION_FIELDS);
+
+      if (error) {
+        this.logger.error('Failed to mark group as read:', error);
+        throw error;
+      }
+
+      return {
+        success: true,
+        message: `${data?.length || 0} notifications marked as read`,
+        count: data?.length || 0,
+      };
+    } catch (error: any) {
+      this.logger.error('Error marking group as read:', error);
       throw error;
     }
   }

@@ -65,7 +65,8 @@ export class UserProfileService {
           show_location,
           show_activity,
           show_connections,
-          years_experience
+          years_experience,
+          is_company_verified
         `,
         )
         .eq('id', userId)
@@ -179,6 +180,7 @@ export class UserProfileService {
         isFollowedBy: isOwnProfile ? undefined : isFollowedBy,
         followersCount,
         followingCount,
+        is_company_verified: (profile as any).is_company_verified || false,
       };
 
       // Enforce field-level privacy for non-own profiles
