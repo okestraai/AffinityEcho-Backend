@@ -61,6 +61,7 @@ import { OkestraModule } from './modules/okestra/okestra.module';
     NotificationsModule,
     FeedsModule,
     AdminModule,
+    OkestraModule,
   ],
   controllers: [AppController],
   providers: [

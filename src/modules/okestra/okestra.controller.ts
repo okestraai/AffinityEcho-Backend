@@ -5,7 +5,8 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OkestraService } from './services/okestra.service';
 import { ContentType } from './interfaces/insights.interface';
 
@@ -23,11 +24,12 @@ export class OkestraController {
   async getInsights(
     @Param('contentType') contentType: ContentType,
     @Param('contentId') contentId: string,
+    @CurrentUser('sub') userId: string,
   ) {
     return this.okestraService.getInsights(
       contentType,
       contentId,
-      'shared',
+      userId,
     );
   }
 
@@ -38,11 +40,12 @@ export class OkestraController {
   async generateSync(
     @Param('contentType') contentType: ContentType,
     @Param('contentId') contentId: string,
+    @CurrentUser('sub') userId: string,
   ) {
     const insights = await this.okestraService.generateSync(
       contentType,
       contentId,
-      'shared',
+      userId,
     );
     return { insights, status: 'fresh' };
   }
