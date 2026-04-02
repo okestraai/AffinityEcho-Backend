@@ -47,6 +47,37 @@ export class FeedsService {
     this.admin = supabaseAdmin(config);
   }
 
+  /**
+   * Fetch user's company list (current + alumni) for company-scoped filtering.
+   */
+  private async getUserCompanyList(userId: string): Promise<string[]> {
+    const { data: profile } = await this.admin
+      .from('user_profiles')
+      .select('company_encrypted, company_alumni_encrypted')
+      .eq('id', userId)
+      .single();
+
+    if (!profile) return [];
+
+    const companies: string[] = [];
+
+    if (profile.company_encrypted) {
+      try {
+        companies.push(this.encryption.decrypt(profile.company_encrypted));
+      } catch {}
+    }
+
+    if (profile.company_alumni_encrypted && Array.isArray(profile.company_alumni_encrypted)) {
+      for (const alumniEncrypted of profile.company_alumni_encrypted) {
+        try {
+          companies.push(this.encryption.decrypt(alumniEncrypted));
+        } catch {}
+      }
+    }
+
+    return companies.filter(Boolean);
+  }
+
   async getAggregatedFeed(userId: string, queryDto: QueryFeedDto) {
     logger.info('Fetching aggregated feed', { userId, queryDto });
 
@@ -97,14 +128,20 @@ export class FeedsService {
         const fetchLimit = Math.min(limit * 3, 100);
         const contentFetchers: Promise<FeedItem[]>[] = [];
 
+        // Pre-fetch user's company list for company-scoped filtering
+        let userCompanyList: string[] | null = null;
+        if (filter === FeedFilter.COMPANY || company) {
+          userCompanyList = await this.getUserCompanyList(userId);
+        }
+
         if (contentType === ContentTypeFilter.ALL || contentType === ContentTypeFilter.POST) {
-          contentFetchers.push(this.getFeedPosts(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff));
+          contentFetchers.push(this.getFeedPosts(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff, userCompanyList));
         }
         if (contentType === ContentTypeFilter.ALL || contentType === ContentTypeFilter.TOPIC) {
-          contentFetchers.push(this.getForumTopics(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff));
+          contentFetchers.push(this.getForumTopics(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff, userCompanyList));
         }
         if (contentType === ContentTypeFilter.ALL || contentType === ContentTypeFilter.NOOK) {
-          contentFetchers.push(this.getNookMessages(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff));
+          contentFetchers.push(this.getNookMessages(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff, userCompanyList));
         }
 
         // Fetch all personalization signals in parallel with content
@@ -183,6 +220,7 @@ export class FeedsService {
     offset: number = 0,
     followingIds?: string[] | null,
     trendingCutoff?: string | null,
+    userCompanyList?: string[] | null,
   ): Promise<FeedItem[]> {
     let query = this.admin
       .from('feed_posts')
@@ -217,6 +255,13 @@ export class FeedsService {
 
     if (filter === FeedFilter.COMPANY || company) {
       query = query.eq('visibility', 'company');
+      // Filter by user's company list (current + alumni)
+      const companyList = userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
+      if (company) {
+        query = query.eq('company_name', company);
+      } else if (companyList.length > 0) {
+        query = query.in('company_name', companyList);
+      }
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('visibility', 'global');
     } else if (filter === FeedFilter.FOLLOWING) {
@@ -284,6 +329,7 @@ export class FeedsService {
     offset: number = 0,
     followingIds?: string[] | null,
     trendingCutoff?: string | null,
+    userCompanyList?: string[] | null,
   ): Promise<FeedItem[]> {
     let query = this.admin
       .from('forum_topics')
@@ -327,8 +373,11 @@ export class FeedsService {
 
     if (filter === FeedFilter.COMPANY || company) {
       query = query.eq('scope', 'company');
+      const companyList = userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
       if (company) {
         query = query.eq('company_name', company);
+      } else if (companyList.length > 0) {
+        query = query.in('company_name', companyList);
       }
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('scope', 'global');
@@ -412,6 +461,7 @@ export class FeedsService {
     offset: number = 0,
     followingIds?: string[] | null,
     trendingCutoff?: string | null,
+    userCompanyList?: string[] | null,
   ): Promise<FeedItem[]> {
     const now = new Date().toISOString();
 
@@ -450,6 +500,12 @@ export class FeedsService {
 
     if (filter === FeedFilter.COMPANY || company) {
       query = query.eq('scope', 'company');
+      const companyList = userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
+      if (company) {
+        query = query.eq('company_name', company);
+      } else if (companyList.length > 0) {
+        query = query.in('company_name', companyList);
+      }
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('scope', 'global');
     } else if (filter === FeedFilter.FOLLOWING) {

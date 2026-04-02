@@ -54,6 +54,37 @@ export class TopicService {
     this.admin = supabaseAdmin(config);
   }
 
+  /**
+   * Fetch user's company list (current + alumni) for company-scoped filtering.
+   */
+  private async getUserCompanyList(userId: string): Promise<string[]> {
+    const { data: profile } = await this.admin
+      .from('user_profiles')
+      .select('company_encrypted, company_alumni_encrypted')
+      .eq('id', userId)
+      .single();
+
+    if (!profile) return [];
+
+    const companies: string[] = [];
+
+    if (profile.company_encrypted) {
+      try {
+        companies.push(this.encryption.decrypt(profile.company_encrypted));
+      } catch {}
+    }
+
+    if (profile.company_alumni_encrypted && Array.isArray(profile.company_alumni_encrypted)) {
+      for (const alumniEncrypted of profile.company_alumni_encrypted) {
+        try {
+          companies.push(this.encryption.decrypt(alumniEncrypted));
+        } catch {}
+      }
+    }
+
+    return companies.filter(Boolean);
+  }
+
   // Fixed: fallback MUST return Promise<void> by executing the query
   private async safeRpc(
     rpcName: string,
@@ -202,7 +233,16 @@ export class TopicService {
     }
 
     if (filters.companyName) {
+      // If a specific company name is provided, use it directly
       query = query.ilike('company_name', `%${filters.companyName}%`);
+    } else if (userId) {
+      // For logged-in users without a specific company filter,
+      // expand company-scoped topics to include alumni companies
+      const userCompanyList = await this.getUserCompanyList(userId);
+      if (userCompanyList.length > 0) {
+        // Show global topics OR topics from user's companies (current + alumni)
+        query = query.or(`scope.eq.global,company_name.in.(${userCompanyList.map(c => `"${c}"`).join(',')})`);
+      }
     }
 
     if (filters.hashtag) {
@@ -622,13 +662,20 @@ export class TopicService {
 
       const skip = (page - 1) * limit;
 
+      // Get user's company list (current + alumni) for expanded filtering
+      const userCompanyList = await this.getUserCompanyList(userId);
+      const companyNames = companyName
+        ? [companyName]
+        : userCompanyList;
+
       // Get relevant forum IDs
+      const companyFilter = companyNames.length > 0
+        ? `,company_name.in.(${companyNames.map(c => `"${c}"`).join(',')})`
+        : '';
       let forumQuery = this.admin
         .from('forums')
         .select('id')
-        .or(
-          `is_global.eq.true${companyName ? `,company_name.eq.${companyName}` : ''}`,
-        );
+        .or(`is_global.eq.true${companyFilter}`);
 
       if (category) {
         forumQuery = forumQuery.eq('category', category);

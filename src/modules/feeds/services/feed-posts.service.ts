@@ -33,15 +33,34 @@ export class FeedPostsService {
     logger.info('Creating feed post', { userId });
 
     try {
+      const insertData: any = {
+        user_id: userId,
+        content: dto.content,
+        visibility: dto.visibility || 'global',
+        is_anonymous: dto.isAnonymous || false,
+        tags: dto.tags || [],
+      };
+
+      // Stamp company_name on company-scoped posts
+      if (insertData.visibility === 'company') {
+        const { data: userProfile } = await this.admin
+          .from('user_profiles')
+          .select('company_encrypted')
+          .eq('id', userId)
+          .single();
+
+        if (userProfile?.company_encrypted) {
+          try {
+            insertData.company_name = this.encryption.decrypt(userProfile.company_encrypted);
+          } catch (e) {
+            logger.warn('Failed to decrypt company for post stamp', { userId });
+          }
+        }
+      }
+
       const { data: post, error } = await this.admin
         .from('feed_posts')
-        .insert({
-          user_id: userId,
-          content: dto.content,
-          visibility: dto.visibility || 'global',
-          is_anonymous: dto.isAnonymous || false,
-          tags: dto.tags || [],
-        })
+        .insert(insertData)
         .select(
           `
           *,

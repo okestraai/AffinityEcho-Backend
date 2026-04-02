@@ -10,6 +10,7 @@ import { NookQueryDto } from '../dto/nook-query.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { RedisService } from '../../../common/services/redis.service';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class NooksService {
     private config: ConfigService,
     private redis: RedisService,
     private identityReveal: IdentityRevealUtil,
+    private encryption: EncryptionUtil,
     private okestraService: OkestraService,
   ) {
     this.admin = supabaseAdmin(config);
@@ -109,15 +111,32 @@ export class NooksService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
+    const insertData: any = {
+      ...createNookDto,
+      creator_id: userId,
+      expires_at: expiresAt.toISOString(),
+    };
+
+    // Stamp company_name on company-scoped nooks
+    if (createNookDto.scope === 'company') {
+      const { data: userProfile } = await this.admin
+        .from('user_profiles')
+        .select('company_encrypted')
+        .eq('id', userId)
+        .single();
+
+      if (userProfile?.company_encrypted) {
+        try {
+          insertData.company_name = this.encryption.decrypt(userProfile.company_encrypted);
+        } catch (e) {
+          // Skip stamping if decryption fails
+        }
+      }
+    }
+
     const { data: nook, error } = await this.admin
       .from('nooks')
-      .insert([
-        {
-          ...createNookDto,
-          creator_id: userId,
-          expires_at: expiresAt.toISOString(),
-        },
-      ])
+      .insert([insertData])
       .select(
         `
         id,

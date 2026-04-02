@@ -12,6 +12,7 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { FeedsModule } from '../feeds/feeds.module';
 import { CompanyVerificationController } from './controllers/company-verification.controller';
 import { CompanyVerificationService } from './services/company-verification.service';
+import { UnifiedProfileService } from './services/unified-profile.service';
 import { EmailService } from '../../common/utils/email/email.service';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 
@@ -27,6 +28,7 @@ import { EncryptionUtil } from '../../common/utils/encryption.util';
     UserResourcesService,
     HarassmentReportService,
     CompanyVerificationService,
+    UnifiedProfileService,
     EmailService,
     EncryptionUtil,
   ],

@@ -15,6 +15,7 @@ export const USER_PROFILE_OWN_FIELDS = `
   mentorship_sessions_completed, successful_referrals,
   company_type, race_encrypted, gender_encrypted,
   career_level_encrypted, company_encrypted, affinity_tags_encrypted,
+  company_alumni_encrypted,
   is_active_mentor, is_active_mentee, mentoring_as,
   mentor_bio, mentor_expertise, mentor_industries, mentor_availability,
   mentor_response_time, mentor_style, mentor_languages, mentor_hourly_rate,

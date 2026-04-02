@@ -21,7 +21,9 @@ import { UserResourcesService } from '../services/user-resources.service';
 import { HarassmentReportService } from '../services/harassment-report.service';
 import { FeedEngagementService } from '../../feeds/services/feed-engagement.service';
 import { CompanyVerificationService } from '../services/company-verification.service';
+import { UnifiedProfileService } from '../services/unified-profile.service';
 import { VerifyCompanyEmailDto } from '../dto/company-verification.dto';
+import { UnifiedProfileEditDto } from '../dto/unified-profile-edit.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
@@ -55,6 +57,7 @@ export class UserController {
     private harassmentReportService: HarassmentReportService,
     private feedEngagementService: FeedEngagementService,
     private companyVerificationService: CompanyVerificationService,
+    private unifiedProfileService: UnifiedProfileService,
   ) {}
 
   // ============ STATIC ROUTES FIRST (must come before :userId) ============
@@ -303,6 +306,20 @@ export class UserController {
   ) {
     const userId = req.user.sub;
     return this.harassmentReportService.getReportById(userId, id);
+  }
+
+  // ============ UNIFIED PROFILE EDITING ============
+
+  @Get('profile/edit')
+  @ApiOperation({ summary: 'Get all editable profile data' })
+  async getEditableProfile(@Req() req: any) {
+    return this.unifiedProfileService.getEditableProfile(req.user.sub);
+  }
+
+  @Put('profile/edit')
+  @ApiOperation({ summary: 'Update profile fields' })
+  async updateEditableProfile(@Req() req: any, @Body() dto: UnifiedProfileEditDto) {
+    return this.unifiedProfileService.updateProfile(req.user.sub, dto);
   }
 
   // ============ COMPANY VERIFICATION ============
