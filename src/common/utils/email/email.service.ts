@@ -118,7 +118,7 @@ export class EmailService {
       const html = await this.renderTemplate(template, data);
 
       const mailOptions = {
-        from: `"Affinity Echo" <${this.config.get('FROM_EMAIL') || 'noreply@affinityecho.com'}>`,
+        from: `"AffinityEcho" <${this.config.get('FROM_EMAIL') || 'noreply@affinityecho.com'}>`,
         to,
         subject,
         html,
@@ -139,7 +139,7 @@ export class EmailService {
   }
 
   async sendOtpEmail(email: string, otp: string, username: string) {
-    return this.sendEmail(email, 'Verify Your Account - Affinity Echo', 'otp', {
+    return this.sendEmail(email, 'Verify Your Account - AffinityEcho', 'otp', {
       username,
       otp,
       supportEmail: this.config.get('SUPPORT_EMAIL'),
@@ -151,7 +151,7 @@ export class EmailService {
 
     return this.sendEmail(
       email,
-      'Reset Your Password - Affinity Echo',
+      'Reset Your Password - AffinityEcho',
       'reset-password',
       {
         username,
@@ -162,7 +162,7 @@ export class EmailService {
   }
 
   async sendWelcomeEmail(email: string, username: string) {
-    return this.sendEmail(email, 'Welcome to Affinity Echo!', 'welcome', {
+    return this.sendEmail(email, 'Welcome to AffinityEcho!', 'welcome', {
       username,
       loginUrl: `${this.config.get('FRONTEND_URL')}/login`,
       supportEmail: this.config.get('SUPPORT_EMAIL'),
@@ -176,7 +176,7 @@ export class EmailService {
   ) {
     return this.sendEmail(
       email,
-      'Reset Your Password - Affinity Echo',
+      'Reset Your Password - AffinityEcho',
       'password-reset-otp',
       {
         username,
@@ -189,7 +189,7 @@ export class EmailService {
   async sendPasswordResetConfirmation(email: string, username: string) {
     return this.sendEmail(
       email,
-      'Password Reset Successful - Affinity Echo',
+      'Password Reset Successful - AffinityEcho',
       'password-reset-confirmation',
       {
         username,
@@ -208,7 +208,7 @@ export class EmailService {
 
     return this.sendEmail(
       email,
-      'New Connection Request - Affinity Echo',
+      'New Connection Request - AffinityEcho',
       'connection-request',
       {
         username,
@@ -227,7 +227,7 @@ export class EmailService {
 
     return this.sendEmail(
       email,
-      'Connection Accepted - Affinity Echo',
+      'Connection Accepted - AffinityEcho',
       'connection-accepted',
       {
         username,
@@ -246,7 +246,7 @@ export class EmailService {
 
     return this.sendEmail(
       email,
-      'Identity Reveal Request - Affinity Echo',
+      'Identity Reveal Request - AffinityEcho',
       'identity-reveal-request',
       {
         username,
@@ -265,12 +265,34 @@ export class EmailService {
 
     return this.sendEmail(
       email,
-      'Identity Revealed - Affinity Echo',
+      'Identity Revealed - AffinityEcho',
       'identity-reveal-accepted',
       {
         username,
         viewUrl,
         supportEmail: this.config.get('SUPPORT_EMAIL'),
+      },
+    );
+  }
+
+  async sendCompanyVerificationEmail(
+    email: string,
+    username: string,
+    company: string,
+    verificationToken: string,
+  ) {
+    const backendUrl = this.config.get('BACKEND_URL');
+    const verificationUrl = `${backendUrl}/api/v1/user/verify-company/${verificationToken}`;
+
+    return this.sendEmail(
+      email,
+      'Verify Your Company Email - AffinityEcho',
+      'company-verification',
+      {
+        username,
+        company,
+        verificationUrl,
+        supportEmail: this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
       },
     );
   }

@@ -147,10 +147,6 @@ export class CompanyVerificationService {
         );
       }
 
-      // Send verification email
-      const backendUrl = this.config.get<string>('BACKEND_URL');
-      const verificationUrl = `${backendUrl}/api/v1/user/verify-company/${token}`;
-
       // Fetch username for email
       const { data: userData } = await this.admin
         .from('user_profiles')
@@ -158,16 +154,12 @@ export class CompanyVerificationService {
         .eq('id', userId)
         .single();
 
-      await this.emailService.sendEmail(
+      // Send verification email through the email service
+      await this.emailService.sendCompanyVerificationEmail(
         email,
-        'Verify Your Company - Affinity Echo',
-        'company-verification',
-        {
-          username: userData?.username || 'User',
-          company: companyName,
-          verificationUrl,
-          expiresIn: '24 hours',
-        },
+        userData?.username || 'User',
+        companyName,
+        token,
       );
 
       return {
