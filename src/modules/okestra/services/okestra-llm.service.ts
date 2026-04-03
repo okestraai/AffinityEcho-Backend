@@ -6,21 +6,87 @@ import {
   OkestraInsightsResult,
 } from '../interfaces/insights.interface';
 
-// Compact system prompt — optimized for speed with quantized 8B model
-const OKESTRA_SYSTEM_PROMPT = `You are Okestra, an AI for Affinity Echo—an anonymous professional networking platform for underrepresented tech professionals. Analyze threads and return actionable JSON insights.
+const OKESTRA_SYSTEM_PROMPT = `You are Okestra, an AI assistant for Affinity Echo—an anonymous-first professional networking platform serving underrepresented communities in tech. Analyze discussion threads and generate actionable insights for career challenges, workplace dynamics, and professional growth.
 
-Users are anonymous by default. Forums have topics+comments; Nooks are temporary ephemeral discussions. userType "primary"=topic author, "secondary"=engager.
+## PLATFORM CONTEXT
 
-RULES:
-- keyThemes: 1-2 word discussion topics (what people discuss, NOT actions). 3-5 themes.
-- Sentiment: "Positive" (supportive/constructive even on hard topics), "Neutral" (balanced/mixed), "Negative" (frustration/hopelessness). Thread about bias with supportive replies = Positive.
-- actionItems: Direct second-person imperatives. Rationales are YOUR insights—NEVER reference commenters, the discussion, or comment IDs. nextSteps: 2-3 concrete steps. Confidence: High=safe, Med=tradeoffs, Low=risky.
-- For primary users: synthesize clear actions with timelines. For secondary: name specific contributions they can make.
-- safetyFlags: only if PII, SELF_HARM, HARASSMENT, THREAT, or CRISIS detected.
-- Never quote >12 verbatim words. Protect anonymity. Max 3 action items.
+Affinity Echo serves professionals facing underrepresentation, bias, limited networks, and isolation. Features: anonymous Forums, Nooks (temporary ephemeral discussions), Mentorship, Referrals, and encrypted Messaging. All interactions start anonymous—users control identity reveal.
 
-Return ONLY this JSON, nothing else:
-{"tldr":"1-2 sentences","overallSentiment":"Positive|Neutral|Negative","keyThemes":["Theme"],"themes":[{"name":"Theme","sentiment":"Positive|Neutral|Negative","supportingCommentIds":["c_001"]}],"actionItems":[{"action":"3-6 words","rationale":"2 sentences, your insight only","nextSteps":["Step"],"confidence":"Low|Med|High","category":"category"}],"safetyFlags":[]}`;
+## DATA
+
+- **Forums**: Topics with title, content, author, reactions (seen/validated/inspired/heard), tags. Comments with helpful/supportive reactions. Scope: local (company) or global.
+- **Nooks**: Temporary spaces with urgency (high/medium/low), temperature (hot/warm/cool), messages, expiration dates. Scope: global or company.
+- **User context**: userType = "primary" (topic author) or "secondary" (engager via comments/reactions).
+
+## TASK
+
+Analyze the thread and generate: (1) concise summary, (2) key themes from discussion content, (3) consensus and disagreements, (4) unresolved open questions, (5) actionable suggestions tailored to userType.
+
+## KEY THEMES
+
+Extract from DISCUSSION CONTENT, not suggested actions. Themes = what people are talking about.
+- 1 word preferred, 2 words max (e.g., "Isolation", "Recognition", "Career Growth")
+- Must reflect discussion topics (e.g., "Bias", "Burnout"), NOT actions (e.g., "Documentation", "Escalation")
+- Identify 3-5 themes with sentiment and supporting comment IDs
+
+## SENTIMENT
+
+Use ONLY: "Positive", "Neutral", "Negative"
+
+- **Positive**: Supportive, encouraging, constructive problem-solving, solidarity—even when discussing challenges
+- **Neutral**: Informational, balanced, exploratory, mixed emotions
+- **Negative**: Frustration, discouragement, venting without constructive element, hopelessness
+
+Key: Topic negativity ≠ sentiment negativity. A thread about bias can have Positive sentiment if responses are supportive. Advice-giving is Positive/Neutral even if the situation is bad.
+
+- **overallSentiment**: Dominant tone of the entire thread
+- **themes[].sentiment**: Tone for that specific topic (can differ from overall)
+
+## ACTION ITEMS
+
+Write as direct second-person imperatives. Rationales must be direct AI insights—NEVER reference commenters, posters, participants, the discussion, or comment IDs (c_001 etc.).
+
+**Format:**
+- "action": Short imperative title (3-6 words)
+- "rationale": 2-3 sentences explaining WHY this helps. Direct insight only. No "commenters suggested...", "the thread shows...", "based on the discussion...".
+- "nextSteps": 2-3 concrete steps with specifics (timelines, deliverables where helpful)
+
+**For PRIMARY users (topic authors):**
+- Synthesize into clear actions with concrete next steps and timelines ("before your next 1:1", "within 48 hours")
+- Acknowledge power dynamics, risks of escalation, and protective measures
+- Include both majority and minority viewpoints
+
+**For SECONDARY users (engagers):**
+- Identify what specific perspective, experience, or question they can contribute
+- Name exactly what to share or ask—never meta-advice like "consider contributing"
+
+**Confidence**: High = broadly supported, low risk. Med = has tradeoffs or context-dependent. Low = speculative or high-risk.
+
+## SAFETY
+
+Flag if detected: PII, SELF_HARM, HARASSMENT, THREAT, CRISIS
+
+## PRIVACY
+
+- Never quote >12 verbatim words from any comment
+- Never suggest identity reveal unless in trusted connections context
+- Paraphrase and synthesize; protect anonymity
+
+## DOMAIN GUIDANCE
+
+- **Promotion**: "Vague feedback" often signals bias; suggest documentation, sponsorship (not just mentorship), skip-levels
+- **Bias/Microaggressions**: Validate patterns; include protective strategies alongside confrontation; acknowledge risks of speaking up; build alliances before escalating
+- **Job Search/Referrals**: Leverage platform referral marketplace; emphasize credibility-building
+- **Mentorship**: Distinguish mentorship (advice) from sponsorship (advocacy); suggest specific asks
+- **Workplace Culture**: "Culture fit" may mask bias; exit planning is valid; document for legal purposes
+
+## OUTPUT SCHEMA
+
+Return ONLY valid JSON. No markdown, no commentary.
+
+{"tldr":"1-2 sentence summary","overallSentiment":"Positive|Neutral|Negative","keyThemes":["TopicWord","DiscussionTopic"],"themes":[{"name":"TopicWord","sentiment":"Positive|Neutral|Negative","supportingCommentIds":["c_001"]}],"actionItems":[{"action":"3-6 word imperative","rationale":"Direct AI insight, no references to commenters or comment IDs","nextSteps":["Step 1","Step 2"],"confidence":"Low|Med|High","category":"Category"}],"safetyFlags":[]}
+
+Return ONLY the JSON object.`;
 
 @Injectable()
 export class OkestraLlmService {
@@ -60,6 +126,12 @@ export class OkestraLlmService {
       topic,
       comments,
       userId || 'anonymous',
+    );
+
+    this.logger.log(
+      `Generating insights for ${contentType}:${contentId} — ` +
+        `topic="${topic.title}", comments=${comments.length}, ` +
+        `userType=${threadPayload.userContext.userType}`,
     );
 
     // Call vLLM directly (OpenAI-compatible /v1/chat/completions)
@@ -128,7 +200,7 @@ export class OkestraLlmService {
   }
 
   private async fetchTopicData(topicId: string) {
-    const { data: topicData } = await this.admin
+    const { data: topicData, error: topicError } = await this.admin
       .from('forum_topics')
       .select(
         'id, title, content, tags, user_id, is_anonymous, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, comments_count, user_profiles(username)',
@@ -136,14 +208,27 @@ export class OkestraLlmService {
       .eq('id', topicId)
       .single();
 
-    const { data: commentsData } = await this.admin
+    if (topicError) {
+      this.logger.error(
+        `Failed to fetch topic ${topicId}: ${topicError.message}`,
+      );
+    }
+
+    const { data: commentsData, error: commentsError } = await this.admin
       .from('forum_comments')
       .select(
-        'id, content, user_id, reaction_helpful_count, reaction_supportive_count, user_profiles(username)',
+        'id, content, user_id, helpful_count, supportive_count, user_profiles(username)',
       )
       .eq('topic_id', topicId)
+      .eq('is_removed', false)
       .order('created_at', { ascending: true })
       .limit(100);
+
+    if (commentsError) {
+      this.logger.error(
+        `Failed to fetch comments for topic ${topicId}: ${commentsError.message}`,
+      );
+    }
 
     const topic = {
       title: topicData?.title || '',
@@ -161,15 +246,19 @@ export class OkestraLlmService {
       authorUsername:
         (c.user_profiles as any)?.username || 'Anonymous',
       reactions:
-        (c.reaction_helpful_count || 0) +
-        (c.reaction_supportive_count || 0),
+        (c.helpful_count || 0) +
+        (c.supportive_count || 0),
     }));
+
+    this.logger.debug(
+      `Fetched topic "${topic.title}" with ${comments.length} comments`,
+    );
 
     return { topic, comments };
   }
 
   private async fetchNookData(nookId: string) {
-    const { data: nookData } = await this.admin
+    const { data: nookData, error: nookError } = await this.admin
       .from('nooks')
       .select(
         'id, title, description, hashtags, creator_id, urgency, temperature',
@@ -177,7 +266,13 @@ export class OkestraLlmService {
       .eq('id', nookId)
       .single();
 
-    const { data: messagesData } = await this.admin
+    if (nookError) {
+      this.logger.error(
+        `Failed to fetch nook ${nookId}: ${nookError.message}`,
+      );
+    }
+
+    const { data: messagesData, error: messagesError } = await this.admin
       .from('nook_messages')
       .select(
         'id, content, user_id, heard_count, validated_count, helpful_count, inspired_count',
@@ -186,6 +281,12 @@ export class OkestraLlmService {
       .eq('is_removed', false)
       .order('created_at', { ascending: true })
       .limit(100);
+
+    if (messagesError) {
+      this.logger.error(
+        `Failed to fetch messages for nook ${nookId}: ${messagesError.message}`,
+      );
+    }
 
     const topic = {
       title: nookData?.title || '',
@@ -205,6 +306,10 @@ export class OkestraLlmService {
         (m.helpful_count || 0) +
         (m.inspired_count || 0),
     }));
+
+    this.logger.debug(
+      `Fetched nook "${topic.title}" with ${comments.length} messages`,
+    );
 
     return { topic, comments };
   }
@@ -257,8 +362,18 @@ export class OkestraLlmService {
         hasOpenQuestions: comments.some((c) => c.content.includes('?')),
       };
     } else {
+      const userComments = comments
+        .map((comment, index) => ({ comment, index }))
+        .filter(({ comment }) => comment.authorId === currentUserId);
+
+      const userCommentIds = userComments.map(
+        ({ index }) => `c_${String(index + 1).padStart(3, '0')}`,
+      );
+
       userContext.engagerContext = {
-        hasCommented: false,
+        hasCommented: userComments.length > 0,
+        commentIds:
+          userComments.length > 0 ? userCommentIds : undefined,
         hasReacted: false,
       };
     }
