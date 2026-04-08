@@ -7,10 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import {
-  supabaseClient,
-  supabaseAdmin,
-} from '../../../database/supabase.client';
+import { supabaseAdmin } from '../../../database/supabase.client';
+import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { AvatarGenerator } from '../../../common/utils/avatar-generator.util';
 import { EmailService } from '../../../common/utils/email/email.service';
@@ -27,7 +26,6 @@ import { OnboardingService } from './onboarding.service';
 
 @Injectable()
 export class AuthService {
-  private supabase;
   private admin;
   // UPDATE THIS TYPE DEFINITION
   private otpStore: Map<
@@ -50,7 +48,6 @@ export class AuthService {
     private emailService: EmailService,
     private onboardingService: OnboardingService,
   ) {
-    this.supabase = supabaseClient(config);
     this.admin = supabaseAdmin(config);
     this.otpStore = new Map();
   }
@@ -192,86 +189,46 @@ export class AuthService {
       );
     }
 
-    // Create user in Supabase Auth with retry logic
+    // Create user with bcrypt + direct SQL
     try {
-      const { data, error } = await this.supabase.auth.signUp({
-        email: dto.email,
-        password: dto.password,
-        options: {
-          data: { username: dto.username },
-        },
-      });
-
-      if (error) {
-        logger.warn('Signup failed via Supabase', {
-          error: error.message,
-          errorCode: error.code,
-        });
-
-        if (
-          error.message.includes('invalid email') ||
-          error.message.includes('Email address')
-        ) {
-          throw new BadRequestException(
-            'Please use a valid email address format (e.g., user@example.com)',
-          );
-        } else if (
-          error.message.includes('already registered') ||
-          error.message.includes('user_exists')
-        ) {
-          throw new ConflictException(
-            'An account with this email already exists. Please try logging in instead.',
-          );
-        } else if (
-          error.message.includes('password') ||
-          error.message.includes('weak_password')
-        ) {
-          throw new BadRequestException(
-            'Password does not meet security requirements. Please choose a stronger password.',
-          );
-        } else if (error.message.includes('rate limit')) {
-          throw new BadRequestException(
-            'Too many registration attempts. Please try again in a few minutes.',
-          );
-        } else if (
-          error.message.includes('fetch failed') ||
-          error.message.includes('SocketError')
-        ) {
-          throw new InternalServerErrorException(
-            'Authentication service is temporarily unavailable. Please try again in a moment.',
-          );
-        } else {
-          throw new BadRequestException(
-            `Registration failed: ${error.message}`,
-          );
-        }
-      }
-
-      if (!data.user) {
-        logger.error('Signup failed: No user returned from Supabase', {});
-        throw new BadRequestException('Registration failed - please try again');
-      }
-
-      // OPTIMIZATION: Parallelize profile creation and OTP generation
       const emailLower = dto.email.toLowerCase();
+
+      // Check if email already exists
+      const { data: existingUser } = await this.admin
+        .from('user_profiles')
+        .select('id')
+        .eq('email', emailLower)
+        .maybeSingle();
+
+      if (existingUser) {
+        throw new ConflictException(
+          'An account with this email already exists. Please try logging in instead.',
+        );
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(dto.password, 12);
+      const userId = uuidv4();
+
+      // Create profile with auth fields
       const otp = this.generateOtp();
       await this.storeOtp(emailLower, otp, 'signup');
 
-      // Create profile and send email in parallel (independent operations)
       let profileCreated = false;
       try {
         [profileCreated] = await Promise.all([
           this.createProfile(
-            data.user.id,
+            userId,
             dto.username,
             emailLower,
             dto.avatar,
+            passwordHash,
           ),
           this.emailService.sendOtpEmail(dto.email, otp, dto.username),
         ]);
       } catch (profileError) {
         logger.error('Profile creation or email sending failed', {
-          userId: data.user.id,
+          userId,
           error:
             profileError instanceof Error
               ? profileError.message
@@ -279,19 +236,15 @@ export class AuthService {
         });
       }
 
-      // If profile creation failed, log a warning (verifyOtp will auto-create)
       if (!profileCreated) {
         logger.warn(
           'Profile creation failed during signup, will retry on OTP verify',
-          {
-            userId: data.user.id,
-            username: dto.username,
-          },
+          { userId, username: dto.username },
         );
       }
 
       logger.info('Signup successful - OTP sent', {
-        userId: data.user.id,
+        userId,
         username: dto.username,
         profileCreated,
       });
@@ -299,8 +252,8 @@ export class AuthService {
       return {
         message:
           'Registration successful! Please check your email for the verification code.',
-        userId: data.user.id,
-        email: data.user.email,
+        userId,
+        email: emailLower,
         requiresOtpVerification: true,
         profileCreated,
       };
@@ -338,131 +291,76 @@ export class AuthService {
     }
 
     try {
-      const { data, error } = await this.supabase.auth.signInWithPassword({
-        email: dto.email,
-        password: dto.password,
-      });
+      // Look up user by email
+      const { data: user, error: userError } = await this.admin
+        .from('user_profiles')
+        .select(
+          'id, email, password_hash, auth_provider, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted',
+        )
+        .eq('email', dto.email.toLowerCase())
+        .maybeSingle();
 
-      if (error) {
-        logger.warn('Login failed', {
-          error: error.message,
-          errorCode: error.code,
-        });
-
-        if (error.message.includes('Invalid login credentials')) {
-          throw new UnauthorizedException(
-            'Invalid email or password. Please check your credentials and try again.',
-          );
-        } else if (error.message.includes('Email not confirmed')) {
-          throw new UnauthorizedException(
-            'Please confirm your email address before logging in. Check your inbox for the confirmation link.',
-          );
-        } else if (error.message.includes('rate limit')) {
-          throw new UnauthorizedException(
-            'Too many login attempts. Please try again in a few minutes.',
-          );
-        } else if (error.message.includes('user_not_found')) {
-          throw new UnauthorizedException(
-            'No account found with this email. Please sign up first.',
-          );
-        } else if (
-          error.message.includes('fetch failed') ||
-          error.message.includes('SocketError')
-        ) {
-          throw new InternalServerErrorException(
-            'Authentication service is temporarily unavailable. Please try again in a moment.',
-          );
-        } else {
-          throw new UnauthorizedException(`Login failed: ${error.message}`);
-        }
-      }
-
-      if (!data.session) {
-        logger.warn('Login failed: No session created', {});
+      if (!user || userError) {
+        logger.warn('Login failed: user not found', { email: dto.email });
         throw new UnauthorizedException(
-          'Login failed - unable to create session',
+          'Invalid email or password. Please check your credentials and try again.',
         );
       }
 
-      if (!data.user) {
-        logger.warn('Login failed: No user data returned', {});
-        throw new UnauthorizedException('Login failed - user data missing');
-      }
-
-      // Fetch profile — do NOT auto-create, only signup should create profiles
-      let hasCompletedOnboarding = false;
-      let isDeactivated = false;
-      let userRole = 'user';
-      let username = '';
-
-      try {
-        const { data: profile } = await this.admin
-          .from('user_profiles')
-          .select(
-            'id, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted',
-          )
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile) {
-          // Check if account is suspended
-          if (profile.is_suspended) {
-            logger.warn('Login attempt for suspended account', {
-              userId: data.user.id,
-            });
-            throw new UnauthorizedException(
-              'Your account has been suspended. Please contact support for assistance.',
-            );
-          }
-
-          // Check if account is deleted
-          if (profile.is_deleted) {
-            logger.warn('Login attempt for deleted account', {
-              userId: data.user.id,
-            });
-            throw new UnauthorizedException(
-              'This account has been deleted. Please contact support if you believe this is an error.',
-            );
-          }
-
-          hasCompletedOnboarding = !!profile.has_completed_onboarding;
-          isDeactivated = !!profile.is_deactivated;
-          userRole = profile.role || 'user';
-          username = profile.username || '';
-        } else {
-          logger.warn(
-            'Login attempt for user without profile — must sign up first',
-            {
-              userId: data.user.id,
-            },
-          );
-          throw new UnauthorizedException(
-            'No profile found. Please sign up first.',
-          );
-        }
-      } catch (err: any) {
-        if (err instanceof UnauthorizedException) throw err;
-        logger.error('Could not fetch profile during login', {
-          userId: data.user.id,
-          error: err?.message,
-        });
+      if (user.auth_provider === 'google' && !user.password_hash) {
         throw new UnauthorizedException(
-          'No profile found. Please sign up first.',
+          'This account uses Google sign-in. Please log in with Google.',
         );
       }
 
-      const tokens = this.generateTokens(data.user.id, data.user.email!);
+      if (!user.password_hash) {
+        throw new UnauthorizedException(
+          'Invalid email or password. Please check your credentials and try again.',
+        );
+      }
 
-      // Fetch admin permissions for admin users
+      // Verify password
+      const passwordValid = await bcrypt.compare(
+        dto.password,
+        user.password_hash,
+      );
+      if (!passwordValid) {
+        logger.warn('Login failed: invalid password', {});
+        throw new UnauthorizedException(
+          'Invalid email or password. Please check your credentials and try again.',
+        );
+      }
+
+      // Check account status (all fields already in the single query above)
+      if (user.is_suspended) {
+        logger.warn('Login attempt for suspended account', { userId: user.id });
+        throw new UnauthorizedException(
+          'Your account has been suspended. Please contact support for assistance.',
+        );
+      }
+      if (user.is_deleted) {
+        logger.warn('Login attempt for deleted account', { userId: user.id });
+        throw new UnauthorizedException(
+          'This account has been deleted. Please contact support if you believe this is an error.',
+        );
+      }
+
+      const hasCompletedOnboarding = !!user.has_completed_onboarding;
+      const isDeactivated = !!user.is_deactivated;
+      const userRole = user.role || 'user';
+      const username = user.username || '';
+
+      const tokens = this.generateTokens(user.id, user.email);
+
       let adminPermissions: string[] | null | undefined = undefined;
       if (userRole === 'admin') {
-        adminPermissions = await this.fetchAdminPermissions(data.user.id);
+        adminPermissions = await this.fetchAdminPermissions(user.id);
       } else if (userRole === 'super_admin') {
-        adminPermissions = null; // super_admin has all permissions implicitly
+        adminPermissions = null;
       }
 
       logger.info('Login successful', {
-        userId: data.user.id,
+        userId: user.id,
         role: userRole,
         hasCompletedOnboarding,
       });
@@ -470,13 +368,15 @@ export class AuthService {
       return {
         ...tokens,
         user: {
-          id: data.user.id,
-          email: data.user.email,
-          username: username,
+          id: user.id,
+          email: user.email,
+          username,
           role: userRole,
           has_completed_onboarding: hasCompletedOnboarding,
           is_deactivated: isDeactivated,
-          ...(adminPermissions !== undefined && { permissions: adminPermissions }),
+          ...(adminPermissions !== undefined && {
+            permissions: adminPermissions,
+          }),
         },
       };
     } catch (error) {
@@ -510,44 +410,38 @@ export class AuthService {
     }
 
     try {
-      const backendUrl = this.config.get('BACKEND_URL') || `http://localhost:${this.config.get('PORT') || 3000}`;
-      let redirectTo = `${backendUrl}/api/v1/auth/google/callback`;
-      // Pass mobile redirect_uri through the callback URL so it survives the OAuth round-trip
+      const backendUrl =
+        this.config.get('BACKEND_URL') ||
+        `http://localhost:${this.config.get('PORT') || 3000}`;
+      const clientId = this.config.get('GOOGLE_CLIENT_ID');
+      if (!clientId) {
+        throw new InternalServerErrorException('Google OAuth not configured');
+      }
+
+      let callbackUrl = `${backendUrl}/api/v1/auth/google/callback`;
       if (redirectUri) {
-        redirectTo += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      }
-      const { data, error } = await this.supabase.auth.signInWithOAuth({
-        provider: provider,
-        options: {
-          redirectTo,
-          skipBrowserRedirect: false,
-          queryParams: {
-            response_type: 'code',
-          },
-        },
-      });
-
-      if (error) {
-        logger.warn('Social login failed', { provider, error: error.message });
-        throw new BadRequestException(
-          `Social login with ${provider} failed: ${error.message}`,
-        );
+        callbackUrl += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
       }
 
-      if (!data.url) {
-        logger.error('Social login URL not generated', { provider });
-        throw new BadRequestException(
-          'Social login service temporarily unavailable',
-        );
-      }
+      // Build Google OAuth URL directly
+      const googleAuthUrl = new URL(
+        'https://accounts.google.com/o/oauth2/v2/auth',
+      );
+      googleAuthUrl.searchParams.set('client_id', clientId);
+      googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+      googleAuthUrl.searchParams.set('response_type', 'code');
+      googleAuthUrl.searchParams.set('scope', 'openid email profile');
+      googleAuthUrl.searchParams.set('access_type', 'offline');
+      googleAuthUrl.searchParams.set('prompt', 'consent');
 
-      logger.info('Social login URL generated', { provider, url: data.url });
-      return {
-        url: data.url,
-        provider,
-      };
+      const url = googleAuthUrl.toString();
+      logger.info('Social login URL generated', { provider, url });
+      return { url, provider };
     } catch (error) {
-      if (error instanceof BadRequestException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
         throw error;
       }
       logger.error('Unexpected error during social login', { error, provider });
@@ -558,7 +452,10 @@ export class AuthService {
   }
 
   // GOOGLE OAUTH CALLBACK
-  async googleCallback(code: string, redirectUri?: string): Promise<{ redirectUrl: string }> {
+  async googleCallback(
+    code: string,
+    redirectUri?: string,
+  ): Promise<{ redirectUrl: string }> {
     const frontendUrl = this.config.get('FRONTEND_URL');
 
     // Validate redirect_uri if provided (only allow our deep link scheme)
@@ -568,39 +465,119 @@ export class AuthService {
 
     if (!code) {
       const errorTarget = redirectUri || `${frontendUrl}/auth/callback`;
-      return { redirectUrl: `${errorTarget}?error=${encodeURIComponent('Missing authorization code')}` };
+      return {
+        redirectUrl: `${errorTarget}?error=${encodeURIComponent('Missing authorization code')}`,
+      };
     }
 
     try {
-      const { data: sessionData, error } = await this.supabase.auth.exchangeCodeForSession(code);
+      const { OAuth2Client } = await import('google-auth-library');
+      const backendUrl =
+        this.config.get('BACKEND_URL') ||
+        `http://localhost:${this.config.get('PORT') || 3000}`;
+      const callbackUrl = `${backendUrl}/api/v1/auth/google/callback`;
 
-      if (error || !sessionData.session) {
-        logger.error('Google OAuth code exchange failed', { error: error?.message });
-        return { redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent(error?.message || 'Session exchange failed')}` };
+      const oauth2Client = new OAuth2Client(
+        this.config.get('GOOGLE_CLIENT_ID'),
+        this.config.get('GOOGLE_CLIENT_SECRET'),
+        callbackUrl,
+      );
+
+      // Exchange code for tokens
+      const { tokens: googleTokens } = await oauth2Client.getToken(code);
+      const ticket = await oauth2Client.verifyIdToken({
+        idToken: googleTokens.id_token!,
+        audience: this.config.get('GOOGLE_CLIENT_ID'),
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        logger.error('Google OAuth: no email in token payload');
+        return {
+          redirectUrl: `${frontendUrl}/auth/callback?error=${encodeURIComponent('No email from Google')}`,
+        };
       }
 
-      const { user: supabaseUser } = sessionData;
+      const googleId = payload.sub;
+      const email = payload.email.toLowerCase();
 
-      // Ensure user profile exists (creates if new Google signup)
-      await this.ensureProfileExists(supabaseUser.id, supabaseUser.email || '');
+      // Check if user exists by google_id or email
+      let { data: existingUser } = await this.admin
+        .from('user_profiles')
+        .select('id, email, google_id')
+        .eq('google_id', googleId)
+        .maybeSingle();
 
-      // Generate app tokens (same as regular login) so all guards work consistently
-      const tokens = this.generateTokens(supabaseUser.id, supabaseUser.email || '');
+      if (!existingUser) {
+        // Try by email
+        const { data: emailUser } = await this.admin
+          .from('user_profiles')
+          .select('id, email, google_id')
+          .eq('email', email)
+          .maybeSingle();
 
-      // Redirect with tokens — mobile deep link or web callback
+        if (emailUser) {
+          // Link Google account to existing email user
+          await this.admin
+            .from('user_profiles')
+            .update({
+              google_id: googleId,
+              auth_provider: 'google',
+              email_confirmed_at: new Date().toISOString(),
+            })
+            .eq('id', emailUser.id);
+          existingUser = emailUser;
+        }
+      }
+
+      if (!existingUser) {
+        // New Google signup — create profile
+        const userId = uuidv4();
+        const username = this.generateUsername();
+        const avatar = AvatarGenerator.generate(userId).emoji;
+
+        await this.createProfile(
+          userId,
+          username,
+          email,
+          avatar,
+          undefined,
+          'google',
+          googleId,
+        );
+
+        // Confirm email automatically for Google users
+        await this.admin
+          .from('user_profiles')
+          .update({ email_confirmed_at: new Date().toISOString() })
+          .eq('id', userId);
+
+        existingUser = { id: userId, email };
+      }
+
+      // Generate app tokens
+      const tokens = this.generateTokens(
+        existingUser.id,
+        existingUser.email || email,
+      );
+
       const params = new URLSearchParams({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
       });
 
       const target = redirectUri || `${frontendUrl}/auth/callback`;
-
-      logger.info('Google OAuth callback successful', { userId: supabaseUser.id, mobile: !!redirectUri });
+      logger.info('Google OAuth callback successful', {
+        userId: existingUser.id,
+        mobile: !!redirectUri,
+      });
       return { redirectUrl: `${target}?${params.toString()}` };
     } catch (err) {
       logger.error('Google OAuth callback error', { error: err });
       const errorTarget = redirectUri || `${frontendUrl}/auth/callback`;
-      return { redirectUrl: `${errorTarget}?error=${encodeURIComponent('Authentication failed')}` };
+      return {
+        redirectUrl: `${errorTarget}?error=${encodeURIComponent('Authentication failed')}`,
+      };
     }
   }
 
@@ -711,28 +688,24 @@ export class AuthService {
         throw new BadRequestException('User not found');
       }
 
-      // Update password using Admin API
-      const { data, error } = await this.admin.auth.admin.updateUserById(
-        profile.id,
-        { password: dto.password },
-      );
+      // Update password hash directly
+      const newHash = await bcrypt.hash(dto.password, 12);
+      const { error } = await this.admin
+        .from('user_profiles')
+        .update({
+          password_hash: newHash,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id);
 
       if (error) {
         logger.warn('Password reset failed', {
           userId: profile.id,
           error: error.message,
-          errorCode: error.code,
         });
-
-        if (error.message.includes('password')) {
-          throw new BadRequestException(
-            'Password does not meet security requirements. Please choose a stronger password.',
-          );
-        } else {
-          throw new BadRequestException(
-            `Password reset failed: ${error.message}`,
-          );
-        }
+        throw new BadRequestException(
+          `Password reset failed: ${error.message}`,
+        );
       }
 
       // Clear OTP after successful reset
@@ -791,11 +764,12 @@ export class AuthService {
         secret: this.config.get('JWT_REFRESH_SECRET'),
       });
 
-      // Verify the user still exists in Supabase
-      const {
-        data: { user },
-        error: userError,
-      } = await this.supabase.auth.getUser();
+      // Verify the user still exists
+      const { data: user, error: userError } = await this.admin
+        .from('user_profiles')
+        .select('id, email')
+        .eq('id', payload.sub)
+        .maybeSingle();
 
       if (userError || !user) {
         logger.warn('User not found during token refresh', {
@@ -804,12 +778,12 @@ export class AuthService {
         throw new UnauthorizedException('User account no longer exists');
       }
 
-      // Generate new tokens (both access and refresh)
-      const tokens = this.generateTokens(user.id, user.email!);
+      const tokens = this.generateTokens(user.id, user.email);
 
       logger.info('Token refresh successful', { userId: payload.sub });
       return tokens;
     } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('Invalid refresh token', { error: message });
 
@@ -830,34 +804,13 @@ export class AuthService {
     }
   }
 
-  // LOGOUT
+  // LOGOUT — stateless JWTs, nothing to invalidate server-side
   async logout(userId?: string) {
-    logger.info('Logout initiated', { userId });
-
-    try {
-      const { error } = await this.supabase.auth.signOut();
-
-      if (error) {
-        logger.warn('Logout error from Supabase', {
-          userId,
-          error: error.message,
-        });
-        // Don't throw error for logout failures as user is already leaving
-      }
-
-      logger.info('Logout successful', { userId });
-      return {
-        message: 'Logged out successfully',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      logger.error('Unexpected error during logout', { error, userId });
-      // Still return success for logout to avoid user frustration
-      return {
-        message: 'Logged out successfully',
-        timestamp: new Date().toISOString(),
-      };
-    }
+    logger.info('Logout successful', { userId });
+    return {
+      message: 'Logged out successfully',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   // SEND OTP (EMAIL)
@@ -872,26 +825,24 @@ export class AuthService {
     }
 
     try {
-      const { data, error } = await this.supabase.auth.signInWithOtp({
-        email: dto.email,
-        options: {
-          emailRedirectTo: `${this.config.get('FRONTEND_URL')}/auth/callback`,
-        },
-      });
+      const emailLower = dto.email.toLowerCase();
 
-      if (error) {
-        logger.warn('OTP send failed', {
-          error: error.message,
-        });
+      // Generate and store OTP
+      const otp = this.generateOtp();
+      await this.storeOtp(emailLower, otp, 'signup');
 
-        if (error.message.includes('rate limit')) {
-          throw new BadRequestException(
-            'Too many OTP requests. Please try again in a few minutes.',
-          );
-        } else {
-          throw new BadRequestException(`OTP send failed: ${error.message}`);
-        }
-      }
+      // Get username for email
+      const { data: profile } = await this.admin
+        .from('user_profiles')
+        .select('username')
+        .eq('email', emailLower)
+        .maybeSingle();
+
+      await this.emailService.sendOtpEmail(
+        dto.email,
+        otp,
+        profile?.username || 'User',
+      );
 
       logger.info('OTP sent successfully', {});
       return {
@@ -945,17 +896,15 @@ export class AuthService {
       .eq('email', email)
       .single();
 
-    // Check if user has already confirmed email via Supabase Auth
+    // Check if user has already confirmed email
     let isEmailConfirmed = false;
     if (profile) {
-      try {
-        const { data: authUser } = await this.admin.auth.admin.getUserById(
-          profile.id,
-        );
-        isEmailConfirmed = !!authUser.user?.email_confirmed_at;
-      } catch (e) {
-        /* ignore */
-      }
+      const { data: authData } = await this.admin
+        .from('user_profiles')
+        .select('email_confirmed_at')
+        .eq('id', profile.id)
+        .maybeSingle();
+      isEmailConfirmed = !!authData?.email_confirmed_at;
     }
 
     // Allow resend if user exists and NOT confirmed OR has pending OTP
@@ -1006,65 +955,24 @@ export class AuthService {
     }
 
     // Try to find profile by email
-    let { data: profile } = await this.admin
+    const { data: profile } = await this.admin
       .from('user_profiles')
       .select('id, username')
       .eq('email', emailLower)
       .single();
 
-    // If profile not found, look up auth user and auto-create profile
-    // (handles case where signup created auth user but profile insert failed)
+    // If profile not found by email, user doesn't exist
     if (!profile) {
-      logger.warn(
-        'Profile not found by email during OTP verify, looking up auth user',
-        {},
-      );
-
-      const { data: authUsers } = await this.admin.auth.admin.listUsers();
-      const authUser = authUsers?.users?.find(
-        (u) => u.email?.toLowerCase() === emailLower,
-      );
-
-      if (!authUser) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Auto-create the missing profile
-      const username =
-        authUser.user_metadata?.username || this.generateUsername();
-      const created = await this.createProfile(
-        authUser.id,
-        username,
-        emailLower,
-      );
-      if (!created) {
-        logger.error('Failed to auto-create profile during OTP verify', {
-          userId: authUser.id,
-        });
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Re-fetch the freshly created profile
-      const { data: newProfile } = await this.admin
-        .from('user_profiles')
-        .select('id, username')
-        .eq('id', authUser.id)
-        .single();
-
-      if (!newProfile) {
-        throw new UnauthorizedException('User not found');
-      }
-      profile = newProfile;
-      logger.info('Auto-created missing profile during OTP verify', {
-        userId: profile.id,
-      });
+      logger.warn('Profile not found by email during OTP verify', {});
+      throw new UnauthorizedException('User not found');
     }
 
-    // Parallelize independent operations
+    // Mark email as confirmed + send welcome email
     await Promise.all([
-      this.admin.auth.admin.updateUserById(profile.id, {
-        email_confirm: true,
-      }),
+      this.admin
+        .from('user_profiles')
+        .update({ email_confirmed_at: new Date().toISOString() })
+        .eq('id', profile.id),
       this.emailService.sendWelcomeEmail(email, profile.username || 'User'),
     ]);
 
@@ -1229,62 +1137,45 @@ export class AuthService {
     }
 
     try {
-      // Get user email from Supabase Auth, not from user_profiles table
-      const {
-        data: { user },
-        error: userError,
-      } = await this.supabase.auth.getUser();
+      // Get user from DB
+      const { data: user, error: userError } = await this.admin
+        .from('user_profiles')
+        .select('id, email, password_hash')
+        .eq('id', userId)
+        .single();
 
       if (userError || !user) {
-        logger.error('User not found in Supabase Auth during password change', {
-          userId,
-          error: userError?.message,
-        });
         throw new BadRequestException('User not found');
       }
 
-      const userEmail = user.email;
-
-      if (!userEmail) {
-        throw new BadRequestException('User email not found');
+      if (!user.password_hash) {
+        throw new BadRequestException(
+          'Cannot change password for OAuth-only accounts. Use Google sign-in.',
+        );
       }
 
-      // Verify current password by attempting to sign in
-      const { error: signInError } =
-        await this.supabase.auth.signInWithPassword({
-          email: userEmail,
-          password: currentPassword,
-        });
-
-      if (signInError) {
-        logger.warn('Current password verification failed', {
-          userId,
-          error: signInError.message,
-        });
+      // Verify current password
+      const isValid = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isValid) {
+        logger.warn('Current password verification failed', { userId });
         throw new BadRequestException('Current password is incorrect');
       }
 
-      // Update password
-      const { error } = await this.supabase.auth.updateUser({
-        password: newPassword,
-      });
+      // Hash and update new password
+      const newHash = await bcrypt.hash(newPassword, 12);
+      const { error } = await this.admin
+        .from('user_profiles')
+        .update({
+          password_hash: newHash,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
 
       if (error) {
-        logger.warn('Password change failed', {
-          userId,
-          error: error.message,
-          errorCode: error.code,
-        });
-
-        if (error.message.includes('password')) {
-          throw new BadRequestException(
-            'Password does not meet security requirements. Please choose a stronger password.',
-          );
-        } else {
-          throw new BadRequestException(
-            `Password change failed: ${error.message}`,
-          );
-        }
+        logger.warn('Password change failed', { userId, error: error.message });
+        throw new BadRequestException(
+          `Password change failed: ${error.message}`,
+        );
       }
 
       logger.info('Password changed successfully', { userId });
@@ -1324,7 +1215,7 @@ export class AuthService {
 
   private cleanUserData(profile: any): UserProfileResponse {
     // Supabase returns `any` from .single(), so we cast safely
-    const p = profile as any;
+    const p = profile;
 
     return {
       id: p.id,
@@ -1369,18 +1260,23 @@ export class AuthService {
     username: string,
     email: string,
     avatar?: string,
+    passwordHash?: string,
+    authProvider: string = 'email',
+    googleId?: string,
   ): Promise<boolean> {
     logger.info('Creating user profile', { userId, username });
 
-    const profileData = {
+    const profileData: Record<string, any> = {
       id: userId,
       username,
       email,
+      password_hash: passwordHash || null,
+      auth_provider: authProvider,
+      google_id: googleId || null,
       avatar: avatar || AvatarGenerator.generate(userId).emoji,
       privacy_level: 'anonymous',
       has_completed_onboarding: false,
       is_willing_to_mentor: false,
-      // Explicitly set all encrypted fields to null (required if NOT NULL in DB)
       race_encrypted: null,
       gender_encrypted: null,
       career_level_encrypted: null,

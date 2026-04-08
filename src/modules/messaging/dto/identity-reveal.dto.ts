@@ -30,7 +30,10 @@ export class RespondIdentityRevealDto {
   @IsUUID()
   reveal_id!: string;
 
-  @ApiProperty({ enum: ['accept', 'reject', 'accepted', 'rejected'], description: 'Response action' })
+  @ApiProperty({
+    enum: ['accept', 'reject', 'accepted', 'rejected'],
+    description: 'Response action',
+  })
   @IsEnum(['accept', 'reject', 'accepted', 'rejected'])
   action!: string;
 

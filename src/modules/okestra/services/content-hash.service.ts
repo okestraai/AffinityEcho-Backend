@@ -1,18 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '../../../database/supabase.client';
 import { ConfigService } from '@nestjs/config';
 import { ContentType } from '../interfaces/insights.interface';
 
 @Injectable()
 export class ContentHashService {
-  private admin: SupabaseClient;
+  private admin;
 
   constructor(private config: ConfigService) {
-    this.admin = createClient(
-      this.config.get<string>('SUPABASE_URL')!,
-      this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
+    this.admin = supabaseAdmin(config);
   }
 
   async computeHash(

@@ -36,13 +36,17 @@ export class ConversationsService {
     try {
       // Prevent self-conversation
       if (userId === dto.other_user_id) {
-        throw new BadRequestException('Cannot create a conversation with yourself');
+        throw new BadRequestException(
+          'Cannot create a conversation with yourself',
+        );
       }
 
       // Check if user exists and get their messaging preference
       const { data: otherUser, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar, allow_messages_from, is_company_verified')
+        .select(
+          'id, username, avatar, allow_messages_from, is_company_verified',
+        )
         .eq('id', dto.other_user_id)
         .single();
 
@@ -79,7 +83,9 @@ export class ConversationsService {
           .maybeSingle();
 
         if (!followCheck) {
-          throw new ForbiddenException('You must be connected with this user to send messages');
+          throw new ForbiddenException(
+            'You must be connected with this user to send messages',
+          );
         }
       }
 
@@ -250,7 +256,7 @@ export class ConversationsService {
       );
 
       // Filter out conversations soft-deleted by this user (unless new messages arrived after deletion)
-      const visibleConversations = (conversations || []).filter((conv) => {
+      const visibleConversations = (conversations || []).filter((conv: any) => {
         const deletedAt =
           conv.user1_id === userId
             ? conv.user1_deleted_at
@@ -259,7 +265,10 @@ export class ConversationsService {
         if (!deletedAt) return true; // Not deleted by this user
 
         // If there are new messages after the deletion timestamp, show the conversation
-        return conv.last_message_at && new Date(conv.last_message_at) > new Date(deletedAt);
+        return (
+          conv.last_message_at &&
+          new Date(conv.last_message_at) > new Date(deletedAt)
+        );
       });
 
       // If no conversations, return empty array
@@ -277,7 +286,7 @@ export class ConversationsService {
       }
 
       // Get all other user IDs first
-      const otherUserIds = visibleConversations.map((conv) =>
+      const otherUserIds = visibleConversations.map((conv: any) =>
         conv.user1_id === userId ? conv.user2_id : conv.user1_id,
       );
 
@@ -308,20 +317,22 @@ export class ConversationsService {
 
       // Create a map for quick lookup
       const usersMap = new Map();
-      otherUsers?.forEach((user) => {
+      otherUsers?.forEach((user: any) => {
         usersMap.set(user.id, user);
       });
 
       // Batch-fetch last messages, unread counts, and mentorship contexts
       // instead of querying per-conversation in a loop (eliminates 3N queries)
-      const conversationIds = visibleConversations.map((c) => c.id);
+      const conversationIds = visibleConversations.map((c: any) => c.id);
 
       // Fetch last messages for ALL conversations in one query using DISTINCT ON
       // Supabase doesn't support DISTINCT ON, so we fetch recent messages and deduplicate
       const [lastMessagesResult, unreadCountsResult] = await Promise.all([
         this.admin
           .from('messages')
-          .select('conversation_id, content_encrypted, content_type, created_at, sender_id')
+          .select(
+            'conversation_id, content_encrypted, content_type, created_at, sender_id',
+          )
           .in('conversation_id', conversationIds)
           .order('created_at', { ascending: false }),
         this.admin
@@ -352,12 +363,19 @@ export class ConversationsService {
         .not('sender_id', 'eq', userId);
 
       (unreadMessages || []).forEach((msg: any) => {
-        unreadCountMap.set(msg.conversation_id, (unreadCountMap.get(msg.conversation_id) || 0) + 1);
+        unreadCountMap.set(
+          msg.conversation_id,
+          (unreadCountMap.get(msg.conversation_id) || 0) + 1,
+        );
       });
 
       // Batch-fetch mentorship relationships for mentorship conversations
-      const mentorshipConvs = visibleConversations.filter((c) => c.context_type === 'mentorship' && c.context_id);
-      const mentorshipContextIds = mentorshipConvs.map((c) => c.context_id);
+      const mentorshipConvs = visibleConversations.filter(
+        (c: any) => c.context_type === 'mentorship' && c.context_id,
+      );
+      const mentorshipContextIds = mentorshipConvs.map(
+        (c: any) => c.context_id,
+      );
       const mentorshipMap = new Map<string, any>();
 
       if (mentorshipContextIds.length > 0) {
@@ -372,164 +390,164 @@ export class ConversationsService {
       }
 
       // Now build enhanced conversations without any per-conversation queries
-      const enhancedConversations = visibleConversations.map((conv) => {
-          const otherUserId =
-            conv.user1_id === userId ? conv.user2_id : conv.user1_id;
+      const enhancedConversations = visibleConversations.map((conv: any) => {
+        const otherUserId =
+          conv.user1_id === userId ? conv.user2_id : conv.user1_id;
 
-          // Get other user info from map
-          const otherUser = usersMap.get(otherUserId);
+        // Get other user info from map
+        const otherUser = usersMap.get(otherUserId);
 
-          // Get last message from batch map
-          const lastMessage = lastMessageMap.get(conv.id) || null;
+        // Get last message from batch map
+        const lastMessage = lastMessageMap.get(conv.id) || null;
 
-          // Get unread count from batch map
-          const unreadCount = unreadCountMap.get(conv.id) || 0;
+        // Get unread count from batch map
+        const unreadCount = unreadCountMap.get(conv.id) || 0;
 
-          // Get mentorship context from batch map
-          let mentorshipContext = null;
-          if (conv.context_type === 'mentorship' && conv.context_id) {
-            const relationship = mentorshipMap.get(conv.context_id);
-            if (relationship) {
-              mentorshipContext = {
-                relationship_id: conv.context_id,
-                role: relationship.mentor_id === userId ? 'mentor' : 'mentee',
-                status: relationship.status,
-              };
-            }
+        // Get mentorship context from batch map
+        let mentorshipContext = null;
+        if (conv.context_type === 'mentorship' && conv.context_id) {
+          const relationship = mentorshipMap.get(conv.context_id);
+          if (relationship) {
+            mentorshipContext = {
+              relationship_id: conv.context_id,
+              role: relationship.mentor_id === userId ? 'mentor' : 'mentee',
+              status: relationship.status,
+            };
           }
+        }
 
-          // Check if the OTHER user's identity is revealed to current user
-          // user1_identity_revealed = user1 revealed their identity (user2 can see it)
-          // user2_identity_revealed = user2 revealed their identity (user1 can see it)
-          const otherUserRevealed =
-            conv.user1_id === userId
-              ? conv.user2_identity_revealed // I'm user1, can I see user2's real name?
-              : conv.user1_identity_revealed; // I'm user2, can I see user1's real name?
+        // Check if the OTHER user's identity is revealed to current user
+        // user1_identity_revealed = user1 revealed their identity (user2 can see it)
+        // user2_identity_revealed = user2 revealed their identity (user1 can see it)
+        const otherUserRevealed =
+          conv.user1_id === userId
+            ? conv.user2_identity_revealed // I'm user1, can I see user2's real name?
+            : conv.user1_identity_revealed; // I'm user2, can I see user1's real name?
 
-          const identityRevealed =
-            conv.user1_id === userId
-              ? conv.user1_identity_revealed
-              : conv.user2_identity_revealed;
+        const identityRevealed =
+          conv.user1_id === userId
+            ? conv.user1_identity_revealed
+            : conv.user2_identity_revealed;
 
-          // Decrypt company if available
-          let companyDecrypted = null;
-          if (otherUser?.company_encrypted) {
-            try {
-              companyDecrypted = this.encryption.decrypt(
-                otherUser.company_encrypted,
-              );
-            } catch (decryptError) {
-              logger.debug('Failed to decrypt company', {
-                userId: otherUser.id,
-                error:
-                  decryptError instanceof Error
-                    ? decryptError.message
-                    : String(decryptError),
-              });
-            }
-          }
-
-          // Decrypt career level if available
-          let careerLevelDecrypted = null;
-          if (otherUser?.career_level_encrypted) {
-            try {
-              careerLevelDecrypted = this.encryption.decrypt(
-                otherUser.career_level_encrypted,
-              );
-            } catch (decryptError) {
-              logger.debug('Failed to decrypt career level', {
-                userId: otherUser.id,
-                error:
-                  decryptError instanceof Error
-                    ? decryptError.message
-                    : String(decryptError),
-              });
-            }
-          }
-
-          // Decrypt real name if identity is revealed
-          let displayName = otherUser?.username || 'Anonymous';
-          if (otherUserRevealed && otherUser) {
-            const realName = this.identityReveal.decryptRealName(
-              otherUser.first_name_encrypted,
-              otherUser.last_name_encrypted,
+        // Decrypt company if available
+        let companyDecrypted = null;
+        if (otherUser?.company_encrypted) {
+          try {
+            companyDecrypted = this.encryption.decrypt(
+              otherUser.company_encrypted,
             );
-            if (realName) displayName = realName;
+          } catch (decryptError) {
+            logger.debug('Failed to decrypt company', {
+              userId: otherUser.id,
+              error:
+                decryptError instanceof Error
+                  ? decryptError.message
+                  : String(decryptError),
+            });
           }
+        }
 
-          // Build conversation object
-          return {
-            id: conv.id,
-            other_user: {
-              id: otherUserId,
-              username: otherUser?.username || 'Anonymous',
-              display_name: displayName,
-              avatar: otherUser?.avatar || '👤',
-              job_title: otherUser?.job_title,
-              company: companyDecrypted || null,
-              career_level: careerLevelDecrypted || null,
-              mentoring_as: otherUser?.mentoring_as,
-              is_company_verified: otherUser?.is_company_verified || false,
-            },
-            last_message: lastMessage
-              ? {
-                  content_preview: lastMessage.content_encrypted
-                    ? (() => {
-                        try {
-                          // Check if it's likely plain text
-                          const isLikelyPlainText =
-                            /^[A-Za-z0-9\s.,!?'"()\-:;]+$/.test(
-                              lastMessage.content_encrypted,
-                            ) &&
-                            lastMessage.content_encrypted.length < 1000 &&
-                            !lastMessage.content_encrypted.includes('==') &&
-                            !lastMessage.content_encrypted.includes('+/');
+        // Decrypt career level if available
+        let careerLevelDecrypted = null;
+        if (otherUser?.career_level_encrypted) {
+          try {
+            careerLevelDecrypted = this.encryption.decrypt(
+              otherUser.career_level_encrypted,
+            );
+          } catch (decryptError) {
+            logger.debug('Failed to decrypt career level', {
+              userId: otherUser.id,
+              error:
+                decryptError instanceof Error
+                  ? decryptError.message
+                  : String(decryptError),
+            });
+          }
+        }
 
-                          if (isLikelyPlainText) {
-                            return lastMessage.content_encrypted.substring(
-                              0,
-                              100,
-                            );
-                          }
+        // Decrypt real name if identity is revealed
+        let displayName = otherUser?.username || 'Anonymous';
+        if (otherUserRevealed && otherUser) {
+          const realName = this.identityReveal.decryptRealName(
+            otherUser.first_name_encrypted,
+            otherUser.last_name_encrypted,
+          );
+          if (realName) displayName = realName;
+        }
 
-                          // Try to decrypt
-                          return this.encryption
-                            .decrypt(lastMessage.content_encrypted)
-                            .substring(0, 100);
-                        } catch (decryptError) {
-                          logger.debug('Failed to decrypt message preview', {
-                            conversationId: conv.id,
-                            error:
-                              decryptError instanceof Error
-                                ? decryptError.message
-                                : String(decryptError),
-                          });
-                          return (
-                            lastMessage.content_encrypted?.substring(0, 100) ||
-                            '[Encrypted message]'
+        // Build conversation object
+        return {
+          id: conv.id,
+          other_user: {
+            id: otherUserId,
+            username: otherUser?.username || 'Anonymous',
+            display_name: displayName,
+            avatar: otherUser?.avatar || '👤',
+            job_title: otherUser?.job_title,
+            company: companyDecrypted || null,
+            career_level: careerLevelDecrypted || null,
+            mentoring_as: otherUser?.mentoring_as,
+            is_company_verified: otherUser?.is_company_verified || false,
+          },
+          last_message: lastMessage
+            ? {
+                content_preview: lastMessage.content_encrypted
+                  ? (() => {
+                      try {
+                        // Check if it's likely plain text
+                        const isLikelyPlainText =
+                          /^[A-Za-z0-9\s.,!?'"()\-:;]+$/.test(
+                            lastMessage.content_encrypted,
+                          ) &&
+                          lastMessage.content_encrypted.length < 1000 &&
+                          !lastMessage.content_encrypted.includes('==') &&
+                          !lastMessage.content_encrypted.includes('+/');
+
+                        if (isLikelyPlainText) {
+                          return lastMessage.content_encrypted.substring(
+                            0,
+                            100,
                           );
                         }
-                      })()
-                    : '',
-                  sender_id: lastMessage.sender_id,
-                  sent_at: lastMessage.created_at,
-                  content_type: lastMessage.content_type,
-                }
-              : null,
-            unread_count: unreadCount,
-            chat_type: conv.context_type,
-            mentorship_context: mentorshipContext,
-            identity_revealed: identityRevealed,
-            updated_at: conv.updated_at,
-            last_activity_at: conv.last_message_at,
-          };
-        });
+
+                        // Try to decrypt
+                        return this.encryption
+                          .decrypt(lastMessage.content_encrypted)
+                          .substring(0, 100);
+                      } catch (decryptError) {
+                        logger.debug('Failed to decrypt message preview', {
+                          conversationId: conv.id,
+                          error:
+                            decryptError instanceof Error
+                              ? decryptError.message
+                              : String(decryptError),
+                        });
+                        return (
+                          lastMessage.content_encrypted?.substring(0, 100) ||
+                          '[Encrypted message]'
+                        );
+                      }
+                    })()
+                  : '',
+                sender_id: lastMessage.sender_id,
+                sent_at: lastMessage.created_at,
+                content_type: lastMessage.content_type,
+              }
+            : null,
+          unread_count: unreadCount,
+          chat_type: conv.context_type,
+          mentorship_context: mentorshipContext,
+          identity_revealed: identityRevealed,
+          updated_at: conv.updated_at,
+          last_activity_at: conv.last_message_at,
+        };
+      });
 
       // Filter by search term if provided
       let filteredConversations = enhancedConversations;
       if (search) {
         filteredConversations = enhancedConversations.filter(
-          (conv) =>
+          (conv: any) =>
             conv.other_user.username
               .toLowerCase()
               .includes(search.toLowerCase()) ||
@@ -632,7 +650,9 @@ export class ConversationsService {
       // Verify conversation access and get identity reveal flags + deletion timestamps
       const { data: conversation, error: convError } = await this.admin
         .from('conversations')
-        .select('user1_id, user2_id, user1_identity_revealed, user2_identity_revealed, user1_deleted_at, user2_deleted_at')
+        .select(
+          'user1_id, user2_id, user1_identity_revealed, user2_identity_revealed, user1_deleted_at, user2_deleted_at',
+        )
         .eq('id', conversationId)
         .single();
 
@@ -713,7 +733,10 @@ export class ConversationsService {
         if (msg[deleteFlag] === true) return false;
 
         // Exclude messages created before the user's conversation deletion timestamp
-        if (userDeletedAt && new Date(msg.created_at) <= new Date(userDeletedAt)) {
+        if (
+          userDeletedAt &&
+          new Date(msg.created_at) <= new Date(userDeletedAt)
+        ) {
           return false;
         }
 
@@ -722,13 +745,18 @@ export class ConversationsService {
 
       // Determine if identity is revealed (mutual — both flags set together)
       const isRevealed =
-        conversation.user1_identity_revealed && conversation.user2_identity_revealed;
+        conversation.user1_identity_revealed &&
+        conversation.user2_identity_revealed;
 
       // Batch fetch unique sender profiles
-      const senderIds = [...new Set(filteredMessages.map((msg: any) => msg.sender_id))];
+      const senderIds = [
+        ...new Set(filteredMessages.map((msg: any) => msg.sender_id)),
+      ];
       const { data: senderProfiles } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified')
+        .select(
+          'id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified',
+        )
         .in('id', senderIds);
 
       const sendersMap = new Map<string, any>();
@@ -783,7 +811,7 @@ export class ConversationsService {
             .update({ is_delivered: true })
             .in(
               'id',
-              undeliveredMessages.map((msg) => msg.id),
+              undeliveredMessages.map((msg: any) => msg.id),
             );
           logger.info(
             `Marked ${undeliveredMessages.length} messages as delivered`,

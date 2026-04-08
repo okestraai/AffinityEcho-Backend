@@ -46,7 +46,8 @@ import { OkestraModule } from './modules/okestra/okestra.module';
         limit: 50, // 50 requests per 10 seconds for messaging endpoints
       },
     ]),
-    BullModule.forRoot(getBullConfig()),
+    // BullModule requires Redis — uncomment when Redis is available
+    // BullModule.forRoot(getBullConfig()),
     ScheduleModule.forRoot(),
     RedisModule,
     AuthModule,

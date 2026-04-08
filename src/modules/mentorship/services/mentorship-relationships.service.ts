@@ -72,7 +72,11 @@ export class MentorshipRelationshipsService {
             if (!user) return user;
             let affinityTags: string[] = [];
             if (user.affinity_tags_encrypted) {
-              try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+              try {
+                affinityTags = JSON.parse(user.affinity_tags_encrypted);
+              } catch {
+                affinityTags = [];
+              }
             }
             const { affinity_tags_encrypted, ...rest } = user;
             return { ...rest, affinity_tags: affinityTags };
@@ -166,7 +170,11 @@ export class MentorshipRelationshipsService {
         if (!user) return user;
         let affinityTags: string[] = [];
         if (user.affinity_tags_encrypted) {
-          try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+          try {
+            affinityTags = JSON.parse(user.affinity_tags_encrypted);
+          } catch {
+            affinityTags = [];
+          }
         }
         const { affinity_tags_encrypted, ...rest } = user;
         return { ...rest, affinity_tags: affinityTags };
@@ -760,8 +768,10 @@ export class MentorshipRelationshipsService {
       .eq('status', 'completed');
 
     const totalCompletedSessions =
-      relationships?.reduce((sum, r) => sum + (r.completed_sessions || 0), 0) ||
-      0;
+      relationships?.reduce(
+        (sum: any, r: any) => sum + (r.completed_sessions || 0),
+        0,
+      ) || 0;
 
     await this.admin
       .from('user_profiles')
@@ -794,8 +804,4 @@ export class MentorshipRelationshipsService {
       metadata: {},
     });
   }
-
-
-
-  
 }

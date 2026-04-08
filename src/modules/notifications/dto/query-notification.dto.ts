@@ -1,9 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsInt,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryNotificationDto {
-  @ApiProperty({ example: false, required: false, description: 'Filter by read status' })
+  @ApiProperty({
+    example: false,
+    required: false,
+    description: 'Filter by read status',
+  })
   @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)
@@ -18,7 +29,11 @@ export class QueryNotificationDto {
   @IsString()
   type?: string;
 
-  @ApiProperty({ example: false, required: false, description: 'Group notifications by type and reference' })
+  @ApiProperty({
+    example: false,
+    required: false,
+    description: 'Group notifications by type and reference',
+  })
   @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)

@@ -183,7 +183,6 @@ async function bootstrap() {
     new TransformInterceptor(),
   );
 
-
   // Configure WebSocket adapter
   app.useWebSocketAdapter(new WebSocketAdapter(app));
   logger.info('🔌 WebSocket adapter configured', {

@@ -14,7 +14,12 @@ jest.mock('../../../database/supabase.client', () => ({
 
 jest.mock('../../../common/utils/logger.util', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 describe('ReferralService', () => {
@@ -45,7 +50,7 @@ describe('ReferralService', () => {
     };
 
     service = new ReferralService(
-      mockConfig as any,
+      mockConfig,
       mockEncryption,
       mockIdentityReveal,
     );
@@ -73,7 +78,10 @@ describe('ReferralService', () => {
       };
 
       // Mock the insert chain: this.admin.from('referral_posts').insert(...).select().single()
-      const insertChain = createMockQueryChain({ data: insertedRow, error: null });
+      const insertChain = createMockQueryChain({
+        data: insertedRow,
+        error: null,
+      });
       mockClient.from.mockReturnValueOnce(insertChain);
 
       // Mock the rpc call: this.admin.rpc('increment_user_posts', ...)
@@ -258,9 +266,9 @@ describe('ReferralService', () => {
       });
       mockClient.from.mockReturnValueOnce(notFoundChain);
 
-      await expect(
-        service.getReferralById(userId, referralId),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getReferralById(userId, referralId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

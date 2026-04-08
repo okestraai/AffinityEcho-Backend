@@ -75,13 +75,12 @@ export class FollowService {
       }
 
       // Check if already following - use maybeSingle to avoid throwing error if not found
-      const { data: existingFollow } =
-        await this.admin
-          .from('user_follows')
-          .select('id')
-          .eq('follower_id', followerId)
-          .eq('following_id', followingId)
-          .maybeSingle();
+      const { data: existingFollow } = await this.admin
+        .from('user_follows')
+        .select('id')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .maybeSingle();
 
       if (existingFollow) {
         throw new BadRequestException('Already following this user');
@@ -103,7 +102,10 @@ export class FollowService {
         .single();
 
       if (followError) {
-        logger.error('Follow creation failed', { module: 'FollowService', error: followError });
+        logger.error('Follow creation failed', {
+          module: 'FollowService',
+          error: followError,
+        });
         throw new BadRequestException(
           `Failed to follow user: ${followError.message}`,
         );
@@ -191,7 +193,7 @@ export class FollowService {
 
   async getFollowing(userId: string, type?: string, currentUserId?: string) {
     try {
-      let query = this.admin
+      const query = this.admin
         .from('user_follows')
         .select(
           `
@@ -224,7 +226,10 @@ export class FollowService {
       const { data: follows, error } = await query;
 
       if (error) {
-        logger.error('Failed to get following list', { module: 'FollowService', error });
+        logger.error('Failed to get following list', {
+          module: 'FollowService',
+          error,
+        });
         throw new BadRequestException('Failed to get following list');
       }
 
@@ -238,7 +243,11 @@ export class FollowService {
               const decrypted = this.decryptField(user.affinity_tags_encrypted);
               affinityTags = decrypted ? JSON.parse(decrypted) : [];
             } catch {
-              try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+              try {
+                affinityTags = JSON.parse(user.affinity_tags_encrypted);
+              } catch {
+                affinityTags = [];
+              }
             }
           }
           return {
@@ -265,12 +274,17 @@ export class FollowService {
             },
           };
         })
-        .filter((f) => !f.user.is_deleted && !f.user.is_deactivated && f.user.has_completed_onboarding !== false);
+        .filter(
+          (f: any) =>
+            !f.user.is_deleted &&
+            !f.user.is_deactivated &&
+            f.user.has_completed_onboarding !== false,
+        );
 
       // Filter by type if specified
       let filteredFollows = processedFollows;
       if (type === 'mentors') {
-        filteredFollows = processedFollows.filter((f) => {
+        filteredFollows = processedFollows.filter((f: any) => {
           const user = f.user;
           return (
             user.is_willing_to_mentor ||
@@ -279,7 +293,7 @@ export class FollowService {
           );
         });
       } else if (type === 'mentees') {
-        filteredFollows = processedFollows.filter((f) => {
+        filteredFollows = processedFollows.filter((f: any) => {
           const user = f.user;
           return user.mentoring_as === 'mentee' || user.mentoring_as === 'both';
         });
@@ -288,15 +302,18 @@ export class FollowService {
       // Apply identity reveal — show real name for revealed users and self
       const viewerId = currentUserId || userId;
       const otherUserIds = filteredFollows
-        .filter((f) => f.user.id && f.user.id !== viewerId)
-        .map((f) => f.user.id);
-      const revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, otherUserIds);
+        .filter((f: any) => f.user.id && f.user.id !== viewerId)
+        .map((f: any) => f.user.id);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(
+        viewerId,
+        otherUserIds,
+      );
 
       return {
         success: true,
         message: 'Following list retrieved successfully',
         data: {
-          following: filteredFollows.map((f) => {
+          following: filteredFollows.map((f: any) => {
             const isOwnEntry = f.user.id === viewerId;
             const isRevealed = revealedIds.has(f.user.id);
             let displayName = f.user.username;
@@ -307,7 +324,11 @@ export class FollowService {
               );
               if (realName) displayName = realName;
             }
-            const { first_name_encrypted, last_name_encrypted, ...userWithout } = f.user;
+            const {
+              first_name_encrypted,
+              last_name_encrypted,
+              ...userWithout
+            } = f.user;
             return {
               ...userWithout,
               display_name: displayName,
@@ -320,14 +341,17 @@ export class FollowService {
       };
     } catch (error: any) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to get following list', { module: 'FollowService', error });
+      logger.error('Failed to get following list', {
+        module: 'FollowService',
+        error,
+      });
       throw new BadRequestException('Failed to get following list');
     }
   }
 
   async getFollowers(userId: string, type?: string, currentUserId?: string) {
     try {
-      let query = this.admin
+      const query = this.admin
         .from('user_follows')
         .select(
           `
@@ -360,7 +384,10 @@ export class FollowService {
       const { data: follows, error } = await query;
 
       if (error) {
-        logger.error('Failed to get followers list', { module: 'FollowService', error });
+        logger.error('Failed to get followers list', {
+          module: 'FollowService',
+          error,
+        });
         throw new BadRequestException('Failed to get followers list');
       }
 
@@ -374,7 +401,11 @@ export class FollowService {
               const decrypted = this.decryptField(user.affinity_tags_encrypted);
               affinityTags = decrypted ? JSON.parse(decrypted) : [];
             } catch {
-              try { affinityTags = JSON.parse(user.affinity_tags_encrypted); } catch { affinityTags = []; }
+              try {
+                affinityTags = JSON.parse(user.affinity_tags_encrypted);
+              } catch {
+                affinityTags = [];
+              }
             }
           }
           return {
@@ -401,12 +432,17 @@ export class FollowService {
             },
           };
         })
-        .filter((f) => !f.user.is_deleted && !f.user.is_deactivated && f.user.has_completed_onboarding !== false);
+        .filter(
+          (f: any) =>
+            !f.user.is_deleted &&
+            !f.user.is_deactivated &&
+            f.user.has_completed_onboarding !== false,
+        );
 
       // Filter by type if specified
       let filteredFollows = processedFollows;
       if (type === 'mentors') {
-        filteredFollows = processedFollows.filter((f) => {
+        filteredFollows = processedFollows.filter((f: any) => {
           const user = f.user;
           return (
             user.is_willing_to_mentor ||
@@ -415,7 +451,7 @@ export class FollowService {
           );
         });
       } else if (type === 'mentees') {
-        filteredFollows = processedFollows.filter((f) => {
+        filteredFollows = processedFollows.filter((f: any) => {
           const user = f.user;
           return user.mentoring_as === 'mentee' || user.mentoring_as === 'both';
         });
@@ -424,15 +460,18 @@ export class FollowService {
       // Apply identity reveal — show real name for revealed users and self
       const viewerId = currentUserId || userId;
       const otherUserIds = filteredFollows
-        .filter((f) => f.user.id && f.user.id !== viewerId)
-        .map((f) => f.user.id);
-      const revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, otherUserIds);
+        .filter((f: any) => f.user.id && f.user.id !== viewerId)
+        .map((f: any) => f.user.id);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(
+        viewerId,
+        otherUserIds,
+      );
 
       return {
         success: true,
         message: 'Followers list retrieved successfully',
         data: {
-          followers: filteredFollows.map((f) => {
+          followers: filteredFollows.map((f: any) => {
             const isOwnEntry = f.user.id === viewerId;
             const isRevealed = revealedIds.has(f.user.id);
             let displayName = f.user.username;
@@ -443,7 +482,11 @@ export class FollowService {
               );
               if (realName) displayName = realName;
             }
-            const { first_name_encrypted, last_name_encrypted, ...userWithout } = f.user;
+            const {
+              first_name_encrypted,
+              last_name_encrypted,
+              ...userWithout
+            } = f.user;
             return {
               ...userWithout,
               display_name: displayName,
@@ -456,7 +499,10 @@ export class FollowService {
       };
     } catch (error: any) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to get followers list', { module: 'FollowService', error });
+      logger.error('Failed to get followers list', {
+        module: 'FollowService',
+        error,
+      });
       throw new BadRequestException('Failed to get followers list');
     }
   }
@@ -505,7 +551,10 @@ export class FollowService {
         },
       };
     } catch (error: any) {
-      logger.error('Failed to check follow status', { module: 'FollowService', error });
+      logger.error('Failed to check follow status', {
+        module: 'FollowService',
+        error,
+      });
       return {
         success: false,
         message: 'Failed to check follow status',
@@ -541,7 +590,10 @@ export class FollowService {
         delivery_method: ['in_app'],
       });
     } catch (error: any) {
-      logger.error('Failed to create follow notification', { module: 'FollowService', error });
+      logger.error('Failed to create follow notification', {
+        module: 'FollowService',
+        error,
+      });
     }
   }
 }

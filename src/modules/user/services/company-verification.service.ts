@@ -142,9 +142,7 @@ export class CompanyVerificationService {
 
       if (updateError) {
         this.logger.error('Failed to update user profile', updateError);
-        throw new InternalServerErrorException(
-          'Failed to update user profile',
-        );
+        throw new InternalServerErrorException('Failed to update user profile');
       }
 
       // Fetch username for email

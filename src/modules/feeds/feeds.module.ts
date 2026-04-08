@@ -10,9 +10,24 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
 
 @Module({
-  imports: [ConfigModule, NotificationsModule, EncryptionModule, MentionsModule],
+  imports: [
+    ConfigModule,
+    NotificationsModule,
+    EncryptionModule,
+    MentionsModule,
+  ],
   controllers: [FeedsController],
-  providers: [FeedsService, FeedPostsService, FeedEngagementService, FeedRankingService],
-  exports: [FeedsService, FeedPostsService, FeedEngagementService, FeedRankingService],
+  providers: [
+    FeedsService,
+    FeedPostsService,
+    FeedEngagementService,
+    FeedRankingService,
+  ],
+  exports: [
+    FeedsService,
+    FeedPostsService,
+    FeedEngagementService,
+    FeedRankingService,
+  ],
 })
 export class FeedsModule {}

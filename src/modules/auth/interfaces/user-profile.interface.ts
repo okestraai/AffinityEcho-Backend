@@ -27,7 +27,7 @@ export interface UserProfileResponse {
   role: string;
 
   // Encrypted sensitive fields (sent to frontend as-is)
-  company_type: string | null,
+  company_type: string | null;
   race_encrypted: string | null;
   gender_encrypted: string | null;
   career_level_encrypted: string | null;

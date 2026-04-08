@@ -32,7 +32,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       path: request.url,
       method: request.method,
       message:
-        typeof message === 'string' ? message : (message as any).message || message,
+        typeof message === 'string'
+          ? message
+          : (message as any).message || message,
     };
 
     // LOG WITH WINSTON

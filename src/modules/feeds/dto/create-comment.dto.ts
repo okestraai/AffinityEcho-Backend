@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsUUID, MaxLength, MinLength, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  IsBoolean,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateFeedCommentDto {

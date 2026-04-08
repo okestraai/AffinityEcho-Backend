@@ -176,7 +176,7 @@ export class PushNotificationService {
           body: JSON.stringify(batch),
         });
 
-        const result = await response.json() as any;
+        const result = await response.json();
 
         if (result.data) {
           // Check for individual ticket errors (invalid tokens)

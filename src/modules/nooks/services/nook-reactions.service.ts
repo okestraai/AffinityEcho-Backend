@@ -105,7 +105,13 @@ export class NookReactionsService {
   ) {
     const { reaction_type } = reactionDto;
 
-    const validReactions = ['heard', 'validated', 'helpful', 'supportive', 'inspired'];
+    const validReactions = [
+      'heard',
+      'validated',
+      'helpful',
+      'supportive',
+      'inspired',
+    ];
     if (!validReactions.includes(reaction_type)) {
       throw new BadRequestException(
         `Invalid reaction type. Valid: ${validReactions.join(', ')}`,

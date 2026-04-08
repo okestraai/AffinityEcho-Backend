@@ -62,9 +62,7 @@ describe('IdentityRevealUtil', () => {
       const chain = createMockQueryChain({ data: null, error: null });
       mockClient.from.mockReturnValueOnce(chain);
 
-      const result = await util.getRevealedUserIds('current-user', [
-        'user-2',
-      ]);
+      const result = await util.getRevealedUserIds('current-user', ['user-2']);
       expect(result).toEqual(new Set());
     });
 
@@ -85,10 +83,7 @@ describe('IdentityRevealUtil', () => {
 
   describe('decryptRealName', () => {
     it('should decrypt and combine first and last name', () => {
-      const result = util.decryptRealName(
-        'encrypted_John',
-        'encrypted_Doe',
-      );
+      const result = util.decryptRealName('encrypted_John', 'encrypted_Doe');
       expect(result).toBe('John Doe');
       expect(mockEncryption.decrypt).toHaveBeenCalledTimes(2);
     });
@@ -113,10 +108,7 @@ describe('IdentityRevealUtil', () => {
         throw new Error('Decryption failed');
       });
 
-      const result = util.decryptRealName(
-        'encrypted_bad',
-        'encrypted_data',
-      );
+      const result = util.decryptRealName('encrypted_bad', 'encrypted_data');
       expect(result).toBeNull();
     });
   });

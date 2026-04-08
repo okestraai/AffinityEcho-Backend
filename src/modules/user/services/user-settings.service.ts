@@ -2,7 +2,10 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
-import { UpdatePrivacySettingsDto, UpdateNotificationSettingsDto } from '../dto/update-profile.dto';
+import {
+  UpdatePrivacySettingsDto,
+  UpdateNotificationSettingsDto,
+} from '../dto/update-profile.dto';
 
 @Injectable()
 export class UserSettingsService {
@@ -35,7 +38,10 @@ export class UserSettingsService {
         .single();
 
       if (error) {
-        logger.warn('Could not fetch privacy settings, returning defaults', { userId, error: error.message });
+        logger.warn('Could not fetch privacy settings, returning defaults', {
+          userId,
+          error: error.message,
+        });
       }
 
       return {
@@ -131,7 +137,10 @@ export class UserSettingsService {
         .single();
 
       if (error) {
-        logger.warn('Could not fetch notification settings, returning defaults', { userId, error: error.message });
+        logger.warn(
+          'Could not fetch notification settings, returning defaults',
+          { userId, error: error.message },
+        );
       }
 
       return {
@@ -144,7 +153,8 @@ export class UserSettingsService {
           notifyOnFollow: settings?.notify_on_follow ?? true,
           notifyOnMention: settings?.notify_on_mention ?? true,
           notifyOnMessage: settings?.notify_on_message ?? true,
-          notifyOnConnectionRequest: settings?.notify_on_connection_request ?? true,
+          notifyOnConnectionRequest:
+            settings?.notify_on_connection_request ?? true,
           digestFrequency: settings?.digest_frequency || 'daily',
         },
       };
@@ -154,7 +164,10 @@ export class UserSettingsService {
     }
   }
 
-  async updateNotificationSettings(userId: string, dto: UpdateNotificationSettingsDto) {
+  async updateNotificationSettings(
+    userId: string,
+    dto: UpdateNotificationSettingsDto,
+  ) {
     logger.info('Updating notification settings', { userId });
 
     try {

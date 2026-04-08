@@ -126,7 +126,10 @@ export class MessagingService {
           },
         });
       } catch (notifError) {
-        logger.warn('Failed to send message notification', { notifError, recipientId });
+        logger.warn('Failed to send message notification', {
+          notifError,
+          recipientId,
+        });
       }
 
       // Return complete message data for WebSocket broadcast
@@ -238,58 +241,28 @@ export class MessagingService {
 
   async getUnreadCount(userId: string, chatType?: string) {
     try {
-      // First, get all conversation IDs for this user
-      const { data: userConversations, error: convError } = await this.admin
-        .from('conversations')
-        .select('id, context_type')
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-        .eq('is_active', true);
+      // Single RPC call instead of 2 sequential queries
+      const { data, error } = await this.admin.rpc('get_unread_message_count', {
+        p_user_id: userId,
+        p_chat_type: chatType || null,
+      });
 
-      if (convError) throw convError;
-
-      if (!userConversations || userConversations.length === 0) {
-        return {
-          success: true,
-          data: {
-            unread_count: 0,
-            chat_type: chatType || 'all',
-          },
-        };
+      if (error) {
+        // Fallback to original 2-query approach if RPC doesn't exist
+        logger.warn('RPC fallback for unread count', { error: error.message });
+        return this.getUnreadCountFallback(userId, chatType);
       }
 
-      // Filter by chat type if specified
-      let conversationIds = userConversations.map((conv) => conv.id);
-
-      if (chatType && chatType !== 'all') {
-        conversationIds = userConversations
-          .filter((conv) => conv.context_type === chatType)
-          .map((conv) => conv.id);
-      }
-
-      if (conversationIds.length === 0) {
-        return {
-          success: true,
-          data: {
-            unread_count: 0,
-            chat_type: chatType || 'all',
-          },
-        };
-      }
-
-      // Get unread count for these conversations
-      const { count, error } = await this.admin
-        .from('messages')
-        .select('id', { count: 'exact' })
-        .eq('is_read', false)
-        .not('sender_id', 'eq', userId)
-        .in('conversation_id', conversationIds);
-
-      if (error) throw error;
+      // RPC returns { get_unread_message_count: N }
+      const count =
+        typeof data === 'object' && data !== null
+          ? (data.get_unread_message_count ?? 0)
+          : (data ?? 0);
 
       return {
         success: true,
         data: {
-          unread_count: count || 0,
+          unread_count: count,
           chat_type: chatType || 'all',
         },
       };
@@ -299,7 +272,51 @@ export class MessagingService {
     }
   }
 
-  async deleteMessage(userId: string, messageId: string, conversationId: string) {
+  private async getUnreadCountFallback(userId: string, chatType?: string) {
+    const { data: convs } = await this.admin
+      .from('conversations')
+      .select('id, context_type')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .eq('is_active', true);
+
+    if (!convs || convs.length === 0) {
+      return {
+        success: true,
+        data: { unread_count: 0, chat_type: chatType || 'all' },
+      };
+    }
+
+    let ids = convs.map((c: any) => c.id);
+    if (chatType && chatType !== 'all') {
+      ids = convs
+        .filter((c: any) => c.context_type === chatType)
+        .map((c: any) => c.id);
+    }
+    if (ids.length === 0) {
+      return {
+        success: true,
+        data: { unread_count: 0, chat_type: chatType || 'all' },
+      };
+    }
+
+    const { count } = await this.admin
+      .from('messages')
+      .select('id', { count: 'exact' })
+      .eq('is_read', false)
+      .not('sender_id', 'eq', userId)
+      .in('conversation_id', ids);
+
+    return {
+      success: true,
+      data: { unread_count: count || 0, chat_type: chatType || 'all' },
+    };
+  }
+
+  async deleteMessage(
+    userId: string,
+    messageId: string,
+    conversationId: string,
+  ) {
     try {
       logger.info('Deleting message', { userId, messageId, conversationId });
 
@@ -377,7 +394,11 @@ export class MessagingService {
 
   async editMessage(userId: string, messageId: string, dto: EditMessageDto) {
     try {
-      logger.info('Editing message', { userId, messageId, conversationId: dto.conversation_id });
+      logger.info('Editing message', {
+        userId,
+        messageId,
+        conversationId: dto.conversation_id,
+      });
 
       // Verify conversation exists and user is participant and conversation is active
       const { data: conversation, error: convError } = await this.admin
@@ -447,7 +468,11 @@ export class MessagingService {
           ? conversation.user2_id
           : conversation.user1_id;
 
-      logger.info('Successfully edited message', { messageId, conversationId: dto.conversation_id, userId });
+      logger.info('Successfully edited message', {
+        messageId,
+        conversationId: dto.conversation_id,
+        userId,
+      });
 
       return {
         success: true,

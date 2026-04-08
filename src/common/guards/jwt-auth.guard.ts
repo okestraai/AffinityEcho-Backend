@@ -3,16 +3,18 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from '@nestjs/common';
-import { supabaseClient } from '../../database/supabase.client';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import logger from '../utils/logger.util';
 
 @Injectable()
 export class JwtAuthGuard {
-  private supabase;
+  private jwtService: JwtService;
+  private jwtSecret: string;
 
   constructor(private config: ConfigService) {
-    this.supabase = supabaseClient(config);
+    this.jwtSecret = config.get<string>('JWT_SECRET') || '';
+    this.jwtService = new JwtService({ secret: this.jwtSecret });
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -24,29 +26,16 @@ export class JwtAuthGuard {
     }
 
     try {
-      const { data, error } = await this.supabase.auth.getUser(token);
+      const payload = this.jwtService.verify(token, { secret: this.jwtSecret });
 
-      if (error) {
-        logger.warn('Token validation failed', {
-          message: error.message,
-          status: error.status,
-          tokenPrefix: token?.substring(0, 20) + '...',
-          tokenLength: token?.length,
-        });
-        throw new UnauthorizedException(
-          `Token validation failed: ${error.message}`,
-        );
+      if (!payload.sub) {
+        throw new UnauthorizedException('Invalid token payload');
       }
 
-      if (!data.user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Set user in request - CRITICAL for CurrentUser to work
+      // Set user in request — CRITICAL for @CurrentUser() to work
       request.user = {
-        sub: data.user.id, // This MUST be set for @CurrentUser() to work
-        email: data.user.email,
-        user_metadata: data.user.user_metadata,
+        sub: payload.sub,
+        email: payload.email,
       };
 
       return true;
@@ -54,23 +43,21 @@ export class JwtAuthGuard {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Token has expired');
+      }
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Invalid token');
+      }
       throw new UnauthorizedException('Authentication failed');
     }
   }
 
   private extractToken(request: any): string | null {
     const authHeader = request.headers.authorization;
-
-    if (!authHeader) {
-      return null;
-    }
-
+    if (!authHeader) return null;
     const [type, token] = authHeader.split(' ');
-
-    if (type !== 'Bearer' || !token) {
-      return null;
-    }
-
+    if (type !== 'Bearer' || !token) return null;
     return token;
   }
 }

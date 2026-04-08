@@ -1,29 +1,59 @@
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
     <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Verify Your Account - AffinityEcho</title>
+    <!--[if gte mso 9]>
+    <xml>
+        <o:OfficeDocumentSettings>
+            <o:AllowPNG/>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+    </xml>
+    <![endif]-->
 </head>
-<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #4b5563; margin: 0; padding: 0; background: #f3f4f6;">
-    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.07);">
-        <div style="background: linear-gradient(135deg, #9333ea 0%, #4f46e5 50%, #3b82f6 100%); padding: 40px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px; font-weight: 700;">Complete Your Registration</h1>
-            <p style="margin: 10px 0 0; opacity: 0.9; font-size: 16px;">AffinityEcho - Verify Your Account</p>
-        </div>
-
-        <div style="padding: 40px;">
-            <h2 style="color: #111827; margin: 0 0 10px; font-size: 22px;">Welcome to AffinityEcho!</h2>
-            <p>Hello <strong style="color: #9333ea;"><%= username %></strong>,</p>
-            <p>Thank you for joining our community! To complete your registration, please use the verification code below:</p>
-
-            <div style="background: #faf5ff; border: 2px solid #9333ea; border-radius: 12px; padding: 20px; font-size: 42px; font-weight: bold; letter-spacing: 12px; color: #9333ea; font-family: 'Courier New', monospace; text-align: center; margin: 30px 0;">
-                <%= otp %>
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #4b5563; margin: 0; padding: 0; background-color: #f3f4f6;" bgcolor="#f3f4f6">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f3f4f6;" bgcolor="#f3f4f6">
+    <tr><td align="center" style="padding: 20px 0;">
+    <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.07);" bgcolor="#ffffff">
+        <!-- Header -->
+        <tr><td>
+            <!--[if mso]>
+            <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;">
+            <v:fill type="gradient" color="#9333ea" color2="#3b82f6" angle="135"/>
+            <v:textbox style="mso-fit-shape-to-text:true" inset="0,0,0,0">
+            <![endif]-->
+            <div style="background: linear-gradient(135deg, #9333ea 0%, #4f46e5 50%, #3b82f6 100%); background-color: #9333ea; padding: 40px; text-align: center; color: white;">
+                <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: white;">Complete Your Registration</h1>
+                <p style="margin: 10px 0 0; opacity: 0.9; font-size: 16px; color: white;">AffinityEcho - Verify Your Account</p>
             </div>
+            <!--[if mso]></v:textbox></v:rect><![endif]-->
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding: 40px;">
+            <h2 style="color: #111827; margin: 0 0 10px; font-size: 22px;">Welcome to AffinityEcho!</h2>
+            <p style="color: #4b5563;">Hello <strong style="color: #9333ea;"><%= username %></strong>,</p>
+            <p style="color: #4b5563;">Thank you for joining our community! To complete your registration, please use the verification code below:</p>
+
+            <!-- OTP Box -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 30px 0;">
+            <tr><td align="center">
+                <table cellpadding="0" cellspacing="0" border="0" style="background-color: #faf5ff; border: 2px solid #9333ea; border-radius: 12px;" bgcolor="#faf5ff">
+                <tr><td style="padding: 20px 40px; font-size: 42px; font-weight: bold; letter-spacing: 12px; color: #9333ea; font-family: 'Courier New', monospace; text-align: center;">
+                    <%= otp %>
+                </td></tr>
+                </table>
+            </td></tr>
+            </table>
 
             <p style="text-align: center; font-size: 16px; color: #4b5563; margin: 20px 0;">Enter this 6-digit code on the verification page to activate your account.</p>
 
-            <div style="background: #faf5ff; border: 1px solid #e9d5ff; padding: 20px; border-radius: 8px; margin: 25px 0;">
+            <!-- Info Box -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 25px 0;">
+            <tr><td style="background-color: #faf5ff; border: 1px solid #e9d5ff; padding: 20px; border-radius: 8px;" bgcolor="#faf5ff">
                 <p style="margin: 0 0 10px; color: #9333ea; font-weight: 600;">What happens after verification?</p>
                 <ul style="margin: 0; color: #4b5563; padding-left: 20px;">
                     <li>Complete your anonymous profile setup</li>
@@ -31,9 +61,12 @@
                     <li>Access company-specific forums</li>
                     <li>Start finding mentorship opportunities</li>
                 </ul>
-            </div>
+            </td></tr>
+            </table>
 
-            <div style="background: #fef3c7; border: 1px solid #fde68a; padding: 20px; border-radius: 8px; margin: 25px 0;">
+            <!-- Warning Box -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 25px 0;">
+            <tr><td style="background-color: #fef3c7; border: 1px solid #fde68a; padding: 20px; border-radius: 8px;" bgcolor="#fef3c7">
                 <p style="margin: 0 0 10px; color: #92400e; font-weight: 600;">Security Information</p>
                 <ul style="margin: 0; color: #92400e; padding-left: 20px;">
                     <li>This code will expire in 15 minutes</li>
@@ -41,14 +74,18 @@
                     <li>AffinityEcho will never ask for this code via phone or email</li>
                     <li>If you didn't create an account, please ignore this email</li>
                 </ul>
-            </div>
-        </div>
+            </td></tr>
+            </table>
+        </td></tr>
 
-        <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+        <!-- Footer -->
+        <tr><td style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;" bgcolor="#f9fafb">
             <p style="margin: 0 0 8px; color: #9ca3af; font-size: 14px;">This verification code was sent as part of your account registration.</p>
             <p style="margin: 0; font-size: 12px; color: #9ca3af;">Need help? Contact us at <a href="mailto:<%= supportEmail %>" style="color: #4f46e5;"><%= supportEmail %></a></p>
             <p style="margin: 12px 0 0; font-size: 12px; color: #9ca3af;">&copy; 2025 AffinityEcho. Building stronger professionals together.</p>
-        </div>
-    </div>
+        </td></tr>
+    </table>
+    </td></tr>
+    </table>
 </body>
 </html>

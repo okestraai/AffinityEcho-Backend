@@ -26,11 +26,7 @@ export class OkestraController {
     @Param('contentId') contentId: string,
     @CurrentUser('sub') userId: string,
   ) {
-    return this.okestraService.getInsights(
-      contentType,
-      contentId,
-      userId,
-    );
+    return this.okestraService.getInsights(contentType, contentId, userId);
   }
 
   @Post('insights/:contentType/:contentId/generate')

@@ -7,7 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
-import { DeactivateAccountDto, DeleteAccountDto } from '../dto/update-profile.dto';
+import {
+  DeactivateAccountDto,
+  DeleteAccountDto,
+} from '../dto/update-profile.dto';
 import { USER_PROFILE_OWN_FIELDS } from '../../../common/constants/select-fields';
 
 @Injectable()
@@ -63,7 +66,8 @@ export class UserAccountService {
 
       return {
         success: true,
-        message: 'Account deactivated successfully. You can reactivate it by logging in again.',
+        message:
+          'Account deactivated successfully. You can reactivate it by logging in again.',
       };
     } catch (error) {
       if (
@@ -200,14 +204,19 @@ export class UserAccountService {
 
   // ============ CHANGE PASSWORD ============
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     logger.info('Changing password', { userId });
 
     try {
-      // Get user email from profile
+      // Get user with password hash
+      const bcrypt = await import('bcrypt');
       const { data: profile, error: profileError } = await this.admin
         .from('user_profiles')
-        .select('email')
+        .select('email, password_hash')
         .eq('id', userId)
         .single();
 
@@ -215,29 +224,36 @@ export class UserAccountService {
         throw new BadRequestException('User not found');
       }
 
-      // Verify current password by attempting to sign in
-      const { error: signInError } = await this.admin.auth.signInWithPassword({
-        email: profile.email,
-        password: currentPassword,
-      });
+      if (!profile.password_hash) {
+        throw new BadRequestException(
+          'Cannot change password for OAuth-only accounts.',
+        );
+      }
 
-      if (signInError) {
+      // Verify current password
+      const isValid = await bcrypt.compare(
+        currentPassword,
+        profile.password_hash,
+      );
+      if (!isValid) {
         throw new BadRequestException('Current password is incorrect');
       }
 
-      // Update password using admin API
-      const { error: updateError } = await this.admin.auth.admin.updateUserById(
-        userId,
-        { password: newPassword },
-      );
+      // Hash and update new password
+      const newHash = await bcrypt.hash(newPassword, 12);
+      const { error: updateError } = await this.admin
+        .from('user_profiles')
+        .update({
+          password_hash: newHash,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
 
       if (updateError) {
-        logger.error('Password update failed', { userId, error: updateError.message });
-        if (updateError.message.includes('password')) {
-          throw new BadRequestException(
-            'Password does not meet security requirements. Please choose a stronger password.',
-          );
-        }
+        logger.error('Password update failed', {
+          userId,
+          error: updateError.message,
+        });
         throw new BadRequestException('Failed to update password');
       }
 

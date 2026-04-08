@@ -80,8 +80,20 @@ export class EmailService {
   ): Promise<string> {
     try {
       // Try src/ first (dev), then templates/ (production Docker)
-      const devPath = path.resolve(process.cwd(), 'src', 'common', 'templates', 'emails', `${templateName}.ejs`);
-      const prodPath = path.resolve(process.cwd(), 'templates', 'emails', `${templateName}.ejs`);
+      const devPath = path.resolve(
+        process.cwd(),
+        'src',
+        'common',
+        'templates',
+        'emails',
+        `${templateName}.ejs`,
+      );
+      const prodPath = path.resolve(
+        process.cwd(),
+        'templates',
+        'emails',
+        `${templateName}.ejs`,
+      );
       const fs = await import('fs');
       const templatePath = fs.existsSync(devPath) ? devPath : prodPath;
 
@@ -292,7 +304,8 @@ export class EmailService {
         username,
         company,
         verificationUrl,
-        supportEmail: this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
+        supportEmail:
+          this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
       },
     );
   }

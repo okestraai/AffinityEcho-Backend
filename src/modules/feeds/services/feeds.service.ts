@@ -2,7 +2,12 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
-import { QueryFeedDto, FeedFilter, FeedSortBy, ContentTypeFilter } from '../dto/query-feed.dto';
+import {
+  QueryFeedDto,
+  FeedFilter,
+  FeedSortBy,
+  ContentTypeFilter,
+} from '../dto/query-feed.dto';
 import { FeedRankingService, RankingContext } from './feed-ranking.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
@@ -67,7 +72,10 @@ export class FeedsService {
       } catch {}
     }
 
-    if (profile.company_alumni_encrypted && Array.isArray(profile.company_alumni_encrypted)) {
+    if (
+      profile.company_alumni_encrypted &&
+      Array.isArray(profile.company_alumni_encrypted)
+    ) {
       for (const alumniEncrypted of profile.company_alumni_encrypted) {
         try {
           companies.push(this.encryption.decrypt(alumniEncrypted));
@@ -117,12 +125,13 @@ export class FeedsService {
               pagination: { page, limit, total: 0, hasMore: false },
             };
           }
-          followingIds = followingUsers.map((f) => f.following_id);
+          followingIds = followingUsers.map((f: any) => f.following_id);
         }
 
-        const trendingCutoff = filter === FeedFilter.TRENDING
-          ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-          : null;
+        const trendingCutoff =
+          filter === FeedFilter.TRENDING
+            ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+            : null;
 
         // Fetch 3x limit per content type to support pagination + diversity filtering
         const fetchLimit = Math.min(limit * 3, 100);
@@ -134,18 +143,71 @@ export class FeedsService {
           userCompanyList = await this.getUserCompanyList(userId);
         }
 
-        if (contentType === ContentTypeFilter.ALL || contentType === ContentTypeFilter.POST) {
-          contentFetchers.push(this.getFeedPosts(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff, userCompanyList));
+        if (
+          contentType === ContentTypeFilter.ALL ||
+          contentType === ContentTypeFilter.POST
+        ) {
+          contentFetchers.push(
+            this.getFeedPosts(
+              userId,
+              filter,
+              sortBy,
+              company,
+              tags,
+              fetchLimit,
+              0,
+              followingIds,
+              trendingCutoff,
+              userCompanyList,
+            ),
+          );
         }
-        if (contentType === ContentTypeFilter.ALL || contentType === ContentTypeFilter.TOPIC) {
-          contentFetchers.push(this.getForumTopics(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff, userCompanyList));
+        if (
+          contentType === ContentTypeFilter.ALL ||
+          contentType === ContentTypeFilter.TOPIC
+        ) {
+          contentFetchers.push(
+            this.getForumTopics(
+              userId,
+              filter,
+              sortBy,
+              company,
+              tags,
+              fetchLimit,
+              0,
+              followingIds,
+              trendingCutoff,
+              userCompanyList,
+            ),
+          );
         }
-        if (contentType === ContentTypeFilter.ALL || contentType === ContentTypeFilter.NOOK) {
-          contentFetchers.push(this.getNookMessages(userId, filter, sortBy, company, tags, fetchLimit, 0, followingIds, trendingCutoff, userCompanyList));
+        if (
+          contentType === ContentTypeFilter.ALL ||
+          contentType === ContentTypeFilter.NOOK
+        ) {
+          contentFetchers.push(
+            this.getNookMessages(
+              userId,
+              filter,
+              sortBy,
+              company,
+              tags,
+              fetchLimit,
+              0,
+              followingIds,
+              trendingCutoff,
+              userCompanyList,
+            ),
+          );
         }
 
         // Fetch all personalization signals in parallel with content
-        const [contentResults, tagAffinities, authorAffinities, contentTypePrefs] = await Promise.all([
+        const [
+          contentResults,
+          tagAffinities,
+          authorAffinities,
+          contentTypePrefs,
+        ] = await Promise.all([
           Promise.all(contentFetchers),
           this.getUserEngagementProfile(userId),
           this.getUserAuthorAffinities(userId),
@@ -176,20 +238,29 @@ export class FeedsService {
       let processedFeed: any[] = sortedFeed;
       if (seenIds.length > 0) {
         const seenMap = new Map(seenIds.map((id: string) => [id, 1]));
-        processedFeed = this.feedRanking.applySuppression(processedFeed, seenMap);
+        processedFeed = this.feedRanking.applySuppression(
+          processedFeed,
+          seenMap,
+        );
       }
 
       // Apply diversity constraints over the slice needed for this page.
       // Requesting offset+limit items ensures page consistency across pages:
       //   page 1 gets items [0:20], page 2 gets [20:40] from the same diversity pass.
       const totalNeeded = offset + limit;
-      const diverseFeed = this.feedRanking.applyDiversityConstraints(processedFeed, totalNeeded);
+      const diverseFeed = this.feedRanking.applyDiversityConstraints(
+        processedFeed,
+        totalNeeded,
+      );
 
       // Paginate from the diversity-constrained result
       const paginatedFeed = diverseFeed.slice(offset, offset + limit);
 
       // Enrich with user engagement data
-      const enrichedFeed = await this.enrichWithUserEngagement(userId, paginatedFeed);
+      const enrichedFeed = await this.enrichWithUserEngagement(
+        userId,
+        paginatedFeed,
+      );
 
       // Apply identity reveal — show real name for revealed users
       await this.applyIdentityReveals(userId, enrichedFeed);
@@ -256,7 +327,8 @@ export class FeedsService {
     if (filter === FeedFilter.COMPANY || company) {
       query = query.eq('visibility', 'company');
       // Filter by user's company list (current + alumni)
-      const companyList = userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
+      const companyList =
+        userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
       if (company) {
         query = query.eq('company_name', company);
       } else if (companyList.length > 0) {
@@ -373,7 +445,8 @@ export class FeedsService {
 
     if (filter === FeedFilter.COMPANY || company) {
       query = query.eq('scope', 'company');
-      const companyList = userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
+      const companyList =
+        userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
       if (company) {
         query = query.eq('company_name', company);
       } else if (companyList.length > 0) {
@@ -500,7 +573,8 @@ export class FeedsService {
 
     if (filter === FeedFilter.COMPANY || company) {
       query = query.eq('scope', 'company');
-      const companyList = userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
+      const companyList =
+        userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
       if (company) {
         query = query.eq('company_name', company);
       } else if (companyList.length > 0) {
@@ -531,7 +605,9 @@ export class FeedsService {
     }
 
     return (nooks || []).map((nook: any) => {
-      const userProfile = Array.isArray(nook.user_profile) ? nook.user_profile[0] : nook.user_profile;
+      const userProfile = Array.isArray(nook.user_profile)
+        ? nook.user_profile[0]
+        : nook.user_profile;
       const timeLeft = this.calculateTimeLeft(nook.expires_at);
 
       return {
@@ -568,7 +644,11 @@ export class FeedsService {
     });
   }
 
-  private applySorting(query: any, sortBy: FeedSortBy, contentType: 'post' | 'topic' | 'nook') {
+  private applySorting(
+    query: any,
+    sortBy: FeedSortBy,
+    contentType: 'post' | 'topic' | 'nook',
+  ) {
     switch (sortBy) {
       case FeedSortBy.RECENT:
         return query.order('created_at', { ascending: false });
@@ -594,29 +674,49 @@ export class FeedsService {
   private sortFeedItems(items: FeedItem[], sortBy: FeedSortBy): FeedItem[] {
     switch (sortBy) {
       case FeedSortBy.RECENT:
-        return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        return items.sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
 
       case FeedSortBy.POPULAR:
       case FeedSortBy.MOST_LIKED:
-        return items.sort((a, b) => (b.engagement.likes || 0) - (a.engagement.likes || 0));
+        return items.sort(
+          (a, b) => (b.engagement.likes || 0) - (a.engagement.likes || 0),
+        );
 
       case FeedSortBy.MOST_COMMENTED:
-        return items.sort((a, b) => (b.engagement.comments || 0) - (a.engagement.comments || 0));
+        return items.sort(
+          (a, b) => (b.engagement.comments || 0) - (a.engagement.comments || 0),
+        );
 
       default:
-        return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        return items.sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
     }
   }
 
-  private async enrichWithUserEngagement(userId: string, items: FeedItem[]): Promise<any[]> {
+  private async enrichWithUserEngagement(
+    userId: string,
+    items: FeedItem[],
+  ): Promise<any[]> {
     if (items.length === 0) return items;
 
-    const postIds = items.filter(i => i.content_type === 'post').map(i => i.content_id);
-    const topicIds = items.filter(i => i.content_type === 'topic').map(i => i.content_id);
+    const postIds = items
+      .filter((i) => i.content_type === 'post')
+      .map((i) => i.content_id);
+    const topicIds = items
+      .filter((i) => i.content_type === 'topic')
+      .map((i) => i.content_id);
 
     const [
-      { data: likes }, { data: shares }, { data: bookmarks },
-      { data: feedUserReactions }, { data: feedAllReactions },
+      { data: likes },
+      { data: shares },
+      { data: bookmarks },
+      { data: feedUserReactions },
+      { data: feedAllReactions },
       { data: topicUserReactions },
     ] = await Promise.all([
       this.admin
@@ -656,9 +756,15 @@ export class FeedsService {
         : Promise.resolve({ data: [] }),
     ]);
 
-    const likeMap = new Set((likes || []).map((l) => `${l.content_type}_${l.content_id}`));
-    const shareMap = new Set((shares || []).map((s) => `${s.content_type}_${s.content_id}`));
-    const bookmarkMap = new Set((bookmarks || []).map((b) => `${b.content_type}_${b.content_id}`));
+    const likeMap = new Set(
+      (likes || []).map((l: any) => `${l.content_type}_${l.content_id}`),
+    );
+    const shareMap = new Set(
+      (shares || []).map((s: any) => `${s.content_type}_${s.content_id}`),
+    );
+    const bookmarkMap = new Set(
+      (bookmarks || []).map((b: any) => `${b.content_type}_${b.content_id}`),
+    );
 
     const feedReactionMap = new Map<string, Set<string>>();
     (feedUserReactions || []).forEach((r: any) => {
@@ -670,14 +776,16 @@ export class FeedsService {
     const feedReactionCounts = new Map<string, Record<string, number>>();
     (feedAllReactions || []).forEach((r: any) => {
       const key = `${r.content_type}_${r.content_id}`;
-      if (!feedReactionCounts.has(key)) feedReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
+      if (!feedReactionCounts.has(key))
+        feedReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
       const counts = feedReactionCounts.get(key)!;
       if (counts[r.reaction_type] !== undefined) counts[r.reaction_type]++;
     });
 
     const topicReactionMap = new Map<string, Set<string>>();
     (topicUserReactions || []).forEach((r: any) => {
-      if (!topicReactionMap.has(r.topic_id)) topicReactionMap.set(r.topic_id, new Set());
+      if (!topicReactionMap.has(r.topic_id))
+        topicReactionMap.set(r.topic_id, new Set());
       topicReactionMap.get(r.topic_id)!.add(r.reaction_type);
     });
 
@@ -711,21 +819,33 @@ export class FeedsService {
           validated: feedReactions?.has('validated') || false,
           inspired: feedReactions?.has('inspired') || false,
         },
-        reaction_counts: feedReactionCounts.get(key) || { heard: 0, validated: 0, inspired: 0 },
+        reaction_counts: feedReactionCounts.get(key) || {
+          heard: 0,
+          validated: 0,
+          inspired: 0,
+        },
       };
     });
   }
 
-  private async applyIdentityReveals(userId: string, items: any[]): Promise<void> {
+  private async applyIdentityReveals(
+    userId: string,
+    items: any[],
+  ): Promise<void> {
     if (items.length === 0) return;
 
-    const otherAuthorIds = [...new Set(
-      items
-        .filter((item) => item.user_id && item.user_id !== userId)
-        .map((item) => item.user_id),
-    )];
+    const otherAuthorIds = [
+      ...new Set(
+        items
+          .filter((item) => item.user_id && item.user_id !== userId)
+          .map((item) => item.user_id),
+      ),
+    ];
 
-    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      userId,
+      otherAuthorIds,
+    );
 
     items.forEach((item) => {
       if (!item.author) return;
@@ -773,12 +893,16 @@ export class FeedsService {
    * Looks at the last 30 days of likes and comments.
    * Comments are weighted 2x (more intentional engagement).
    */
-  private async getUserEngagementProfile(userId: string): Promise<Map<string, number>> {
+  private async getUserEngagementProfile(
+    userId: string,
+  ): Promise<Map<string, number>> {
     const cacheKey = `engagement-profile:${userId}`;
     const cached = await this.redis.get<[string, number][]>(cacheKey);
     if (cached) return new Map(cached);
 
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
     const [likesResult, commentsResult] = await Promise.all([
       this.admin
@@ -805,8 +929,12 @@ export class FeedsService {
 
     if (engagedContentIds.length === 0) return new Map();
 
-    const postIds = engagedContentIds.filter((e) => e.type === 'post').map((e) => e.id);
-    const topicIds = engagedContentIds.filter((e) => e.type === 'topic').map((e) => e.id);
+    const postIds = engagedContentIds
+      .filter((e) => e.type === 'post')
+      .map((e) => e.id);
+    const topicIds = engagedContentIds
+      .filter((e) => e.type === 'topic')
+      .map((e) => e.id);
 
     const tagResults = await Promise.all([
       postIds.length > 0
@@ -818,11 +946,13 @@ export class FeedsService {
     ]);
 
     const tagCounts = new Map<string, number>();
-    [...(tagResults[0].data || []), ...(tagResults[1].data || [])].forEach((item: any) => {
-      (item.tags || []).forEach((tag: string) => {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-      });
-    });
+    [...(tagResults[0].data || []), ...(tagResults[1].data || [])].forEach(
+      (item: any) => {
+        (item.tags || []).forEach((tag: string) => {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        });
+      },
+    );
 
     const maxCount = Math.max(...tagCounts.values(), 1);
     const affinities = new Map<string, number>();
@@ -839,12 +969,16 @@ export class FeedsService {
    * Identifies which authors' content the user likes/comments on most,
    * normalised to 0-1. Comments are weighted 2x.
    */
-  private async getUserAuthorAffinities(userId: string): Promise<Map<string, number>> {
+  private async getUserAuthorAffinities(
+    userId: string,
+  ): Promise<Map<string, number>> {
     const cacheKey = `author-affinities:${userId}`;
     const cached = await this.redis.get<[string, number][]>(cacheKey);
     if (cached) return new Map(cached);
 
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
     const [likesResult, commentsResult] = await Promise.all([
       this.admin
@@ -861,24 +995,41 @@ export class FeedsService {
 
     const engagedContent: { type: string; id: string; weight: number }[] = [];
     (likesResult.data || []).forEach((l: any) =>
-      engagedContent.push({ type: l.content_type, id: l.content_id, weight: 1 }),
+      engagedContent.push({
+        type: l.content_type,
+        id: l.content_id,
+        weight: 1,
+      }),
     );
     (commentsResult.data || []).forEach((c: any) =>
-      engagedContent.push({ type: c.content_type, id: c.content_id, weight: 2 }),
+      engagedContent.push({
+        type: c.content_type,
+        id: c.content_id,
+        weight: 2,
+      }),
     );
 
     if (engagedContent.length === 0) return new Map();
 
-    const postIds = engagedContent.filter((e) => e.type === 'post').map((e) => e.id);
-    const topicIds = engagedContent.filter((e) => e.type === 'topic').map((e) => e.id);
-    const nookIds = engagedContent.filter((e) => e.type === 'nook_message').map((e) => e.id);
+    const postIds = engagedContent
+      .filter((e) => e.type === 'post')
+      .map((e) => e.id);
+    const topicIds = engagedContent
+      .filter((e) => e.type === 'topic')
+      .map((e) => e.id);
+    const nookIds = engagedContent
+      .filter((e) => e.type === 'nook_message')
+      .map((e) => e.id);
 
     const [postsResult, topicsResult, nooksResult] = await Promise.all([
       postIds.length > 0
         ? this.admin.from('feed_posts').select('id, user_id').in('id', postIds)
         : Promise.resolve({ data: [] }),
       topicIds.length > 0
-        ? this.admin.from('forum_topics').select('id, user_id').in('id', topicIds)
+        ? this.admin
+            .from('forum_topics')
+            .select('id, user_id')
+            .in('id', topicIds)
         : Promise.resolve({ data: [] }),
       nookIds.length > 0
         ? this.admin.from('nooks').select('id, creator_id').in('id', nookIds)
@@ -887,9 +1038,15 @@ export class FeedsService {
 
     // Map content id → author id
     const contentAuthorMap = new Map<string, string>();
-    (postsResult.data || []).forEach((p: any) => contentAuthorMap.set(`post_${p.id}`, p.user_id));
-    (topicsResult.data || []).forEach((t: any) => contentAuthorMap.set(`topic_${t.id}`, t.user_id));
-    (nooksResult.data || []).forEach((n: any) => contentAuthorMap.set(`nook_message_${n.id}`, n.creator_id));
+    (postsResult.data || []).forEach((p: any) =>
+      contentAuthorMap.set(`post_${p.id}`, p.user_id),
+    );
+    (topicsResult.data || []).forEach((t: any) =>
+      contentAuthorMap.set(`topic_${t.id}`, t.user_id),
+    );
+    (nooksResult.data || []).forEach((n: any) =>
+      contentAuthorMap.set(`nook_message_${n.id}`, n.creator_id),
+    );
 
     const authorCounts = new Map<string, number>();
     engagedContent.forEach(({ type, id, weight }) => {
@@ -916,12 +1073,16 @@ export class FeedsService {
    * Returns a normalised 0-1 score per content type (post, topic, nook_message).
    * Comments are weighted 2x.
    */
-  private async getUserContentTypePreference(userId: string): Promise<Map<string, number>> {
+  private async getUserContentTypePreference(
+    userId: string,
+  ): Promise<Map<string, number>> {
     const cacheKey = `content-type-prefs:${userId}`;
     const cached = await this.redis.get<[string, number][]>(cacheKey);
     if (cached) return new Map(cached);
 
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
     const [likesResult, commentsResult] = await Promise.all([
       this.admin

@@ -39,7 +39,10 @@ export class NooksService {
     // Build query
     let supabaseQuery = this.admin
       .from('nooks')
-      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`, { count: 'exact' })
+      .select(
+        `*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
+        { count: 'exact' },
+      )
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())
       .neq('creator_id', userId);
@@ -64,7 +67,9 @@ export class NooksService {
     // Apply sorting
     if (query.sortBy === 'trending') {
       // Trending: only show nooks from last 7 days, sorted by activity
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const sevenDaysAgo = new Date(
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      ).toISOString();
       supabaseQuery = supabaseQuery
         .gte('created_at', sevenDaysAgo)
         .order('messages_count', { ascending: false });
@@ -82,7 +87,7 @@ export class NooksService {
 
     if (error) throw new BadRequestException(error.message);
 
-    const formattedNooks = (nooks || []).map((nook) => ({
+    const formattedNooks = (nooks || []).map((nook: any) => ({
       ...nook,
       timeLeft: this.calculateTimeLeft(new Date(nook.expires_at)),
     }));
@@ -127,7 +132,9 @@ export class NooksService {
 
       if (userProfile?.company_encrypted) {
         try {
-          insertData.company_name = this.encryption.decrypt(userProfile.company_encrypted);
+          insertData.company_name = this.encryption.decrypt(
+            userProfile.company_encrypted,
+          );
         } catch (e) {
           // Skip stamping if decryption fails
         }
@@ -400,9 +407,16 @@ export class NooksService {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const { data: nooks, error, count } = await this.admin
+    const {
+      data: nooks,
+      error,
+      count,
+    } = await this.admin
       .from('nooks')
-      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`, { count: 'exact' })
+      .select(
+        `*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
+        { count: 'exact' },
+      )
       .eq('creator_id', userId)
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())
@@ -433,7 +447,11 @@ export class NooksService {
     };
   }
 
-  async getBookmarkedNooks(userId: string, page: number = 1, limit: number = 8) {
+  async getBookmarkedNooks(
+    userId: string,
+    page: number = 1,
+    limit: number = 8,
+  ) {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -445,7 +463,8 @@ export class NooksService {
       .eq('content_type', 'nook_message')
       .order('created_at', { ascending: false });
 
-    if (bmError) throw new BadRequestException('Failed to fetch bookmarked nooks');
+    if (bmError)
+      throw new BadRequestException('Failed to fetch bookmarked nooks');
 
     const nookIds = (bookmarks || []).map((b: any) => b.content_id);
     if (nookIds.length === 0) {
@@ -458,15 +477,23 @@ export class NooksService {
       };
     }
 
-    const { data: nooks, error, count } = await this.admin
+    const {
+      data: nooks,
+      error,
+      count,
+    } = await this.admin
       .from('nooks')
-      .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`, { count: 'exact' })
+      .select(
+        `*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
+        { count: 'exact' },
+      )
       .in('id', nookIds)
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())
       .range(from, to);
 
-    if (error) throw new BadRequestException('Failed to fetch bookmarked nooks');
+    if (error)
+      throw new BadRequestException('Failed to fetch bookmarked nooks');
 
     const formattedNooks = (nooks || []).map((nook: any) => ({
       ...nook,
@@ -511,27 +538,44 @@ export class NooksService {
 
     if (existing) {
       await this.admin.from('feed_bookmarks').delete().eq('id', existing.id);
-      return { success: true, data: { bookmarked: false }, message: 'Bookmark removed' };
+      return {
+        success: true,
+        data: { bookmarked: false },
+        message: 'Bookmark removed',
+      };
     } else {
       await this.admin.from('feed_bookmarks').insert({
         user_id: userId,
         content_type: 'nook_message',
         content_id: nookId,
       });
-      return { success: true, data: { bookmarked: true }, message: 'Nook bookmarked' };
+      return {
+        success: true,
+        data: { bookmarked: true },
+        message: 'Nook bookmarked',
+      };
     }
   }
 
-  private async applyIdentityReveals(userId: string, items: any[], ownerField: string = 'creator_id'): Promise<void> {
-    const otherAuthorIds = [...new Set(
-      items
-        .filter((item) => item.user_profile?.id && item.user_profile.id !== userId)
-        .map((item) => item.user_profile.id),
-    )];
+  private async applyIdentityReveals(
+    userId: string,
+    items: any[],
+    ownerField: string = 'creator_id',
+  ): Promise<void> {
+    const otherAuthorIds = [
+      ...new Set(
+        items
+          .filter(
+            (item) => item.user_profile?.id && item.user_profile.id !== userId,
+          )
+          .map((item) => item.user_profile.id),
+      ),
+    ];
 
-    const revealedIds = otherAuthorIds.length > 0
-      ? await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds)
-      : new Set<string>();
+    const revealedIds =
+      otherAuthorIds.length > 0
+        ? await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds)
+        : new Set<string>();
 
     items.forEach((item) => {
       if (!item.user_profile) return;

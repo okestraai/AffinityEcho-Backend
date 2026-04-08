@@ -217,7 +217,10 @@ export class ConversationsController {
     @CurrentUser() user: any,
     @Param('id') conversationId: string,
   ) {
-    return this.conversationsService.deleteConversation(user.userId, conversationId);
+    return this.conversationsService.deleteConversation(
+      user.userId,
+      conversationId,
+    );
   }
 
   @Delete(':id/clear')

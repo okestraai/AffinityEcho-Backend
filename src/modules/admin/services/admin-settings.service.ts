@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { AdminUsersService } from './admin-users.service';
 
-const VALID_KEYS = ['general', 'security', 'notifications', 'moderation'] as const;
+const VALID_KEYS = [
+  'general',
+  'security',
+  'notifications',
+  'moderation',
+] as const;
 type SettingKey = (typeof VALID_KEYS)[number];
 
 @Injectable()
@@ -21,7 +26,7 @@ export class AdminSettingsService {
     const { data, error } = await this.admin
       .from('system_settings')
       .select('key, value, updated_by, updated_at')
-      .in('key', VALID_KEYS);
+      .in('key', [...VALID_KEYS]);
 
     if (error) throw new BadRequestException(error.message);
 

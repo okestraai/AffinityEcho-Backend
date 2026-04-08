@@ -35,15 +35,15 @@ export class ReferralCommentsService {
       if (error) throw error;
 
       // Get author profiles
-      const userIds = [...new Set(data.map((c) => c.user_id))];
+      const userIds = [...new Set(data.map((c: any) => c.user_id))];
       const { data: profiles } = await this.admin
         .from('user_profiles')
         .select('id, username, avatar, is_company_verified')
         .in('id', userIds);
 
-      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+      const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
 
-      const commentsWithAuthors = data.map((comment) => ({
+      const commentsWithAuthors = data.map((comment: any) => ({
         ...comment,
         author: profileMap.get(comment.user_id),
       }));

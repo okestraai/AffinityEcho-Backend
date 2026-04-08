@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsEnum, IsArray, MaxLength, MinLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum PostVisibility {
@@ -10,7 +17,8 @@ export enum PostVisibility {
 export class CreatePostDto {
   @ApiProperty({
     description: 'Post content',
-    example: 'Just achieved a major milestone in my career! Feeling grateful for all the support.',
+    example:
+      'Just achieved a major milestone in my career! Feeling grateful for all the support.',
     minLength: 1,
     maxLength: 5000,
   })

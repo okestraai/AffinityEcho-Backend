@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
@@ -26,7 +30,11 @@ export class FeedEngagementService {
   }
 
   // ============ LIKES ============
-  async toggleLike(contentType: ContentType, contentId: string, userId: string) {
+  async toggleLike(
+    contentType: ContentType,
+    contentId: string,
+    userId: string,
+  ) {
     logger.info('Toggling like', { contentType, contentId, userId });
 
     try {
@@ -85,7 +93,12 @@ export class FeedEngagementService {
     userId: string,
     reactionType: string,
   ) {
-    logger.info('Toggling reaction', { contentType, contentId, userId, reactionType });
+    logger.info('Toggling reaction', {
+      contentType,
+      contentId,
+      userId,
+      reactionType,
+    });
 
     const validReactions = ['heard', 'validated', 'inspired'];
     if (!validReactions.includes(reactionType)) {
@@ -126,7 +139,12 @@ export class FeedEngagementService {
         });
 
         // Create notification for the content owner
-        await this.createReactionNotification(contentType, contentId, userId, reactionType);
+        await this.createReactionNotification(
+          contentType,
+          contentId,
+          userId,
+          reactionType,
+        );
         await this.redis.delPattern('feeds:*');
 
         const counts = await this.getReactionCounts(contentType, contentId);
@@ -187,7 +205,12 @@ export class FeedEngagementService {
       await this.incrementCommentCount(contentType, contentId);
 
       // Create notification
-      await this.createCommentNotification(contentType, contentId, userId, dto.content);
+      await this.createCommentNotification(
+        contentType,
+        contentId,
+        userId,
+        dto.content,
+      );
 
       await this.redis.delPattern('feeds:*');
 
@@ -197,7 +220,10 @@ export class FeedEngagementService {
         message: 'Comment added successfully',
       };
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
         throw error;
       }
       logger.error('Failed to add comment', { error });
@@ -286,9 +312,13 @@ export class FeedEngagementService {
         .filter((id: string) => id && id !== userId);
       const uniqueAuthorIds = [...new Set(authorIds)] as string[];
 
-      const revealedIds = uniqueAuthorIds.length > 0
-        ? await this.identityReveal.getRevealedUserIds(userId, uniqueAuthorIds)
-        : new Set<string>();
+      const revealedIds =
+        uniqueAuthorIds.length > 0
+          ? await this.identityReveal.getRevealedUserIds(
+              userId,
+              uniqueAuthorIds,
+            )
+          : new Set<string>();
 
       // Step 5: Format all comments and build a map
       const commentMap = new Map<string, any>();
@@ -335,7 +365,9 @@ export class FeedEngagementService {
         const aIsMine = a.user_id === userId ? 0 : 1;
         const bIsMine = b.user_id === userId ? 0 : 1;
         if (aIsMine !== bIsMine) return aIsMine - bIsMine;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
       });
 
       return {
@@ -356,7 +388,12 @@ export class FeedEngagementService {
   }
 
   // ============ SHARES ============
-  async shareItem(contentType: ContentType, contentId: string, userId: string, dto: ShareFeedItemDto) {
+  async shareItem(
+    contentType: ContentType,
+    contentId: string,
+    userId: string,
+    dto: ShareFeedItemDto,
+  ) {
     logger.info('Sharing item', { contentType, contentId, userId });
 
     try {
@@ -395,7 +432,11 @@ export class FeedEngagementService {
     }
   }
 
-  async unshareItem(contentType: ContentType, contentId: string, userId: string) {
+  async unshareItem(
+    contentType: ContentType,
+    contentId: string,
+    userId: string,
+  ) {
     logger.info('Unsharing item', { contentType, contentId, userId });
 
     try {
@@ -426,7 +467,11 @@ export class FeedEngagementService {
   }
 
   // ============ BOOKMARKS ============
-  async toggleBookmark(contentType: ContentType, contentId: string, userId: string) {
+  async toggleBookmark(
+    contentType: ContentType,
+    contentId: string,
+    userId: string,
+  ) {
     logger.info('Toggling bookmark', { contentType, contentId, userId });
 
     try {
@@ -477,7 +522,11 @@ export class FeedEngagementService {
     const offset = (page - 1) * limit;
 
     try {
-      const { data: bookmarks, error, count } = await this.admin
+      const {
+        data: bookmarks,
+        error,
+        count,
+      } = await this.admin
         .from('feed_bookmarks')
         .select('*', { count: 'exact' })
         .eq('user_id', userId)
@@ -497,31 +546,48 @@ export class FeedEngagementService {
       }
 
       // Group bookmark content_ids by type
-      const postIds = bookmarks.filter((b: any) => b.content_type === 'post').map((b: any) => b.content_id);
-      const topicIds = bookmarks.filter((b: any) => b.content_type === 'topic').map((b: any) => b.content_id);
-      const nookIds = bookmarks.filter((b: any) => b.content_type === 'nook_message').map((b: any) => b.content_id);
+      const postIds = bookmarks
+        .filter((b: any) => b.content_type === 'post')
+        .map((b: any) => b.content_id);
+      const topicIds = bookmarks
+        .filter((b: any) => b.content_type === 'topic')
+        .map((b: any) => b.content_id);
+      const nookIds = bookmarks
+        .filter((b: any) => b.content_type === 'nook_message')
+        .map((b: any) => b.content_id);
 
       // Fetch actual content + engagement data in parallel
       const [
-        postsResult, topicsResult, nooksResult, likesResult,
-        feedAllReactions, feedUserReactions, topicUserReactions,
+        postsResult,
+        topicsResult,
+        nooksResult,
+        likesResult,
+        feedAllReactions,
+        feedUserReactions,
+        topicUserReactions,
       ] = await Promise.all([
         postIds.length > 0
           ? this.admin
               .from('feed_posts')
-              .select(`*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`)
+              .select(
+                `*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
+              )
               .in('id', postIds)
           : Promise.resolve({ data: [] }),
         topicIds.length > 0
           ? this.admin
               .from('forum_topics')
-              .select(`*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified), forum:forums(id, name)`)
+              .select(
+                `*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified), forum:forums(id, name)`,
+              )
               .in('id', topicIds)
           : Promise.resolve({ data: [] }),
         nookIds.length > 0
           ? this.admin
               .from('nooks')
-              .select(`*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`)
+              .select(
+                `*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
+              )
               .in('id', nookIds)
               .gt('expires_at', new Date().toISOString())
           : Promise.resolve({ data: [] }),
@@ -529,7 +595,10 @@ export class FeedEngagementService {
           .from('feed_likes')
           .select('content_type, content_id')
           .eq('user_id', userId)
-          .in('content_id', bookmarks.map((b: any) => b.content_id)),
+          .in(
+            'content_id',
+            bookmarks.map((b: any) => b.content_id),
+          ),
         // Post reaction counts from feed_reactions
         postIds.length > 0
           ? this.admin
@@ -556,15 +625,22 @@ export class FeedEngagementService {
       ]);
 
       // Build content maps
-      const postMap = new Map((postsResult.data || []).map((p: any) => [p.id, p]));
-      const topicMap = new Map((topicsResult.data || []).map((t: any) => [t.id, t]));
-      const nookMap = new Map((nooksResult.data || []).map((n: any) => [n.id, n]));
+      const postMap = new Map<string, any>(
+        (postsResult.data || []).map((p: any) => [p.id, p]),
+      );
+      const topicMap = new Map<string, any>(
+        (topicsResult.data || []).map((t: any) => [t.id, t]),
+      );
+      const nookMap = new Map<string, any>(
+        (nooksResult.data || []).map((n: any) => [n.id, n]),
+      );
 
       // Build post reaction counts (from feed_reactions)
       const postReactionCounts = new Map<string, Record<string, number>>();
       (feedAllReactions.data || []).forEach((r: any) => {
         const key = `${r.content_type}_${r.content_id}`;
-        if (!postReactionCounts.has(key)) postReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
+        if (!postReactionCounts.has(key))
+          postReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
         const counts = postReactionCounts.get(key)!;
         if (counts[r.reaction_type] !== undefined) counts[r.reaction_type]++;
       });
@@ -573,19 +649,25 @@ export class FeedEngagementService {
       const postUserReactionMap = new Map<string, Set<string>>();
       (feedUserReactions.data || []).forEach((r: any) => {
         const key = `${r.content_type}_${r.content_id}`;
-        if (!postUserReactionMap.has(key)) postUserReactionMap.set(key, new Set());
+        if (!postUserReactionMap.has(key))
+          postUserReactionMap.set(key, new Set());
         postUserReactionMap.get(key)!.add(r.reaction_type);
       });
 
       // Build topic user reactions (from topic_reactions)
       const topicUserReactionMap = new Map<string, Set<string>>();
       (topicUserReactions.data || []).forEach((r: any) => {
-        if (!topicUserReactionMap.has(r.topic_id)) topicUserReactionMap.set(r.topic_id, new Set());
+        if (!topicUserReactionMap.has(r.topic_id))
+          topicUserReactionMap.set(r.topic_id, new Set());
         topicUserReactionMap.get(r.topic_id)!.add(r.reaction_type);
       });
 
       // Build user likes set
-      const likeSet = new Set((likesResult.data || []).map((l: any) => `${l.content_type}_${l.content_id}`));
+      const likeSet = new Set(
+        (likesResult.data || []).map(
+          (l: any) => `${l.content_type}_${l.content_id}`,
+        ),
+      );
 
       // Collect all author IDs for identity reveal
       const allAuthorIds: string[] = [];
@@ -611,18 +693,33 @@ export class FeedEngagementService {
             ...base,
             user_id: post.user_id,
             content: { text: post.content, tags: post.tags },
-            engagement: { likes: post.likes_count, comments: post.comments_count, shares: post.shares_count, views: post.views_count },
+            engagement: {
+              likes: post.likes_count,
+              comments: post.comments_count,
+              shares: post.shares_count,
+              views: post.views_count,
+            },
             author: {
-              display_name: post.is_anonymous ? 'Anonymous User' : post.user_profile?.username || 'Unknown',
+              display_name: post.is_anonymous
+                ? 'Anonymous User'
+                : post.user_profile?.username || 'Unknown',
               username: post.user_profile?.username,
               bio: post.is_anonymous ? null : post.user_profile?.bio || null,
-              avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || 'User',
+              avatar: post.is_anonymous
+                ? '👤'
+                : post.user_profile?.avatar || 'User',
               first_name_encrypted: post.user_profile?.first_name_encrypted,
               last_name_encrypted: post.user_profile?.last_name_encrypted,
-              is_company_verified: post.is_anonymous ? false : post.user_profile?.is_company_verified || false,
+              is_company_verified: post.is_anonymous
+                ? false
+                : post.user_profile?.is_company_verified || false,
             },
             is_anonymous: post.is_anonymous,
-            reaction_counts: postReactionCounts.get(bmKey) || { heard: 0, validated: 0, inspired: 0 },
+            reaction_counts: postReactionCounts.get(bmKey) || {
+              heard: 0,
+              validated: 0,
+              inspired: 0,
+            },
             user_reactions: {
               heard: postUserReactions?.has('heard') || false,
               validated: postUserReactions?.has('validated') || false,
@@ -636,22 +733,40 @@ export class FeedEngagementService {
           const topic = topicMap.get(bookmark.content_id);
           if (!topic) return { ...base, content: null, author: null };
           if (topic.user_id) allAuthorIds.push(topic.user_id);
-          const totalReactions = (topic.reaction_seen_count || 0) + (topic.reaction_validated_count || 0) +
-            (topic.reaction_inspired_count || 0) + (topic.reaction_heard_count || 0);
+          const totalReactions =
+            (topic.reaction_seen_count || 0) +
+            (topic.reaction_validated_count || 0) +
+            (topic.reaction_inspired_count || 0) +
+            (topic.reaction_heard_count || 0);
           const topicReactions = topicUserReactionMap.get(bookmark.content_id);
           return {
             ...base,
             user_id: topic.user_id,
-            content: { title: topic.title, text: topic.content, forum_name: topic.forum?.name || 'Unknown Forum', tags: topic.tags },
-            engagement: { likes: totalReactions, comments: topic.comments_count, views: topic.views_count },
+            content: {
+              title: topic.title,
+              text: topic.content,
+              forum_name: topic.forum?.name || 'Unknown Forum',
+              tags: topic.tags,
+            },
+            engagement: {
+              likes: totalReactions,
+              comments: topic.comments_count,
+              views: topic.views_count,
+            },
             author: {
-              display_name: topic.is_anonymous ? 'Anonymous User' : topic.user_profile?.username || 'Unknown',
+              display_name: topic.is_anonymous
+                ? 'Anonymous User'
+                : topic.user_profile?.username || 'Unknown',
               username: topic.user_profile?.username,
               bio: topic.is_anonymous ? null : topic.user_profile?.bio || null,
-              avatar: topic.is_anonymous ? '👤' : topic.user_profile?.avatar || 'User',
+              avatar: topic.is_anonymous
+                ? '👤'
+                : topic.user_profile?.avatar || 'User',
               first_name_encrypted: topic.user_profile?.first_name_encrypted,
               last_name_encrypted: topic.user_profile?.last_name_encrypted,
-              is_company_verified: topic.is_anonymous ? false : topic.user_profile?.is_company_verified || false,
+              is_company_verified: topic.is_anonymous
+                ? false
+                : topic.user_profile?.is_company_verified || false,
             },
             is_anonymous: topic.is_anonymous,
             reaction_counts: {
@@ -673,7 +788,9 @@ export class FeedEngagementService {
         if (bookmark.content_type === 'nook_message') {
           const nook = nookMap.get(bookmark.content_id);
           if (!nook) return { ...base, content: null, author: null };
-          const userProfile = Array.isArray(nook.user_profile) ? nook.user_profile[0] : nook.user_profile;
+          const userProfile = Array.isArray(nook.user_profile)
+            ? nook.user_profile[0]
+            : nook.user_profile;
           if (nook.creator_id) allAuthorIds.push(nook.creator_id);
           const timeLeft = this.calculateNookTimeLeft(nook.expires_at);
           return {
@@ -709,11 +826,18 @@ export class FeedEngagementService {
       });
 
       // Filter out bookmarks with no content (e.g. expired nooks)
-      const validBookmarks = enrichedBookmarks.filter((b: any) => b.content !== null);
+      const validBookmarks = enrichedBookmarks.filter(
+        (b: any) => b.content !== null,
+      );
 
       // Apply identity reveals
-      const uniqueAuthorIds = [...new Set(allAuthorIds.filter((id) => id !== userId))];
-      const revealedIds = await this.identityReveal.getRevealedUserIds(userId, uniqueAuthorIds);
+      const uniqueAuthorIds = [
+        ...new Set(allAuthorIds.filter((id) => id !== userId)),
+      ];
+      const revealedIds = await this.identityReveal.getRevealedUserIds(
+        userId,
+        uniqueAuthorIds,
+      );
 
       validBookmarks.forEach((item: any) => {
         if (!item.author) return;
@@ -739,7 +863,10 @@ export class FeedEngagementService {
         pagination: {
           page,
           limit,
-          total: validBookmarks.length < (count || 0) ? validBookmarks.length : (count || 0),
+          total:
+            validBookmarks.length < (count || 0)
+              ? validBookmarks.length
+              : count || 0,
           hasMore: (count || 0) > offset + limit,
         },
       };
@@ -751,7 +878,10 @@ export class FeedEngagementService {
   }
 
   // ============ HELPER METHODS ============
-  private async verifyContentExists(contentType: ContentType, contentId: string) {
+  private async verifyContentExists(
+    contentType: ContentType,
+    contentId: string,
+  ) {
     const tableMap = {
       post: 'feed_posts',
       topic: 'forum_topics',
@@ -769,7 +899,10 @@ export class FeedEngagementService {
     }
   }
 
-  private async incrementLikeCount(contentType: ContentType, contentId: string) {
+  private async incrementLikeCount(
+    contentType: ContentType,
+    contentId: string,
+  ) {
     if (contentType === 'post') {
       const { error } = await this.admin.rpc('increment_feed_post_likes', {
         post_id: contentId,
@@ -789,7 +922,10 @@ export class FeedEngagementService {
     }
   }
 
-  private async decrementLikeCount(contentType: ContentType, contentId: string) {
+  private async decrementLikeCount(
+    contentType: ContentType,
+    contentId: string,
+  ) {
     if (contentType === 'post') {
       const { error } = await this.admin.rpc('decrement_feed_post_likes', {
         post_id: contentId,
@@ -809,7 +945,10 @@ export class FeedEngagementService {
     }
   }
 
-  private async incrementCommentCount(contentType: ContentType, contentId: string) {
+  private async incrementCommentCount(
+    contentType: ContentType,
+    contentId: string,
+  ) {
     if (contentType === 'post') {
       const { error } = await this.admin.rpc('increment_feed_post_comments', {
         post_id: contentId,
@@ -829,7 +968,10 @@ export class FeedEngagementService {
     }
   }
 
-  private async incrementShareCount(contentType: ContentType, contentId: string) {
+  private async incrementShareCount(
+    contentType: ContentType,
+    contentId: string,
+  ) {
     if (contentType === 'post') {
       const { error } = await this.admin.rpc('increment_feed_post_shares', {
         post_id: contentId,
@@ -849,7 +991,10 @@ export class FeedEngagementService {
     }
   }
 
-  private async decrementShareCount(contentType: ContentType, contentId: string) {
+  private async decrementShareCount(
+    contentType: ContentType,
+    contentId: string,
+  ) {
     if (contentType === 'post') {
       const { error } = await this.admin.rpc('decrement_feed_post_shares', {
         post_id: contentId,
@@ -863,15 +1008,24 @@ export class FeedEngagementService {
           .single();
         await this.admin
           .from('feed_posts')
-          .update({ shares_count: Math.max(0, (current?.shares_count || 0) - 1) })
+          .update({
+            shares_count: Math.max(0, (current?.shares_count || 0) - 1),
+          })
           .eq('id', contentId);
       }
     }
   }
 
-  private async createLikeNotification(contentType: ContentType, contentId: string, userId: string) {
+  private async createLikeNotification(
+    contentType: ContentType,
+    contentId: string,
+    userId: string,
+  ) {
     try {
-      const contentOwnerId = await this.getContentOwnerId(contentType, contentId);
+      const contentOwnerId = await this.getContentOwnerId(
+        contentType,
+        contentId,
+      );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
       const { data: liker } = await this.admin
@@ -904,7 +1058,10 @@ export class FeedEngagementService {
     content: string,
   ) {
     try {
-      const contentOwnerId = await this.getContentOwnerId(contentType, contentId);
+      const contentOwnerId = await this.getContentOwnerId(
+        contentType,
+        contentId,
+      );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
       const { data: commenter } = await this.admin
@@ -930,7 +1087,10 @@ export class FeedEngagementService {
     }
   }
 
-  private async getContentOwnerId(contentType: ContentType, contentId: string): Promise<string | null> {
+  private async getContentOwnerId(
+    contentType: ContentType,
+    contentId: string,
+  ): Promise<string | null> {
     const tableMap = {
       post: 'feed_posts',
       topic: 'forum_topics',
@@ -972,8 +1132,12 @@ export class FeedEngagementService {
         display_name: comment.is_anonymous
           ? 'Anonymous User'
           : comment.user_profile?.username || 'Unknown',
-        avatar: comment.is_anonymous ? '👤' : comment.user_profile?.avatar || 'User',
-        is_company_verified: comment.is_anonymous ? false : comment.user_profile?.is_company_verified || false,
+        avatar: comment.is_anonymous
+          ? '👤'
+          : comment.user_profile?.avatar || 'User',
+        is_company_verified: comment.is_anonymous
+          ? false
+          : comment.user_profile?.is_company_verified || false,
       },
       replies: [] as any[],
     };
@@ -1000,7 +1164,11 @@ export class FeedEngagementService {
       .eq('content_type', contentType)
       .eq('content_id', contentId);
 
-    const counts: Record<string, number> = { heard: 0, validated: 0, inspired: 0 };
+    const counts: Record<string, number> = {
+      heard: 0,
+      validated: 0,
+      inspired: 0,
+    };
     (reactions || []).forEach((r: any) => {
       if (counts[r.reaction_type] !== undefined) {
         counts[r.reaction_type]++;
@@ -1016,7 +1184,10 @@ export class FeedEngagementService {
     reactionType: string,
   ) {
     try {
-      const contentOwnerId = await this.getContentOwnerId(contentType, contentId);
+      const contentOwnerId = await this.getContentOwnerId(
+        contentType,
+        contentId,
+      );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
       const { data: reactor } = await this.admin

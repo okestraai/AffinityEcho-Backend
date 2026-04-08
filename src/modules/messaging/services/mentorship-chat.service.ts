@@ -148,7 +148,7 @@ export class MentorshipChatService {
         .limit(5);
 
       const sessions =
-        upcomingSessions?.map((session) => ({
+        upcomingSessions?.map((session: any) => ({
           id: session.id,
           scheduled_at: session.scheduled_at,
           duration_minutes: session.duration_minutes,
@@ -190,7 +190,10 @@ export class MentorshipChatService {
 
       // Also check identity_reveals table for mutual reveal
       if (!identityRevealed) {
-        const revealedIds = await this.identityReveal.getRevealedUserIds(userId, [targetUserId]);
+        const revealedIds = await this.identityReveal.getRevealedUserIds(
+          userId,
+          [targetUserId],
+        );
         identityRevealed = revealedIds.has(targetUserId);
       }
 

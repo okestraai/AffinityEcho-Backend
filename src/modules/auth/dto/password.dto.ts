@@ -1,6 +1,6 @@
 // src/auth/dto/password.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength, IsNotEmpty, } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsNotEmpty } from 'class-validator';
 
 export class ForgotPasswordDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -28,7 +28,7 @@ export class RefreshTokenDto {
 export class ChangePasswordDto {
   @ApiProperty({
     description: 'Current password for verification',
-    example: 'CurrentPassword123!'
+    example: 'CurrentPassword123!',
   })
   @IsString()
   @IsNotEmpty()
@@ -37,7 +37,7 @@ export class ChangePasswordDto {
   @ApiProperty({
     description: 'New password',
     example: 'NewSecurePassword123!',
-    minLength: 6
+    minLength: 6,
   })
   @IsString()
   @IsNotEmpty()

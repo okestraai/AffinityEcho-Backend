@@ -6,31 +6,6 @@
     "auditLog": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\.2e6f0bb1214123f7d975e9a195c76e5126ece05b-audit.json",
     "files": [
         {
-            "date": 1772623862744,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-04.log",
-            "hash": "1bd4bf8e56a40bff19228d176adc199b0bcca742a02f4484bb0a93608ea70521"
-        },
-        {
-            "date": 1772705562513,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-05.log",
-            "hash": "9a11a0d4e07840153395e3c7485d0e4d89fc85e46ad16265b00a0d575651a367"
-        },
-        {
-            "date": 1772761734757,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-06.log",
-            "hash": "8b345f99c9dae1b6439f9d2dec3cab7be71053999e41733f12f4d070d5ae4695"
-        },
-        {
-            "date": 1773007657020,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-08.log",
-            "hash": "274c6c5e141f708c5f7fb13f5d3bb35b8ee857a68a4f33853fc4981842c6db0c"
-        },
-        {
-            "date": 1773011297291,
-            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-09.log",
-            "hash": "8928b0909c0b5ba4a662361a352ee04cd7fa08edcf0675c7cebd53e0aeb37fca"
-        },
-        {
             "date": 1773154699866,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-03-10.log",
             "hash": "b9b6896ba65f15f5045544883cb32960f8a002a3654924949c7e096f0f213714"
@@ -69,6 +44,11 @@
             "date": 1775094732035,
             "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-04-02.log",
             "hash": "7fc7343a4767f66bd16d23d9f6de42579ff14d091c6cab9b398cdcadecbaaa87"
+        },
+        {
+            "date": 1775644142818,
+            "name": "E:\\codebase\\Personal\\Okestra\\AffinityBackend\\affinity-echo-api\\logs\\rejections-2026-04-08.log",
+            "hash": "8ae11ef950561cbdb8baa5ba5d97cebde3a4f9382cf0646d4859ec75ddbb9338"
         }
     ],
     "hashType": "sha256"

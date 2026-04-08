@@ -12,7 +12,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   constructor(private configService: ConfigService) {
     const jwtSecret = configService.get<string>('JWT_SECRET');
-    
+
     if (!jwtSecret) {
       throw new Error('JWT_SECRET is not defined in environment variables');
     }
@@ -22,7 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
     });
-    
+
     this.admin = supabaseAdmin(configService);
   }
 
@@ -35,7 +35,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Query with the new email column
       const { data: user, error } = await this.admin
         .from('user_profiles')
-        .select('id, username, email, privacy_level, has_completed_onboarding, role, is_suspended')
+        .select(
+          'id, username, email, privacy_level, has_completed_onboarding, role, is_suspended',
+        )
         .eq('id', payload.sub)
         .single();
 
@@ -43,7 +45,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         logger.warn('Database query error in JWT strategy', {
           userId: payload.sub,
           error: error.message,
-          code: error.code
+          code: error.code,
         });
 
         // If user profile doesn't exist, create it automatically
@@ -51,9 +53,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           logger.info('Creating user profile automatically in JWT strategy', {
             userId: payload.sub,
           });
-          
-          const createdUser = await this.createUserProfile(payload.sub, payload.email);
-          
+
+          const createdUser = await this.createUserProfile(
+            payload.sub,
+            payload.email,
+          );
+
           if (createdUser) {
             return {
               userId: createdUser.id,
@@ -65,13 +70,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             };
           }
         }
-        
+
         // For other errors, fall back to JWT payload but log the error
-        logger.error('Database error during user verification, but proceeding with JWT payload', {
-          userId: payload.sub,
-          error: error.message
-        });
-        
+        logger.error(
+          'Database error during user verification, but proceeding with JWT payload',
+          {
+            userId: payload.sub,
+            error: error.message,
+          },
+        );
+
         return {
           userId: payload.sub,
           email: payload.email,
@@ -83,9 +91,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
 
       if (!user) {
-        logger.warn('User not found in database, creating profile', { userId: payload.sub });
-        const createdUser = await this.createUserProfile(payload.sub, payload.email);
-        
+        logger.warn('User not found in database, creating profile', {
+          userId: payload.sub,
+        });
+        const createdUser = await this.createUserProfile(
+          payload.sub,
+          payload.email,
+        );
+
         if (createdUser) {
           return {
             userId: createdUser.id,
@@ -96,8 +109,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             ...payload,
           };
         }
-        
-        throw new UnauthorizedException('User not found and could not create profile');
+
+        throw new UnauthorizedException(
+          'User not found and could not create profile',
+        );
       }
 
       logger.info('JWT validation successful', {
@@ -118,13 +133,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     } catch (error: any) {
       logger.error('❌ JWT validation failed', {
         userId: payload.sub,
-        error: error.message
+        error: error.message,
       });
 
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      
+
       // Even if there's an error, return the basic JWT payload to avoid breaking the app
       return {
         userId: payload.sub,
@@ -175,15 +190,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     } catch (error) {
       logger.error('Unexpected error creating user profile in JWT strategy', {
         userId,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       return null;
     }
   }
 
   private generateUsername(): string {
-    const adj = ['Brave', 'Quiet', 'Rising', 'Future', 'Bold', 'Smart', 'True', 'Next'];
-    const noun = ['Leader', 'Voice', 'Pro', 'Dev', 'Builder', 'King', 'Queen', 'Star'];
+    const adj = [
+      'Brave',
+      'Quiet',
+      'Rising',
+      'Future',
+      'Bold',
+      'Smart',
+      'True',
+      'Next',
+    ];
+    const noun = [
+      'Leader',
+      'Voice',
+      'Pro',
+      'Dev',
+      'Builder',
+      'King',
+      'Queen',
+      'Star',
+    ];
     const num = Math.floor(Math.random() * 9999);
     return `${adj[Math.floor(Math.random() * adj.length)]}${noun[Math.floor(Math.random() * noun.length)]}${num}`;
   }

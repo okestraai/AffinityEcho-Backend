@@ -174,18 +174,20 @@ export class UserDiscoveryService {
 
         if (!convError && existingConversations) {
           const existingUserIds = new Set();
-          existingConversations.forEach((conv) => {
+          existingConversations.forEach((conv: any) => {
             if (conv.user1_id !== userId) existingUserIds.add(conv.user1_id);
             if (conv.user2_id !== userId) existingUserIds.add(conv.user2_id);
           });
 
-          filteredUsers = users.filter((user) => !existingUserIds.has(user.id));
+          filteredUsers = users.filter(
+            (user: any) => !existingUserIds.has(user.id),
+          );
         }
       }
 
       // Get connection stats for each user
       const enhancedUsers = await Promise.all(
-        filteredUsers.map(async (user) => {
+        filteredUsers.map(async (user: any) => {
           // Get mutual connections count
           const { count: mutualConnections } = await this.admin
             .from('user_follows')
@@ -271,7 +273,7 @@ export class UserDiscoveryService {
         .eq('is_active', true);
 
       if (existingConversations && existingConversations.length > 0) {
-        const existingUserIds = existingConversations.map((conv) =>
+        const existingUserIds = existingConversations.map((conv: any) =>
           conv.user1_id === userId ? conv.user2_id : conv.user1_id,
         );
         if (existingUserIds.length > 0) {

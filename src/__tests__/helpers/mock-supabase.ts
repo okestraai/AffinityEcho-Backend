@@ -22,7 +22,10 @@ export function createMockQueryChain(
   const chain: any = {};
 
   // Make it thenable so `await chain` works (for queries without .single())
-  chain.then = (resolve: (value: any) => any, reject?: (reason: any) => any) => {
+  chain.then = (
+    resolve: (value: any) => any,
+    reject?: (reason: any) => any,
+  ) => {
     return Promise.resolve(result).then(resolve, reject);
   };
 
@@ -115,17 +118,16 @@ export function createMockSupabaseClient() {
 /**
  * Creates a mock ConfigService with sensible defaults.
  */
-export function createMockConfigService(
-  overrides: Record<string, any> = {},
-) {
+export function createMockConfigService(overrides: Record<string, any> = {}) {
   const defaults: Record<string, any> = {
-    SUPABASE_URL: 'https://test.supabase.co',
-    SUPABASE_ANON_KEY: 'eyJtest-anon-key',
-    SUPABASE_SERVICE_ROLE_KEY: 'eyJtest-service-role-key',
+    DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
     JWT_SECRET: 'test-jwt-secret',
     JWT_REFRESH_SECRET: 'test-jwt-refresh-secret',
     FRONTEND_URL: 'http://localhost:3000',
+    BACKEND_URL: 'http://localhost:3000',
     ENCRYPTION_KEY: Buffer.from('a'.repeat(32)).toString('base64'),
+    GOOGLE_CLIENT_ID: 'test-google-client-id',
+    GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
   };
 
   const values = { ...defaults, ...overrides };

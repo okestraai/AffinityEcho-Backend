@@ -19,7 +19,12 @@ jest.mock('../../../database/supabase.client', () => ({
 
 jest.mock('../../../common/utils/logger.util', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 describe('FeedsService', () => {
@@ -43,7 +48,9 @@ describe('FeedsService', () => {
     mockFeedRanking = {
       rankByEngagement: jest.fn((items: any[]) => items),
       rankByTrending: jest.fn((items: any[]) => items),
-      applyDiversityConstraints: jest.fn((items: any[], limit: number) => items.slice(0, limit)),
+      applyDiversityConstraints: jest.fn((items: any[], limit: number) =>
+        items.slice(0, limit),
+      ),
       applySuppression: jest.fn((items: any[]) => items),
     };
 
@@ -67,7 +74,7 @@ describe('FeedsService', () => {
     };
 
     service = new FeedsService(
-      mockConfig as any,
+      mockConfig,
       mockFeedRanking,
       mockEncryption,
       mockIdentityReveal,
@@ -177,7 +184,10 @@ describe('FeedsService', () => {
       // 2. getForumTopics -> from('forum_topics')
       // 3. getNookMessages -> from('nooks')
       const postsChain = createMockQueryChain({
-        data: [makeMockPost('post-1', 'user-a01'), makeMockPost('post-2', 'user-b02')],
+        data: [
+          makeMockPost('post-1', 'user-a01'),
+          makeMockPost('post-2', 'user-b02'),
+        ],
         error: null,
       });
       const topicsChain = createMockQueryChain({
@@ -313,9 +323,9 @@ describe('FeedsService', () => {
         throw new Error('Database connection failed');
       });
 
-      await expect(
-        service.getAggregatedFeed(userId, queryDto),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.getAggregatedFeed(userId, queryDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

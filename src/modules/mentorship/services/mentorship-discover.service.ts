@@ -24,12 +24,18 @@ export class MentorshipDiscoverService {
   async discoverProfiles(currentUserId: string, query: MentorshipQueryDto) {
     try {
       // Fetch existing mentorship pairs to exclude + current user's profile
-      const [existingRequests, existingRelationships, { data: currentUserProfile }] = await Promise.all([
+      const [
+        existingRequests,
+        existingRelationships,
+        { data: currentUserProfile },
+      ] = await Promise.all([
         this.admin
           .from('mentorship_direct_requests')
           .select('requester_id, target_user_id')
           .eq('status', 'accepted')
-          .or(`requester_id.eq.${currentUserId},target_user_id.eq.${currentUserId}`),
+          .or(
+            `requester_id.eq.${currentUserId},target_user_id.eq.${currentUserId}`,
+          ),
         this.admin
           .from('mentorship_relationships')
           .select('mentor_id, mentee_id')
@@ -37,17 +43,23 @@ export class MentorshipDiscoverService {
           .or(`mentor_id.eq.${currentUserId},mentee_id.eq.${currentUserId}`),
         this.admin
           .from('user_profiles')
-          .select('mentor_expertise, mentor_industries, location, career_level_encrypted, affinity_tags_encrypted')
+          .select(
+            'mentor_expertise, mentor_industries, location, career_level_encrypted, affinity_tags_encrypted',
+          )
           .eq('id', currentUserId)
           .single(),
       ]);
 
       const excludeIds = new Set<string>();
       (existingRequests.data || []).forEach((r: any) => {
-        excludeIds.add(r.requester_id === currentUserId ? r.target_user_id : r.requester_id);
+        excludeIds.add(
+          r.requester_id === currentUserId ? r.target_user_id : r.requester_id,
+        );
       });
       (existingRelationships.data || []).forEach((r: any) => {
-        excludeIds.add(r.mentor_id === currentUserId ? r.mentee_id : r.mentor_id);
+        excludeIds.add(
+          r.mentor_id === currentUserId ? r.mentee_id : r.mentor_id,
+        );
       });
 
       const cacheKey = `mentorship:discover:${currentUserId}:${JSON.stringify(query)}:exclude:${[...excludeIds].sort().join(',')}`;
@@ -71,8 +83,10 @@ export class MentorshipDiscoverService {
       } = query;
 
       // OPTIMIZATION: Select only fields needed for list view (not detail view)
-      let supabaseQuery = this.admin.from('user_profiles').select(
-        `
+      let supabaseQuery = this.admin
+        .from('user_profiles')
+        .select(
+          `
       id,
       username,
       avatar,
@@ -95,8 +109,8 @@ export class MentorshipDiscoverService {
       first_name_encrypted,
       last_name_encrypted
     `,
-        { count: 'exact' },
-      )
+          { count: 'exact' },
+        )
         .eq('is_deleted', false)
         .eq('is_deactivated', false)
         .eq('has_completed_onboarding', true);
@@ -118,7 +132,11 @@ export class MentorshipDiscoverService {
       // Exclude existing mentor-mentee pairs
       if (excludeIds.size > 0) {
         const excludeArray = [...excludeIds];
-        supabaseQuery = supabaseQuery.not('id', 'in', `(${excludeArray.join(',')})`);
+        supabaseQuery = supabaseQuery.not(
+          'id',
+          'in',
+          `(${excludeArray.join(',')})`,
+        );
       }
 
       // Search filter
@@ -138,7 +156,7 @@ export class MentorshipDiscoverService {
       }
 
       if (languages?.length) {
-        supabaseQuery = supabaseQuery.filter('mentor_languages', 'ov', `{${languages.join(',')}}`);
+        supabaseQuery = supabaseQuery.overlaps('mentor_languages', languages);
       }
 
       // Location filter
@@ -200,20 +218,26 @@ export class MentorshipDiscoverService {
       const { data: profiles, error, count } = profilesResult;
 
       if (error) {
-        logger.error('Failed to discover profiles', { module: 'MentorshipDiscover', error });
+        logger.error('Failed to discover profiles', {
+          module: 'MentorshipDiscover',
+          error,
+        });
         throw new BadRequestException('Failed to discover profiles');
       }
 
       const bookmarks = bookmarksResult.data;
-      const bookmarkedIds = bookmarks?.map((b) => b.bookmarked_user_id) || [];
+      const bookmarkedIds =
+        bookmarks?.map((b: any) => b.bookmarked_user_id) || [];
 
       // Apply encrypted field filters and enhance profiles
       const enhancedProfiles = (profiles || [])
-        .filter((profile) => {
+        .filter((profile: any) => {
           // Career level filter (in memory since field is encrypted)
           if (careerLevel?.length) {
             if (!profile.career_level_encrypted) return false;
-            const decryptedLevel = this.decryptField(profile.career_level_encrypted);
+            const decryptedLevel = this.decryptField(
+              profile.career_level_encrypted,
+            );
             const hasMatchingCareerLevel = careerLevel.some((level) =>
               decryptedLevel.includes(level),
             );
@@ -226,7 +250,9 @@ export class MentorshipDiscoverService {
             try {
               let tags: string[];
               try {
-                const decrypted = this.encryption.decrypt(profile.affinity_tags_encrypted);
+                const decrypted = this.encryption.decrypt(
+                  profile.affinity_tags_encrypted,
+                );
                 tags = JSON.parse(decrypted);
               } catch {
                 tags = JSON.parse(profile.affinity_tags_encrypted);
@@ -242,11 +268,13 @@ export class MentorshipDiscoverService {
 
           return true;
         })
-        .map((profile) => {
+        .map((profile: any) => {
           let affinityTagsArray: string[] = [];
           if (profile.affinity_tags_encrypted) {
             try {
-              const decrypted = this.encryption.decrypt(profile.affinity_tags_encrypted);
+              const decrypted = this.encryption.decrypt(
+                profile.affinity_tags_encrypted,
+              );
               affinityTagsArray = JSON.parse(decrypted);
             } catch {
               try {
@@ -262,13 +290,22 @@ export class MentorshipDiscoverService {
             career_level: this.decryptField(profile.career_level_encrypted),
             affinity_tags: affinityTagsArray,
             isBookmarked: bookmarkedIds.includes(profile.id),
-            matchScore: this.calculateMatchScore(profile, currentUserId, currentUserProfile),
+            matchScore: this.calculateMatchScore(
+              profile,
+              currentUserId,
+              currentUserProfile,
+            ),
           };
         });
 
       // Apply identity reveal — show real name for revealed users
-      const profileIds = enhancedProfiles.map((p: any) => p.id).filter((id: string) => id !== currentUserId);
-      const revealedIds = await this.identityReveal.getRevealedUserIds(currentUserId, profileIds);
+      const profileIds = enhancedProfiles
+        .map((p: any) => p.id)
+        .filter((id: string) => id !== currentUserId);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(
+        currentUserId,
+        profileIds,
+      );
 
       enhancedProfiles.forEach((profile: any) => {
         if (revealedIds.has(profile.id)) {
@@ -289,7 +326,7 @@ export class MentorshipDiscoverService {
 
       // Re-sort by match score if requested
       if (sortBy === 'match_score') {
-        enhancedProfiles.sort((a, b) => {
+        enhancedProfiles.sort((a: any, b: any) => {
           return sortOrder === 'asc'
             ? a.matchScore - b.matchScore
             : b.matchScore - a.matchScore;
@@ -298,17 +335,29 @@ export class MentorshipDiscoverService {
 
       // Filter by match score range if specified
       let filteredProfiles = enhancedProfiles;
-      if (query.minMatchScore !== undefined || query.maxMatchScore !== undefined) {
+      if (
+        query.minMatchScore !== undefined ||
+        query.maxMatchScore !== undefined
+      ) {
         filteredProfiles = enhancedProfiles.filter((p: any) => {
-          if (query.minMatchScore !== undefined && p.matchScore < query.minMatchScore) return false;
-          if (query.maxMatchScore !== undefined && p.matchScore > query.maxMatchScore) return false;
+          if (
+            query.minMatchScore !== undefined &&
+            p.matchScore < query.minMatchScore
+          )
+            return false;
+          if (
+            query.maxMatchScore !== undefined &&
+            p.matchScore > query.maxMatchScore
+          )
+            return false;
           return true;
         });
       }
 
-      const effectiveTotal = filteredProfiles.length !== enhancedProfiles.length
-        ? filteredProfiles.length
-        : (count || 0);
+      const effectiveTotal =
+        filteredProfiles.length !== enhancedProfiles.length
+          ? filteredProfiles.length
+          : count || 0;
 
       const result = {
         success: true,
@@ -334,7 +383,10 @@ export class MentorshipDiscoverService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      logger.error('Error in discoverProfiles', { module: 'MentorshipDiscover', error });
+      logger.error('Error in discoverProfiles', {
+        module: 'MentorshipDiscover',
+        error,
+      });
       throw new BadRequestException('Failed to discover profiles');
     }
   }
@@ -400,18 +452,23 @@ export class MentorshipDiscoverService {
       const { data: profiles, error } = await query;
 
       if (error) {
-        logger.error('Failed to get suggestions', { module: 'MentorshipDiscover', error });
+        logger.error('Failed to get suggestions', {
+          module: 'MentorshipDiscover',
+          error,
+        });
         throw new BadRequestException('Failed to get suggestions');
       }
 
       // Calculate match scores and sort
       const scoredProfiles =
         profiles
-          ?.map((profile) => {
+          ?.map((profile: any) => {
             let affinityTags: string[] = [];
             if (profile.affinity_tags_encrypted) {
               try {
-                const decrypted = this.encryption.decrypt(profile.affinity_tags_encrypted);
+                const decrypted = this.encryption.decrypt(
+                  profile.affinity_tags_encrypted,
+                );
                 affinityTags = JSON.parse(decrypted);
               } catch {
                 try {
@@ -429,7 +486,7 @@ export class MentorshipDiscoverService {
               matchScore: this.calculateSuggestionScore(profile, currentUser),
             };
           })
-          .sort((a, b) => b.matchScore - a.matchScore) || [];
+          .sort((a: any, b: any) => b.matchScore - a.matchScore) || [];
 
       const result = {
         success: true,
@@ -441,7 +498,10 @@ export class MentorshipDiscoverService {
       return result;
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Error in getSuggestions', { module: 'MentorshipDiscover', error });
+      logger.error('Error in getSuggestions', {
+        module: 'MentorshipDiscover',
+        error,
+      });
       throw new BadRequestException('Failed to get suggestions');
     }
   }
@@ -550,7 +610,10 @@ export class MentorshipDiscoverService {
     let score = 0;
 
     // Expertise match — up to 30 points (most important for mentorship)
-    if (currentUser?.mentor_expertise?.length && profile.mentor_expertise?.length) {
+    if (
+      currentUser?.mentor_expertise?.length &&
+      profile.mentor_expertise?.length
+    ) {
       const matchingExpertise = profile.mentor_expertise.filter((exp: string) =>
         currentUser.mentor_expertise.includes(exp),
       );
@@ -558,7 +621,10 @@ export class MentorshipDiscoverService {
     }
 
     // Industry match — up to 20 points
-    if (currentUser?.mentor_industries?.length && profile.mentor_industries?.length) {
+    if (
+      currentUser?.mentor_industries?.length &&
+      profile.mentor_industries?.length
+    ) {
       const matchingIndustries = profile.mentor_industries.filter(
         (ind: string) => currentUser.mentor_industries.includes(ind),
       );
@@ -566,17 +632,25 @@ export class MentorshipDiscoverService {
     }
 
     // Affinity tag match — up to 15 points
-    const currentTags = this.decryptTagsField(currentUser?.affinity_tags_encrypted);
+    const currentTags = this.decryptTagsField(
+      currentUser?.affinity_tags_encrypted,
+    );
     const profileTags = this.decryptTagsField(profile.affinity_tags_encrypted);
     if (currentTags.length && profileTags.length) {
-      const matchingTags = profileTags.filter((tag: string) => currentTags.includes(tag));
+      const matchingTags = profileTags.filter((tag: string) =>
+        currentTags.includes(tag),
+      );
       score += Math.min(matchingTags.length * 8, 15);
     }
 
     // Career level compatibility — up to 15 points
     if (currentUser?.career_level_encrypted && profile.career_level_encrypted) {
-      const currentLevel = this.parseCareerLevel(currentUser.career_level_encrypted);
-      const profileLevel = this.parseCareerLevel(profile.career_level_encrypted);
+      const currentLevel = this.parseCareerLevel(
+        currentUser.career_level_encrypted,
+      );
+      const profileLevel = this.parseCareerLevel(
+        profile.career_level_encrypted,
+      );
       if (currentLevel > 0 && profileLevel > 0) {
         if (currentLevel < profileLevel) {
           score += 15; // Mentee seeking senior mentor
@@ -589,8 +663,11 @@ export class MentorshipDiscoverService {
     }
 
     // Location match — 10 points
-    if (currentUser?.location && profile.location &&
-        currentUser.location.toLowerCase() === profile.location.toLowerCase()) {
+    if (
+      currentUser?.location &&
+      profile.location &&
+      currentUser.location.toLowerCase() === profile.location.toLowerCase()
+    ) {
       score += 10;
     }
 
@@ -604,8 +681,10 @@ export class MentorshipDiscoverService {
     }
     if (profile.mentor_response_time) {
       if (profile.mentor_response_time.includes('24 hours')) activityScore += 4;
-      else if (profile.mentor_response_time.includes('48 hours')) activityScore += 3;
-      else if (profile.mentor_response_time.includes('week')) activityScore += 2;
+      else if (profile.mentor_response_time.includes('48 hours'))
+        activityScore += 3;
+      else if (profile.mentor_response_time.includes('week'))
+        activityScore += 2;
       else activityScore += 1;
     }
     score += Math.min(activityScore, 10);
@@ -617,7 +696,10 @@ export class MentorshipDiscoverService {
     let score = 0;
 
     // Expertise match — up to 35 points (weighted higher for suggestions)
-    if (currentUser.mentor_expertise?.length && profile.mentor_expertise?.length) {
+    if (
+      currentUser.mentor_expertise?.length &&
+      profile.mentor_expertise?.length
+    ) {
       const commonExpertise = currentUser.mentor_expertise.filter(
         (exp: string) => profile.mentor_expertise.includes(exp),
       );
@@ -625,7 +707,10 @@ export class MentorshipDiscoverService {
     }
 
     // Industry match — up to 25 points
-    if (currentUser.mentor_industries?.length && profile.mentor_industries?.length) {
+    if (
+      currentUser.mentor_industries?.length &&
+      profile.mentor_industries?.length
+    ) {
       const commonIndustries = currentUser.mentor_industries.filter(
         (ind: string) => profile.mentor_industries.includes(ind),
       );
@@ -633,23 +718,36 @@ export class MentorshipDiscoverService {
     }
 
     // Affinity tag match — up to 15 points
-    const suggCurrentTags = this.decryptTagsField(currentUser.affinity_tags_encrypted);
-    const suggProfileTags = this.decryptTagsField(profile.affinity_tags_encrypted);
+    const suggCurrentTags = this.decryptTagsField(
+      currentUser.affinity_tags_encrypted,
+    );
+    const suggProfileTags = this.decryptTagsField(
+      profile.affinity_tags_encrypted,
+    );
     if (suggCurrentTags.length && suggProfileTags.length) {
-      const matchingTags = suggProfileTags.filter((tag: string) => suggCurrentTags.includes(tag));
+      const matchingTags = suggProfileTags.filter((tag: string) =>
+        suggCurrentTags.includes(tag),
+      );
       score += Math.min(matchingTags.length * 8, 15);
     }
 
     // Location match — 10 points
-    if (currentUser.location && profile.location &&
-        currentUser.location.toLowerCase() === profile.location.toLowerCase()) {
+    if (
+      currentUser.location &&
+      profile.location &&
+      currentUser.location.toLowerCase() === profile.location.toLowerCase()
+    ) {
       score += 10;
     }
 
     // Career level compatibility — up to 15 points
     if (currentUser.career_level_encrypted && profile.career_level_encrypted) {
-      const currentLevel = this.parseCareerLevel(currentUser.career_level_encrypted);
-      const profileLevel = this.parseCareerLevel(profile.career_level_encrypted);
+      const currentLevel = this.parseCareerLevel(
+        currentUser.career_level_encrypted,
+      );
+      const profileLevel = this.parseCareerLevel(
+        profile.career_level_encrypted,
+      );
       if (currentLevel > 0 && profileLevel > 0) {
         if (currentLevel < profileLevel) {
           score += 15;
@@ -694,7 +792,8 @@ export class MentorshipDiscoverService {
     if (decrypted.includes('Mid') || decrypted.includes('3-7')) return 2;
     if (decrypted.includes('Senior') || decrypted.includes('8-12')) return 3;
     if (decrypted.includes('Leadership') || decrypted.includes('13+')) return 4;
-    if (decrypted.includes('Executive') || decrypted.includes('C-Suite')) return 5;
+    if (decrypted.includes('Executive') || decrypted.includes('C-Suite'))
+      return 5;
     return 0;
   }
 }

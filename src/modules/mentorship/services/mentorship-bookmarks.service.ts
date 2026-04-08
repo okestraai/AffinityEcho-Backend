@@ -35,7 +35,12 @@ export class MentorshipBookmarksService {
         .eq('id', dto.bookmarkedUserId)
         .single();
 
-      if (!bookmarkedUser || bookmarkedUser.is_deleted || bookmarkedUser.is_deactivated || !bookmarkedUser.has_completed_onboarding) {
+      if (
+        !bookmarkedUser ||
+        bookmarkedUser.is_deleted ||
+        bookmarkedUser.is_deactivated ||
+        !bookmarkedUser.has_completed_onboarding
+      ) {
         throw new NotFoundException('User to bookmark not found');
       }
 

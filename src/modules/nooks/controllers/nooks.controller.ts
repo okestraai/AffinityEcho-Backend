@@ -103,7 +103,11 @@ export class NooksController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.nooksService.getBookmarkedNooks(user.userId, page || 1, limit || 8);
+    return this.nooksService.getBookmarkedNooks(
+      user.userId,
+      page || 1,
+      limit || 8,
+    );
   }
 
   @Get(':id')
@@ -178,10 +182,7 @@ export class NooksController {
   @Post(':id/bookmark')
   @ApiOperation({ summary: 'Toggle bookmark on a nook' })
   @ApiParam({ name: 'id', description: 'Nook ID' })
-  async toggleNookBookmark(
-    @CurrentUser() user: any,
-    @Param('id') id: string,
-  ) {
+  async toggleNookBookmark(@CurrentUser() user: any, @Param('id') id: string) {
     return this.nooksService.toggleNookBookmark(id, user.userId);
   }
 

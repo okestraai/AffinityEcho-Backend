@@ -18,7 +18,11 @@ export class BasicProfileDto {
   @ApiPropertyOptional() @IsOptional() @IsString() job_title?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() years_experience?: number;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) skills?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  skills?: string[];
 }
 
 export class CompanyProfileDto {
@@ -34,26 +38,56 @@ export class IdentityProfileDto {
 
 export class MentorSectionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() mentor_bio?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) expertise?: string[];
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) industries?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  expertise?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  industries?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() availability?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() response_time?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() mentoring_style?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) languages?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  languages?: string[];
   @ApiPropertyOptional() @IsOptional() @IsNumber() hourly_rate?: number;
 }
 
 export class MenteeSectionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() mentee_bio?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() goals?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) interests?: string[];
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) industries?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  interests?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  industries?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() availability?: string;
-  @ApiPropertyOptional() @IsOptional() @IsIn(['low', 'medium', 'high']) urgency?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(['low', 'medium', 'high'])
+  urgency?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() topic?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() mentored_style?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) languages?: string[];
-  @ApiPropertyOptional() @IsOptional() @IsString() communication_method?: string;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  languages?: string[];
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  communication_method?: string;
 }
 
 export class UnifiedProfileEditDto {

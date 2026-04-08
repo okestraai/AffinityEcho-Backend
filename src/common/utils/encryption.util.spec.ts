@@ -16,12 +16,16 @@ describe('EncryptionUtil', () => {
 
   it('should throw if ENCRYPTION_KEY is missing', () => {
     const badConfig = { get: jest.fn().mockReturnValue(undefined) } as any;
-    expect(() => new EncryptionUtil(badConfig)).toThrow('ENCRYPTION_KEY must be a 44-character base64 string (32 bytes)');
+    expect(() => new EncryptionUtil(badConfig)).toThrow(
+      'ENCRYPTION_KEY must be a 44-character base64 string (32 bytes)',
+    );
   });
 
   it('should throw if ENCRYPTION_KEY has wrong length', () => {
     const badConfig = { get: jest.fn().mockReturnValue('short-key') } as any;
-    expect(() => new EncryptionUtil(badConfig)).toThrow('ENCRYPTION_KEY must be a 44-character base64 string (32 bytes)');
+    expect(() => new EncryptionUtil(badConfig)).toThrow(
+      'ENCRYPTION_KEY must be a 44-character base64 string (32 bytes)',
+    );
   });
 
   it('should encrypt and decrypt text correctly', () => {

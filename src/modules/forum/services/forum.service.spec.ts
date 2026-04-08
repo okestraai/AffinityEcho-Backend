@@ -150,9 +150,7 @@ describe('ForumService', () => {
         name: 'Test Forum',
         member_count: 5,
         topic_count: 3,
-        forum_topics: [
-          { id: 'topic-1', title: 'Topic 1' },
-        ],
+        forum_topics: [{ id: 'topic-1', title: 'Topic 1' }],
       };
 
       const chain = createMockQueryChain({ data: forum, error: null });

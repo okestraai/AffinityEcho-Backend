@@ -113,7 +113,7 @@ export class ReferralService {
 
       // Transform posts
       const transformedPosts = await Promise.all(
-        posts.map(async (post) => {
+        posts.map(async (post: any) => {
           const profile = post.author;
 
           const [title, company, jobTitle, description] = await Promise.all([
@@ -177,14 +177,20 @@ export class ReferralService {
         .filter((p) => p.author)
         .map((p) => p.user_id);
       const otherAuthorUserIds = allAuthorUserIds.filter((id) => id !== userId);
-      const revealedIds = otherAuthorUserIds.length > 0
-        ? await this.identityReveal.getRevealedUserIds(userId, otherAuthorUserIds)
-        : new Set<string>();
+      const revealedIds =
+        otherAuthorUserIds.length > 0
+          ? await this.identityReveal.getRevealedUserIds(
+              userId,
+              otherAuthorUserIds,
+            )
+          : new Set<string>();
 
       // Collect IDs that need encrypted name lookup (own + revealed)
-      const needNameIds = [...new Set(allAuthorUserIds.filter(
-        (id) => id === userId || revealedIds.has(id),
-      ))];
+      const needNameIds = [
+        ...new Set(
+          allAuthorUserIds.filter((id) => id === userId || revealedIds.has(id)),
+        ),
+      ];
 
       if (needNameIds.length > 0) {
         const { data: profiles } = await this.admin
@@ -192,7 +198,10 @@ export class ReferralService {
           .select('id, first_name_encrypted, last_name_encrypted')
           .in('id', needNameIds);
 
-        const nameMap = new Map<string, { first: string | null; last: string | null }>();
+        const nameMap = new Map<
+          string,
+          { first: string | null; last: string | null }
+        >();
         (profiles || []).forEach((p: any) => {
           nameMap.set(p.id, {
             first: p.first_name_encrypted,
@@ -201,10 +210,16 @@ export class ReferralService {
         });
 
         transformedPosts.forEach((post) => {
-          if (post.author && (post.user_id === userId || revealedIds.has(post.user_id))) {
+          if (
+            post.author &&
+            (post.user_id === userId || revealedIds.has(post.user_id))
+          ) {
             const names = nameMap.get(post.user_id);
             if (names) {
-              const realName = this.identityReveal.decryptRealName(names.first, names.last);
+              const realName = this.identityReveal.decryptRealName(
+                names.first,
+                names.last,
+              );
               if (realName) post.author.display_name = realName;
             }
           }
@@ -266,17 +281,17 @@ export class ReferralService {
           .eq('user_id', userId),
       ]);
 
-      const likedIds = new Set(
-        likesResult.data?.map((l) => l.referral_post_id) || [],
+      const likedIds = new Set<string>(
+        likesResult.data?.map((l: any) => l.referral_post_id) || [],
       );
-      const bookmarkedIds = new Set(
-        bookmarksResult.data?.map((b) => b.referral_post_id) || [],
+      const bookmarkedIds = new Set<string>(
+        bookmarksResult.data?.map((b: any) => b.referral_post_id) || [],
       );
 
       return { likedIds, bookmarkedIds };
     } catch (error) {
       logger.warn('Failed to fetch user interactions', { error, userId });
-      return { likedIds: new Set(), bookmarkedIds: new Set() };
+      return { likedIds: new Set<string>(), bookmarkedIds: new Set<string>() };
     }
   }
 
@@ -318,7 +333,7 @@ export class ReferralService {
       }
 
       // Explicitly type the destructuring
-      const postData = result as any;
+      const postData = result;
       const {
         referral_likes = [],
         referral_bookmarks = [],
@@ -327,7 +342,7 @@ export class ReferralService {
       } = postData;
 
       // Ensure we have valid post data
-      const post = restPost as any;
+      const post = restPost;
 
       // Decrypt fields in parallel
       const [title, company, jobTitle, description] = await Promise.all([
@@ -370,7 +385,9 @@ export class ReferralService {
             ? await (async () => {
                 let displayName = profile.username;
                 const isOwnPost = profile.id === userId;
-                const revealed = isOwnPost || await this.identityReveal.isRevealed(userId, profile.id);
+                const revealed =
+                  isOwnPost ||
+                  (await this.identityReveal.isRevealed(userId, profile.id));
                 if (revealed) {
                   const realName = this.identityReveal.decryptRealName(
                     profile.first_name_encrypted,
@@ -661,7 +678,7 @@ export class ReferralService {
     logger.info('Searching referrals', { userId, params, correlationId });
 
     try {
-      let query = this.admin
+      const query = this.admin
         .from('referral_posts')
         .select('*')
         .eq('status', 'open');
@@ -673,7 +690,7 @@ export class ReferralService {
 
       // Decrypt and filter in memory for text search
       const filteredPosts = await Promise.all(
-        allPosts.map(async (post) => {
+        allPosts.map(async (post: any) => {
           const [title, company, description] = await Promise.all([
             Promise.resolve(
               this.encryption.decrypt(post.title_encrypted).toLowerCase(),
@@ -692,7 +709,7 @@ export class ReferralService {
       );
 
       // Apply search filters
-      let results = filteredPosts
+      const results = filteredPosts
         .filter(({ title, company, description, tags, post }) => {
           if (params.query) {
             const searchLower = params.query.toLowerCase();
@@ -748,18 +765,25 @@ export class ReferralService {
       const [profilesResult, interactionsResult] = await Promise.all([
         this.admin
           .from('user_profiles')
-          .select('id, username, avatar, job_title, company_encrypted, first_name_encrypted, last_name_encrypted, is_company_verified')
+          .select(
+            'id, username, avatar, job_title, company_encrypted, first_name_encrypted, last_name_encrypted, is_company_verified',
+          )
           .in('id', userIds),
         this.getUserInteractions(userId),
       ]);
 
       const profiles = profilesResult.data || [];
       const { likedIds, bookmarkedIds } = interactionsResult;
-      const profileMap = new Map(profiles.map((p) => [p.id, p]));
+      const profileMap = new Map<string, any>(
+        profiles.map((p: any) => [p.id, p]),
+      );
 
       // Get revealed IDs for identity reveal (own posts always get real name)
       const otherUserIds = userIds.filter((id) => id !== userId);
-      const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherUserIds);
+      const revealedIds = await this.identityReveal.getRevealedUserIds(
+        userId,
+        otherUserIds,
+      );
 
       // Transform results
       const transformedResults = await Promise.all(
@@ -914,48 +938,52 @@ export class ReferralService {
       // Calculate statistics
       const totalPosts = allPosts.length;
       const openRequests = allPosts.filter(
-        (p) => p.type === 'request' && p.status === 'open',
+        (p: any) => p.type === 'request' && p.status === 'open',
       ).length;
       const openOffers = allPosts.filter(
-        (p) => p.type === 'offer' && p.status === 'open',
+        (p: any) => p.type === 'offer' && p.status === 'open',
       ).length;
       const totalViews = allPosts.reduce(
-        (sum, p) => sum + (p.views_count || 0),
+        (sum: any, p: any) => sum + (p.views_count || 0),
         0,
       );
 
       const uniqueCompanies = new Set(
-        companies.map((c) => this.encryption.decrypt(c.company_encrypted)),
+        companies.map((c: any) => this.encryption.decrypt(c.company_encrypted)),
       );
 
       const totalConnections = connections.length;
       const acceptedConnections = connections.filter(
-        (c) => c.status === 'accepted',
+        (c: any) => c.status === 'accepted',
       ).length;
       const successfulReferrals = connections.filter(
-        (c) => c.referral_submitted,
+        (c: any) => c.referral_submitted,
       ).length;
       const interviewsScheduled = connections.filter(
-        (c) => c.interview_scheduled,
+        (c: any) => c.interview_scheduled,
       ).length;
-      const offersReceived = connections.filter((c) => c.offer_received).length;
+      const offersReceived = connections.filter(
+        (c: any) => c.offer_received,
+      ).length;
 
       const userPostsCreated = userPosts.length;
-      const userOpenPosts = userPosts.filter((p) => p.status === 'open').length;
+      const userOpenPosts = userPosts.filter(
+        (p: any) => p.status === 'open',
+      ).length;
 
       const connectionsSent = userConnectionsSent.length;
       const connectionsReceived = userConnectionsReceived.length;
       const acceptedSent = userConnectionsSent.filter(
-        (c) => c.status === 'accepted',
+        (c: any) => c.status === 'accepted',
       ).length;
       const acceptedReceived = userConnectionsReceived.filter(
-        (c) => c.status === 'accepted',
+        (c: any) => c.status === 'accepted',
       ).length;
       const pendingSent = userConnectionsSent.filter(
-        (c) => c.status === 'pending',
+        (c: any) => c.status === 'pending',
       ).length;
       const pendingReceived = userConnectionsReceived.filter(
-        (c) => c.status === 'pending',
+        (c: any) => c.status === 'pending',
       ).length;
 
       const userSuccessRate =
@@ -964,8 +992,9 @@ export class ReferralService {
       const responseRate =
         connectionsReceived > 0
           ? ((acceptedReceived +
-              userConnectionsReceived.filter((c) => c.status === 'rejected')
-                .length) /
+              userConnectionsReceived.filter(
+                (c: any) => c.status === 'rejected',
+              ).length) /
               connectionsReceived) *
             100
           : 0;
@@ -1008,20 +1037,21 @@ export class ReferralService {
                 pending: pendingSent,
                 accepted: acceptedSent,
                 rejected: userConnectionsSent.filter(
-                  (c) => c.status === 'rejected',
+                  (c: any) => c.status === 'rejected',
                 ).length,
               },
               received: {
                 pending: pendingReceived,
                 accepted: acceptedReceived,
                 rejected: userConnectionsReceived.filter(
-                  (c) => c.status === 'rejected',
+                  (c: any) => c.status === 'rejected',
                 ).length,
               },
             },
             postsByType: {
-              requests: userPosts.filter((p) => p.type === 'request').length,
-              offers: userPosts.filter((p) => p.type === 'offer').length,
+              requests: userPosts.filter((p: any) => p.type === 'request')
+                .length,
+              offers: userPosts.filter((p: any) => p.type === 'offer').length,
             },
           },
         },
@@ -1115,7 +1145,7 @@ export class ReferralService {
 
       // Transform posts with parallel decryption
       const transformedPosts = await Promise.all(
-        posts.map(async (post) => {
+        posts.map(async (post: any) => {
           const [title, company] = await Promise.all([
             Promise.resolve(this.encryption.decrypt(post.title_encrypted)),
             Promise.resolve(this.encryption.decrypt(post.company_encrypted)),
@@ -1143,7 +1173,7 @@ export class ReferralService {
 
       // Get recent activity timeline
       const recentActivity = [
-        ...posts.map((p) => ({
+        ...posts.map((p: any) => ({
           type: 'post_created',
           timestamp: p.created_at,
           data: {
@@ -1152,7 +1182,7 @@ export class ReferralService {
             postType: p.type,
           },
         })),
-        ...connectionsSent.map((c) => ({
+        ...connectionsSent.map((c: any) => ({
           type: 'connection_sent',
           timestamp: c.created_at,
           data: {
@@ -1161,7 +1191,7 @@ export class ReferralService {
             status: c.status,
           },
         })),
-        ...connectionsReceived.map((c) => ({
+        ...connectionsReceived.map((c: any) => ({
           type: 'connection_received',
           timestamp: c.created_at,
           data: {
@@ -1170,14 +1200,14 @@ export class ReferralService {
             status: c.status,
           },
         })),
-        ...likes.map((l) => ({
+        ...likes.map((l: any) => ({
           type: 'post_liked',
           timestamp: l.created_at,
           data: {
             referralPostId: l.referral_post_id,
           },
         })),
-        ...comments.map((c) => ({
+        ...comments.map((c: any) => ({
           type: 'comment_posted',
           timestamp: c.created_at,
           data: {
@@ -1198,7 +1228,7 @@ export class ReferralService {
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
       const postsThisMonth = posts.filter(
-        (p) => new Date(p.created_at) > oneMonthAgo,
+        (p: any) => new Date(p.created_at) > oneMonthAgo,
       ).length;
 
       const connectionsThisMonth = [
@@ -1219,11 +1249,15 @@ export class ReferralService {
             received: connectionsReceived,
             total: connectionsSent.length + connectionsReceived.length,
             pending:
-              connectionsSent.filter((c) => c.status === 'pending').length +
-              connectionsReceived.filter((c) => c.status === 'pending').length,
+              connectionsSent.filter((c: any) => c.status === 'pending')
+                .length +
+              connectionsReceived.filter((c: any) => c.status === 'pending')
+                .length,
             accepted:
-              connectionsSent.filter((c) => c.status === 'accepted').length +
-              connectionsReceived.filter((c) => c.status === 'accepted').length,
+              connectionsSent.filter((c: any) => c.status === 'accepted')
+                .length +
+              connectionsReceived.filter((c: any) => c.status === 'accepted')
+                .length,
           },
           engagement: {
             likes: likes.length,
@@ -1239,13 +1273,16 @@ export class ReferralService {
           },
           summary: {
             totalPosts: posts.length,
-            activePosts: posts.filter((p) => p.status === 'open').length,
+            activePosts: posts.filter((p: any) => p.status === 'open').length,
             totalConnections:
               connectionsSent.length + connectionsReceived.length,
             totalEngagements: likes.length + bookmarks.length + comments.length,
-            totalViews: posts.reduce((sum, p) => sum + (p.views_count || 0), 0),
+            totalViews: posts.reduce(
+              (sum: any, p: any) => sum + (p.views_count || 0),
+              0,
+            ),
             totalLikesReceived: posts.reduce(
-              (sum, p) => sum + (p.likes_count || 0),
+              (sum: any, p: any) => sum + (p.likes_count || 0),
               0,
             ),
           },

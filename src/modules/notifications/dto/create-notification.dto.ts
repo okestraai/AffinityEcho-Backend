@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsBoolean, IsObject } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsBoolean,
+  IsObject,
+} from 'class-validator';
 
 export class CreateNotificationDto {
   @ApiProperty({ example: 'uuid-user-id' })

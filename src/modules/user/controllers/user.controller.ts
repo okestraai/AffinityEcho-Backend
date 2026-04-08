@@ -26,7 +26,14 @@ import { VerifyCompanyEmailDto } from '../dto/company-verification.dto';
 import { UnifiedProfileEditDto } from '../dto/unified-profile-edit.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
 import {
   UpdateProfileDto,
   UpdateAvatarDto,
@@ -103,7 +110,10 @@ export class UserController {
   @Put('settings/privacy')
   @ApiOperation({ summary: 'Update privacy settings' })
   @ApiBody({ type: UpdatePrivacySettingsDto })
-  updatePrivacySettings(@Req() req: any, @Body() dto: UpdatePrivacySettingsDto) {
+  updatePrivacySettings(
+    @Req() req: any,
+    @Body() dto: UpdatePrivacySettingsDto,
+  ) {
     const userId = req.user.sub;
     return this.userSettingsService.updatePrivacySettings(userId, dto);
   }
@@ -120,7 +130,10 @@ export class UserController {
   @Put('settings/notifications')
   @ApiOperation({ summary: 'Update notification settings' })
   @ApiBody({ type: UpdateNotificationSettingsDto })
-  updateNotificationSettings(@Req() req: any, @Body() dto: UpdateNotificationSettingsDto) {
+  updateNotificationSettings(
+    @Req() req: any,
+    @Body() dto: UpdateNotificationSettingsDto,
+  ) {
     const userId = req.user.sub;
     return this.userSettingsService.updateNotificationSettings(userId, dto);
   }
@@ -148,7 +161,11 @@ export class UserController {
   @ApiBody({ type: ChangePasswordDto })
   changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
     const userId = req.user.sub;
-    return this.userAccountService.changePassword(userId, dto.currentPassword, dto.newPassword);
+    return this.userAccountService.changePassword(
+      userId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   @Delete('account')
@@ -167,10 +184,7 @@ export class UserController {
     enum: ['all', 'profile', 'posts', 'comments', 'connections', 'activity'],
     description: 'Data category to export (default: all)',
   })
-  exportUserData(
-    @Req() req: any,
-    @Query('category') category?: string,
-  ) {
+  exportUserData(@Req() req: any, @Query('category') category?: string) {
     const userId = req.user.sub;
     return this.userAccountService.exportUserData(userId, category || 'all');
   }
@@ -195,7 +209,8 @@ export class UserController {
   @Get('resources/crisis')
   @ApiOperation({
     summary: 'Get crisis resources',
-    description: 'Get mental health, workplace, identity-specific, and self-care crisis resources',
+    description:
+      'Get mental health, workplace, identity-specific, and self-care crisis resources',
   })
   getCrisisResources() {
     return this.userResourcesService.getCrisisResources();
@@ -204,7 +219,8 @@ export class UserController {
   @Get('resources/community-guidelines')
   @ApiOperation({
     summary: 'Get community guidelines',
-    description: 'Get community guidelines including sections on respect, safety, communication, prohibited behavior, mentorship, content, and reporting',
+    description:
+      'Get community guidelines including sections on respect, safety, communication, prohibited behavior, mentorship, content, and reporting',
   })
   getCommunityGuidelines() {
     return this.userResourcesService.getCommunityGuidelines();
@@ -215,9 +231,14 @@ export class UserController {
   @Get('me/activity')
   @ApiOperation({
     summary: 'Get current user activity',
-    description: 'Get aggregated activity (posts, topics, nook messages) for the current user',
+    description:
+      'Get aggregated activity (posts, topics, nook messages) for the current user',
   })
-  @ApiQuery({ name: 'type', required: false, enum: ['posts', 'topics', 'nooks', 'all'] })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['posts', 'topics', 'nooks', 'all'],
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getMyActivity(
@@ -227,7 +248,13 @@ export class UserController {
     @Query('limit') limit?: number,
   ) {
     const userId = req.user.sub;
-    return this.userProfileService.getUserActivity(userId, type || 'all', page || 1, limit || 20, userId);
+    return this.userProfileService.getUserActivity(
+      userId,
+      type || 'all',
+      page || 1,
+      limit || 20,
+      userId,
+    );
   }
 
   @Get('me/bookmarks')
@@ -243,7 +270,11 @@ export class UserController {
     @Query('limit') limit?: number,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.getUserBookmarks(userId, page || 1, limit || 20);
+    return this.feedEngagementService.getUserBookmarks(
+      userId,
+      page || 1,
+      limit || 20,
+    );
   }
 
   // ============ HARASSMENT REPORTS ============
@@ -265,11 +296,23 @@ export class UserController {
   @Get('reports/harassment')
   @ApiOperation({
     summary: 'Get my harassment reports',
-    description: 'Get list of harassment reports submitted by the current user, optionally filtered by status',
+    description:
+      'Get list of harassment reports submitted by the current user, optionally filtered by status',
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'status', required: false, enum: ['submitted', 'under_review', 'investigating', 'resolved', 'dismissed', 'all'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: [
+      'submitted',
+      'under_review',
+      'investigating',
+      'resolved',
+      'dismissed',
+      'all',
+    ],
+  })
   getMyHarassmentReports(
     @Req() req: any,
     @Query('page') page?: number,
@@ -277,7 +320,12 @@ export class UserController {
     @Query('status') status?: string,
   ) {
     const userId = req.user.sub;
-    return this.harassmentReportService.getUserReports(userId, page, limit, status);
+    return this.harassmentReportService.getUserReports(
+      userId,
+      page,
+      limit,
+      status,
+    );
   }
 
   @Get('reports/harassment/reference/:referenceNumber')
@@ -285,13 +333,19 @@ export class UserController {
     summary: 'Get harassment report by reference number',
     description: 'Look up a harassment report using its reference number',
   })
-  @ApiParam({ name: 'referenceNumber', description: 'Report reference number (e.g., HR-XXXXX-XXXX)' })
+  @ApiParam({
+    name: 'referenceNumber',
+    description: 'Report reference number (e.g., HR-XXXXX-XXXX)',
+  })
   getHarassmentReportByReference(
     @Req() req: any,
     @Param('referenceNumber') referenceNumber: string,
   ) {
     const userId = req.user.sub;
-    return this.harassmentReportService.getReportByReference(userId, referenceNumber);
+    return this.harassmentReportService.getReportByReference(
+      userId,
+      referenceNumber,
+    );
   }
 
   @Get('reports/harassment/:id')
@@ -300,10 +354,7 @@ export class UserController {
     description: 'Get a specific harassment report by its ID',
   })
   @ApiParam({ name: 'id', description: 'Report ID' })
-  getHarassmentReportById(
-    @Req() req: any,
-    @Param('id') id: string,
-  ) {
+  getHarassmentReportById(@Req() req: any, @Param('id') id: string) {
     const userId = req.user.sub;
     return this.harassmentReportService.getReportById(userId, id);
   }
@@ -318,7 +369,10 @@ export class UserController {
 
   @Put('profile/edit')
   @ApiOperation({ summary: 'Update profile fields' })
-  async updateEditableProfile(@Req() req: any, @Body() dto: UnifiedProfileEditDto) {
+  async updateEditableProfile(
+    @Req() req: any,
+    @Body() dto: UnifiedProfileEditDto,
+  ) {
     return this.unifiedProfileService.updateProfile(req.user.sub, dto);
   }
 
@@ -330,7 +384,10 @@ export class UserController {
     @Req() req: any,
     @Body() dto: VerifyCompanyEmailDto,
   ) {
-    return this.companyVerificationService.requestVerification(req.user.sub, dto.email);
+    return this.companyVerificationService.requestVerification(
+      req.user.sub,
+      dto.email,
+    );
   }
 
   @Get('company-verification-status')
@@ -366,7 +423,8 @@ export class UserController {
   @Get(':userId/full-profile')
   @ApiOperation({
     summary: 'Get full user profile',
-    description: 'Single endpoint: profile + stats + recent posts/topics/nooks/comments + identity reveal status + viewer engagement. Badges excluded for other users.',
+    description:
+      'Single endpoint: profile + stats + recent posts/topics/nooks/comments + identity reveal status + viewer engagement. Badges excluded for other users.',
   })
   @ApiParam({ name: 'userId', description: 'User ID' })
   getFullUserProfile(@Req() req: any, @Param('userId') userId: string) {
@@ -377,7 +435,11 @@ export class UserController {
   @Get(':userId/activity')
   @ApiOperation({ summary: 'Get user activity' })
   @ApiParam({ name: 'userId', description: 'User ID' })
-  @ApiQuery({ name: 'type', required: false, enum: ['posts', 'topics', 'nooks', 'all'] })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['posts', 'topics', 'nooks', 'all'],
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getUserActivity(
@@ -388,14 +450,24 @@ export class UserController {
     @Query('limit') limit?: number,
   ) {
     const currentUserId = req.user.sub;
-    return this.userProfileService.getUserActivity(userId, type, page, limit, currentUserId);
+    return this.userProfileService.getUserActivity(
+      userId,
+      type,
+      page,
+      limit,
+      currentUserId,
+    );
   }
 
   @Post(':userId/block')
   @ApiOperation({ summary: 'Block a user' })
   @ApiParam({ name: 'userId', description: 'User ID to block' })
   @ApiBody({ type: BlockUserDto })
-  blockUser(@Req() req: any, @Param('userId') targetUserId: string, @Body() dto: BlockUserDto) {
+  blockUser(
+    @Req() req: any,
+    @Param('userId') targetUserId: string,
+    @Body() dto: BlockUserDto,
+  ) {
     const userId = req.user.sub;
     return this.userBlockingService.blockUser(userId, targetUserId, dto);
   }

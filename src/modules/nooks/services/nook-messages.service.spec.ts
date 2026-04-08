@@ -18,7 +18,12 @@ jest.mock('../../../database/supabase.client', () => ({
 
 jest.mock('../../../common/utils/logger.util', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 describe('NookMessagesService', () => {
@@ -54,10 +59,10 @@ describe('NookMessagesService', () => {
     };
 
     service = new NookMessagesService(
-      mockConfigService as any,
-      mockIdentityReveal as any,
-      mockMentionService as any,
-      mockNotificationsService as any,
+      mockConfigService,
+      mockIdentityReveal,
+      mockMentionService,
+      mockNotificationsService,
       mockOkestraService as any,
     );
   });
@@ -67,7 +72,12 @@ describe('NookMessagesService', () => {
     const userId = 'user-001';
 
     it('should return paginated messages with replies', async () => {
-      const nook = { id: nookId, is_active: true, is_locked: false, expires_at: new Date(Date.now() + 86400000).toISOString() };
+      const nook = {
+        id: nookId,
+        is_active: true,
+        is_locked: false,
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      };
       const messages = [
         {
           id: 'msg-001',
@@ -76,7 +86,13 @@ describe('NookMessagesService', () => {
           parent_message_id: null,
           content: 'Hello world',
           is_anonymous: true,
-          user: { id: 'user-002', username: 'alice', avatar: 'avatar1', first_name_encrypted: null, last_name_encrypted: null },
+          user: {
+            id: 'user-002',
+            username: 'alice',
+            avatar: 'avatar1',
+            first_name_encrypted: null,
+            last_name_encrypted: null,
+          },
         },
         {
           id: 'msg-002',
@@ -85,7 +101,13 @@ describe('NookMessagesService', () => {
           parent_message_id: null,
           content: 'Another message',
           is_anonymous: false,
-          user: { id: 'user-003', username: 'bob', avatar: 'avatar2', first_name_encrypted: null, last_name_encrypted: null },
+          user: {
+            id: 'user-003',
+            username: 'bob',
+            avatar: 'avatar2',
+            first_name_encrypted: null,
+            last_name_encrypted: null,
+          },
         },
       ];
       const replies = [
@@ -96,20 +118,34 @@ describe('NookMessagesService', () => {
           parent_message_id: 'msg-001',
           content: 'Reply to hello',
           is_anonymous: true,
-          user: { id: userId, username: 'me', avatar: 'avatar-me', first_name_encrypted: null, last_name_encrypted: null },
+          user: {
+            id: userId,
+            username: 'me',
+            avatar: 'avatar-me',
+            first_name_encrypted: null,
+            last_name_encrypted: null,
+          },
         },
       ];
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const messagesChain = createMockQueryChain({ data: messages, error: null, count: 2 });
+      const messagesChain = createMockQueryChain({
+        data: messages,
+        error: null,
+        count: 2,
+      });
       const repliesChain = createMockQueryChain({ data: replies, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(nookChain)      // nooks check
-        .mockReturnValueOnce(messagesChain)  // nook_messages (top-level)
-        .mockReturnValueOnce(repliesChain);  // nook_messages (replies)
+        .mockReturnValueOnce(nookChain) // nooks check
+        .mockReturnValueOnce(messagesChain) // nook_messages (top-level)
+        .mockReturnValueOnce(repliesChain); // nook_messages (replies)
 
-      const result = await service.getMessages(nookId, { page: 1, limit: 20, sortOrder: 'asc' }, userId);
+      const result = await service.getMessages(
+        nookId,
+        { page: 1, limit: 20, sortOrder: 'asc' },
+        userId,
+      );
 
       expect(result.success).toBe(true);
       expect(result.data.messages).toHaveLength(2);
@@ -134,7 +170,10 @@ describe('NookMessagesService', () => {
     });
 
     it('should throw NotFoundException when nook not found', async () => {
-      const nookChain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      const nookChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
       mockClient.from.mockReturnValueOnce(nookChain);
 
       await expect(
@@ -143,9 +182,18 @@ describe('NookMessagesService', () => {
     });
 
     it('should throw BadRequestException when message query fails', async () => {
-      const nook = { id: nookId, is_active: true, is_locked: false, expires_at: new Date(Date.now() + 86400000).toISOString() };
+      const nook = {
+        id: nookId,
+        is_active: true,
+        is_locked: false,
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      };
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const messagesChain = createMockQueryChain({ data: null, error: { message: 'query failed' }, count: 0 });
+      const messagesChain = createMockQueryChain({
+        data: null,
+        error: { message: 'query failed' },
+        count: 0,
+      });
 
       mockClient.from
         .mockReturnValueOnce(nookChain)
@@ -157,15 +205,28 @@ describe('NookMessagesService', () => {
     });
 
     it('should handle empty messages list', async () => {
-      const nook = { id: nookId, is_active: true, is_locked: false, expires_at: new Date(Date.now() + 86400000).toISOString() };
+      const nook = {
+        id: nookId,
+        is_active: true,
+        is_locked: false,
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      };
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const messagesChain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const messagesChain = createMockQueryChain({
+        data: [],
+        error: null,
+        count: 0,
+      });
 
       mockClient.from
         .mockReturnValueOnce(nookChain)
         .mockReturnValueOnce(messagesChain);
 
-      const result = await service.getMessages(nookId, { page: 1, limit: 20 }, userId);
+      const result = await service.getMessages(
+        nookId,
+        { page: 1, limit: 20 },
+        userId,
+      );
 
       expect(result.success).toBe(true);
       expect(result.data.messages).toHaveLength(0);
@@ -173,9 +234,18 @@ describe('NookMessagesService', () => {
     });
 
     it('should use default query params when not provided', async () => {
-      const nook = { id: nookId, is_active: true, is_locked: false, expires_at: new Date(Date.now() + 86400000).toISOString() };
+      const nook = {
+        id: nookId,
+        is_active: true,
+        is_locked: false,
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      };
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const messagesChain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const messagesChain = createMockQueryChain({
+        data: [],
+        error: null,
+        count: 0,
+      });
 
       mockClient.from
         .mockReturnValueOnce(nookChain)
@@ -211,15 +281,22 @@ describe('NookMessagesService', () => {
       };
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const insertChain = createMockQueryChain({ data: createdMessage, error: null });
-      const recentCountChain = createMockQueryChain({ data: null, error: null, count: 2 });
+      const insertChain = createMockQueryChain({
+        data: createdMessage,
+        error: null,
+      });
+      const recentCountChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 2,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(nookChain)       // nook check
-        .mockReturnValueOnce(insertChain)     // insert message
+        .mockReturnValueOnce(nookChain) // nook check
+        .mockReturnValueOnce(insertChain) // insert message
         .mockReturnValueOnce(recentCountChain) // count recent messages
-        .mockReturnValueOnce(updateChain);    // update nook stats
+        .mockReturnValueOnce(updateChain); // update nook stats
 
       const result = await service.createMessage(
         nookId,
@@ -238,7 +315,10 @@ describe('NookMessagesService', () => {
     });
 
     it('should throw NotFoundException when nook not found', async () => {
-      const nookChain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      const nookChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
       mockClient.from.mockReturnValueOnce(nookChain);
 
       await expect(
@@ -304,7 +384,10 @@ describe('NookMessagesService', () => {
         messages_count: 5,
       };
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const parentCheckChain = createMockQueryChain({ data: null, error: null });
+      const parentCheckChain = createMockQueryChain({
+        data: null,
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(nookChain)
@@ -339,9 +422,19 @@ describe('NookMessagesService', () => {
       };
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const parentCheckChain = createMockQueryChain({ data: parentMessage, error: null });
-      const insertChain = createMockQueryChain({ data: createdMessage, error: null });
-      const recentCountChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const parentCheckChain = createMockQueryChain({
+        data: parentMessage,
+        error: null,
+      });
+      const insertChain = createMockQueryChain({
+        data: createdMessage,
+        error: null,
+      });
+      const recentCountChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 1,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -379,8 +472,15 @@ describe('NookMessagesService', () => {
       };
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const insertChain = createMockQueryChain({ data: createdMessage, error: null });
-      const recentCountChain = createMockQueryChain({ data: null, error: null, count: 12 });
+      const insertChain = createMockQueryChain({
+        data: createdMessage,
+        error: null,
+      });
+      const recentCountChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 12,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -415,8 +515,15 @@ describe('NookMessagesService', () => {
       };
 
       const nookChain = createMockQueryChain({ data: nook, error: null });
-      const insertChain = createMockQueryChain({ data: createdMessage, error: null });
-      const recentCountChain = createMockQueryChain({ data: null, error: null, count: 5 });
+      const insertChain = createMockQueryChain({
+        data: createdMessage,
+        error: null,
+      });
+      const recentCountChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 5,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -449,14 +556,17 @@ describe('NookMessagesService', () => {
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
       const deleteChain = createMockQueryChain({ data: null, error: null });
-      const nookCountChain = createMockQueryChain({ data: nookData, error: null });
+      const nookCountChain = createMockQueryChain({
+        data: nookData,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(fetchChain)     // fetch message
-        .mockReturnValueOnce(deleteChain)    // delete message
+        .mockReturnValueOnce(fetchChain) // fetch message
+        .mockReturnValueOnce(deleteChain) // delete message
         .mockReturnValueOnce(nookCountChain) // get nook count
-        .mockReturnValueOnce(updateChain);   // update nook count
+        .mockReturnValueOnce(updateChain); // update nook count
 
       const result = await service.deleteMessage(nookId, messageId, userId);
 
@@ -477,7 +587,10 @@ describe('NookMessagesService', () => {
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
       const deleteChain = createMockQueryChain({ data: null, error: null });
-      const nookCountChain = createMockQueryChain({ data: nookData, error: null });
+      const nookCountChain = createMockQueryChain({
+        data: nookData,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -486,7 +599,11 @@ describe('NookMessagesService', () => {
         .mockReturnValueOnce(nookCountChain)
         .mockReturnValueOnce(updateChain);
 
-      const result = await service.deleteMessage(nookId, messageId, nookCreatorId);
+      const result = await service.deleteMessage(
+        nookId,
+        messageId,
+        nookCreatorId,
+      );
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Message deleted successfully');
@@ -509,7 +626,10 @@ describe('NookMessagesService', () => {
     });
 
     it('should throw NotFoundException when message not found', async () => {
-      const fetchChain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      const fetchChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
       mockClient.from.mockReturnValueOnce(fetchChain);
 
       await expect(
@@ -526,7 +646,10 @@ describe('NookMessagesService', () => {
       };
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
-      const deleteChain = createMockQueryChain({ data: null, error: { message: 'delete failed' } });
+      const deleteChain = createMockQueryChain({
+        data: null,
+        error: { message: 'delete failed' },
+      });
 
       mockClient.from
         .mockReturnValueOnce(fetchChain)
@@ -548,7 +671,10 @@ describe('NookMessagesService', () => {
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
       const deleteChain = createMockQueryChain({ data: null, error: null });
-      const nookCountChain = createMockQueryChain({ data: nookData, error: null });
+      const nookCountChain = createMockQueryChain({
+        data: nookData,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -573,7 +699,10 @@ describe('NookMessagesService', () => {
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
       const deleteChain = createMockQueryChain({ data: null, error: null });
-      const nookCountChain = createMockQueryChain({ data: nookData, error: null });
+      const nookCountChain = createMockQueryChain({
+        data: nookData,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from

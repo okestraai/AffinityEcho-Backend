@@ -10,7 +10,14 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { FeedsService } from '../services/feeds.service';
 import { FeedPostsService } from '../services/feed-posts.service';
@@ -66,7 +73,12 @@ export class FeedsController {
     @Query('limit') limit?: number,
   ) {
     const requestingUserId = req.user.sub;
-    return this.feedPostsService.getUserPosts(userId, page, limit, requestingUserId);
+    return this.feedPostsService.getUserPosts(
+      userId,
+      page,
+      limit,
+      requestingUserId,
+    );
   }
 
   @Put('posts/:postId')
@@ -109,7 +121,10 @@ export class FeedsController {
   // ============ LIKES ============
   @Post(':contentType/:contentId/like')
   @ApiOperation({ summary: 'Like/Unlike a feed item' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   async toggleLike(
     @Req() req: any,
@@ -117,15 +132,33 @@ export class FeedsController {
     @Param('contentId') contentId: string,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.toggleLike(contentType, contentId, userId);
+    return this.feedEngagementService.toggleLike(
+      contentType,
+      contentId,
+      userId,
+    );
   }
 
   // ============ REACTIONS ============
   @Post(':contentType/:contentId/react')
-  @ApiOperation({ summary: 'Toggle a reaction (heard/validated/inspired) on feed content' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiOperation({
+    summary: 'Toggle a reaction (heard/validated/inspired) on feed content',
+  })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
-  @ApiBody({ schema: { properties: { reactionType: { type: 'string', enum: ['heard', 'validated', 'inspired'] } } } })
+  @ApiBody({
+    schema: {
+      properties: {
+        reactionType: {
+          type: 'string',
+          enum: ['heard', 'validated', 'inspired'],
+        },
+      },
+    },
+  })
   async toggleReaction(
     @Req() req: any,
     @Param('contentType') contentType: 'post' | 'topic' | 'nook_message',
@@ -133,13 +166,21 @@ export class FeedsController {
     @Body('reactionType') reactionType: string,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.toggleReaction(contentType, contentId, userId, reactionType);
+    return this.feedEngagementService.toggleReaction(
+      contentType,
+      contentId,
+      userId,
+      reactionType,
+    );
   }
 
   // ============ COMMENTS ============
   @Post(':contentType/:contentId/comments')
   @ApiOperation({ summary: 'Add comment to feed item' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   @ApiBody({ type: CreateFeedCommentDto })
   async addComment(
@@ -149,12 +190,20 @@ export class FeedsController {
     @Body() dto: CreateFeedCommentDto,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.addComment(contentType, contentId, userId, dto);
+    return this.feedEngagementService.addComment(
+      contentType,
+      contentId,
+      userId,
+      dto,
+    );
   }
 
   @Get(':contentType/:contentId/comments')
   @ApiOperation({ summary: 'Get comments for feed item' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   async getComments(
     @Req() req: any,
@@ -164,13 +213,22 @@ export class FeedsController {
     @Query('limit') limit?: number,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.getComments(contentType, contentId, userId, page, limit);
+    return this.feedEngagementService.getComments(
+      contentType,
+      contentId,
+      userId,
+      page,
+      limit,
+    );
   }
 
   // ============ SHARES ============
   @Post(':contentType/:contentId/share')
   @ApiOperation({ summary: 'Share a feed item' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   @ApiBody({ type: ShareFeedItemDto })
   async shareItem(
@@ -180,12 +238,20 @@ export class FeedsController {
     @Body() dto: ShareFeedItemDto,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.shareItem(contentType, contentId, userId, dto);
+    return this.feedEngagementService.shareItem(
+      contentType,
+      contentId,
+      userId,
+      dto,
+    );
   }
 
   @Delete(':contentType/:contentId/share')
   @ApiOperation({ summary: 'Unshare a feed item' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   async unshareItem(
     @Req() req: any,
@@ -193,13 +259,20 @@ export class FeedsController {
     @Param('contentId') contentId: string,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.unshareItem(contentType, contentId, userId);
+    return this.feedEngagementService.unshareItem(
+      contentType,
+      contentId,
+      userId,
+    );
   }
 
   // ============ BOOKMARKS ============
   @Post(':contentType/:contentId/bookmark')
   @ApiOperation({ summary: 'Bookmark/Unbookmark a feed item' })
-  @ApiParam({ name: 'contentType', description: 'Content type (post, topic, nook_message)' })
+  @ApiParam({
+    name: 'contentType',
+    description: 'Content type (post, topic, nook_message)',
+  })
   @ApiParam({ name: 'contentId', description: 'Content ID' })
   async toggleBookmark(
     @Req() req: any,
@@ -207,7 +280,11 @@ export class FeedsController {
     @Param('contentId') contentId: string,
   ) {
     const userId = req.user.sub;
-    return this.feedEngagementService.toggleBookmark(contentType, contentId, userId);
+    return this.feedEngagementService.toggleBookmark(
+      contentType,
+      contentId,
+      userId,
+    );
   }
 
   @Get('bookmarks')

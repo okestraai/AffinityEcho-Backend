@@ -19,7 +19,14 @@ import { MentionsModule } from '../mentions/mentions.module';
 import { OkestraModule } from '../okestra/okestra.module';
 
 @Module({
-  imports: [JwtModule, ConfigModule, NotificationsModule, EncryptionModule, MentionsModule, OkestraModule],
+  imports: [
+    JwtModule,
+    ConfigModule,
+    NotificationsModule,
+    EncryptionModule,
+    MentionsModule,
+    OkestraModule,
+  ],
   controllers: [
     NooksController,
     NookMessagesController,

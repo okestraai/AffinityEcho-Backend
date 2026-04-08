@@ -38,7 +38,11 @@ export class MentorshipProfileService {
       const decrypted = this.encryption.decrypt(value);
       return JSON.parse(decrypted);
     } catch {
-      try { return JSON.parse(value); } catch { return []; }
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [];
+      }
     }
   }
 
@@ -49,7 +53,9 @@ export class MentorshipProfileService {
       // Check if user exists
       const { data: user, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, mentoring_as, is_active_mentee, career_level_encrypted, company_encrypted, affinity_tags_encrypted')
+        .select(
+          'id, username, mentoring_as, is_active_mentee, career_level_encrypted, company_encrypted, affinity_tags_encrypted',
+        )
         .eq('id', userId)
         .single();
 
@@ -212,7 +218,9 @@ export class MentorshipProfileService {
       // Check if user exists
       const { data: user, error: userError } = await this.admin
         .from('user_profiles')
-        .select('id, username, mentoring_as, is_active_mentor, career_level_encrypted, company_encrypted, affinity_tags_encrypted')
+        .select(
+          'id, username, mentoring_as, is_active_mentor, career_level_encrypted, company_encrypted, affinity_tags_encrypted',
+        )
         .eq('id', userId)
         .single();
 
@@ -464,7 +472,9 @@ export class MentorshipProfileService {
             linkedinUrl: profile.linkedin_url,
             careerLevel: this.decryptField(profile.career_level_encrypted),
             company: this.decryptField(profile.company_encrypted),
-            affinityTags: this.decryptAffinityTags(profile.affinity_tags_encrypted),
+            affinityTags: this.decryptAffinityTags(
+              profile.affinity_tags_encrypted,
+            ),
           },
 
           // Mentor profile (if active)
@@ -513,19 +523,36 @@ export class MentorshipProfileService {
 
           // Stats (live counts from actual tables)
           stats: await (async () => {
-            const [postsResult, commentsResult, topicsResult] = await Promise.all([
-              this.admin.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).eq('is_archived', false),
-              this.admin.from('forum_comments').select('*', { count: 'exact', head: true }).eq('user_id', profile.id),
-              this.admin.from('forum_topics').select('*', { count: 'exact', head: true }).eq('user_id', profile.id),
-            ]);
+            const [postsResult, commentsResult, topicsResult] =
+              await Promise.all([
+                this.admin
+                  .from('feed_posts')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('user_id', profile.id)
+                  .eq('is_archived', false),
+                this.admin
+                  .from('forum_comments')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('user_id', profile.id),
+                this.admin
+                  .from('forum_topics')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('user_id', profile.id),
+              ]);
             const totalPosts = postsResult.count || 0;
             const totalComments = commentsResult.count || 0;
             const totalTopics = topicsResult.count || 0;
-            const mentorshipSessions = profile.mentorship_sessions_completed || 0;
+            const mentorshipSessions =
+              profile.mentorship_sessions_completed || 0;
             const followersCount = followers?.length || 0;
             const followingCount = following?.length || 0;
             return {
-              reputationScore: (totalPosts * 5) + (totalComments * 2) + (totalTopics * 5) + (mentorshipSessions * 10) + (followersCount * 2),
+              reputationScore:
+                totalPosts * 5 +
+                totalComments * 2 +
+                totalTopics * 5 +
+                mentorshipSessions * 10 +
+                followersCount * 2,
               mentorshipSessionsCompleted: mentorshipSessions,
               totalPosts,
               totalComments,
@@ -573,8 +600,10 @@ export class MentorshipProfileService {
         .single();
 
       if (profile) {
-        const activeMentor = section === 'mentor' ? false : profile.is_active_mentor;
-        const activeMentee = section === 'mentee' ? false : profile.is_active_mentee;
+        const activeMentor =
+          section === 'mentor' ? false : profile.is_active_mentor;
+        const activeMentee =
+          section === 'mentee' ? false : profile.is_active_mentee;
 
         if (activeMentor && activeMentee) {
           updateData.mentoring_as = 'both';
@@ -644,8 +673,10 @@ export class MentorshipProfileService {
       }
 
       // Determine new mentoring_as value
-      const activeMentor = section === 'mentor' ? newState : profile.is_active_mentor;
-      const activeMentee = section === 'mentee' ? newState : profile.is_active_mentee;
+      const activeMentor =
+        section === 'mentor' ? newState : profile.is_active_mentor;
+      const activeMentee =
+        section === 'mentee' ? newState : profile.is_active_mentee;
 
       if (activeMentor && activeMentee) {
         updateData.mentoring_as = 'both';
@@ -680,7 +711,10 @@ export class MentorshipProfileService {
         data,
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
       throw new BadRequestException(`Failed to toggle ${section} status`);

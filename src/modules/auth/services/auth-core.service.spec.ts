@@ -14,7 +14,6 @@ import {
 // ── Module-level mocks ───────────────────────────────────────────────
 jest.mock('../../../database/supabase.client', () => ({
   supabaseAdmin: jest.fn(),
-  supabaseClient: jest.fn(),
 }));
 
 jest.mock('../../../common/utils/logger.util', () => ({
@@ -27,17 +26,26 @@ jest.mock('../../../common/utils/logger.util', () => ({
   },
 }));
 
-import {
-  supabaseClient,
-  supabaseAdmin,
-} from '../../../database/supabase.client';
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed-password'),
+  compare: jest.fn().mockResolvedValue(true),
+}));
+
+jest.mock('uuid', () => ({
+  v4: jest.fn().mockReturnValue('user-123'),
+}));
+
+import { supabaseAdmin } from '../../../database/supabase.client';
+import * as bcrypt from 'bcrypt';
 
 // ── Helper factories ─────────────────────────────────────────────────
 
 function createMockJwtService() {
   return {
     sign: jest.fn().mockReturnValue('mock-jwt-token'),
-    verify: jest.fn().mockReturnValue({ sub: 'user-123', email: 'test@example.com' }),
+    verify: jest
+      .fn()
+      .mockReturnValue({ sub: 'user-123', email: 'test@example.com' }),
   };
 }
 
@@ -78,7 +86,6 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
   let mockEncryption: ReturnType<typeof createMockEncryptionUtil>;
   let mockEmail: ReturnType<typeof createMockEmailService>;
   let mockOnboarding: ReturnType<typeof createMockOnboardingService>;
-  let mockClientSupabase: ReturnType<typeof createMockSupabaseClient>;
   let mockAdminSupabase: ReturnType<typeof createMockSupabaseClient>;
 
   beforeEach(() => {
@@ -90,11 +97,13 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     mockEmail = createMockEmailService();
     mockOnboarding = createMockOnboardingService();
 
-    mockClientSupabase = createMockSupabaseClient();
     mockAdminSupabase = createMockSupabaseClient();
 
-    (supabaseClient as jest.Mock).mockReturnValue(mockClientSupabase.client);
     (supabaseAdmin as jest.Mock).mockReturnValue(mockAdminSupabase.client);
+
+    // Reset bcrypt mocks to defaults
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
     service = new AuthService(
       mockConfig as any,
@@ -116,20 +125,21 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     };
 
     it('should register a new user successfully', async () => {
+      // Username check — not found
       const usernameCheckChain = createMockQueryChain({
         data: null,
         error: { code: 'PGRST116', message: 'not found' },
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(usernameCheckChain);
 
-      mockClientSupabase.client.auth.signUp.mockResolvedValue({
-        data: {
-          user: { id: 'user-123', email: 'new@example.com' },
-          session: null,
-        },
+      // Email check — not found
+      const emailCheckChain = createMockQueryChain({
+        data: null,
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(emailCheckChain);
 
+      // Profile insert
       const insertChain = createMockQueryChain({ data: null, error: null });
       mockAdminSupabase.client.from.mockReturnValueOnce(insertChain);
 
@@ -143,11 +153,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
           requiresOtpVerification: true,
         }),
       );
-      expect(mockClientSupabase.client.auth.signUp).toHaveBeenCalledWith({
-        email: 'new@example.com',
-        password: 'StrongPass1!',
-        options: { data: { username: 'newuser' } },
-      });
+      expect(bcrypt.hash).toHaveBeenCalledWith('StrongPass1!', 12);
       expect(mockEmail.sendOtpEmail).toHaveBeenCalled();
     });
 
@@ -158,9 +164,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(usernameCheckChain);
 
-      await expect(service.signup(validDto)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.signup(validDto)).rejects.toThrow(ConflictException);
     });
 
     it('should throw BadRequestException for invalid email format', async () => {
@@ -200,34 +204,44 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     });
 
     it('should throw ConflictException when email is already registered', async () => {
+      // Username check — not found
       const usernameCheckChain = createMockQueryChain({
         data: null,
         error: { code: 'PGRST116', message: 'not found' },
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(usernameCheckChain);
 
-      mockClientSupabase.client.auth.signUp.mockResolvedValue({
-        data: { user: null, session: null },
-        error: { message: 'User already registered', code: 'user_exists' },
+      // Email check — found (existing user)
+      const emailCheckChain = createMockQueryChain({
+        data: { id: 'existing-user' },
+        error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(emailCheckChain);
 
-      await expect(service.signup(validDto)).rejects.toThrow(ConflictException);
       await expect(service.signup(validDto)).rejects.toThrow(
         'An account with this email already exists',
       );
     });
 
-    it('should throw InternalServerErrorException on fetch failure', async () => {
+    it('should throw InternalServerErrorException on unexpected failure', async () => {
+      // Username check — not found
       const usernameCheckChain = createMockQueryChain({
         data: null,
         error: { code: 'PGRST116', message: 'not found' },
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(usernameCheckChain);
 
-      mockClientSupabase.client.auth.signUp.mockResolvedValue({
-        data: { user: null, session: null },
-        error: { message: 'fetch failed', code: 'network_error' },
+      // Email check throws unexpected error
+      const emailCheckChain = createMockQueryChain({
+        data: null,
+        error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(emailCheckChain);
+
+      // bcrypt.hash throws
+      (bcrypt.hash as jest.Mock).mockRejectedValueOnce(
+        new Error('bcrypt failure'),
+      );
 
       await expect(service.signup(validDto)).rejects.toThrow(
         InternalServerErrorException,
@@ -242,23 +256,25 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     const validDto = { email: 'user@example.com', password: 'password123' };
 
     it('should login successfully and return tokens', async () => {
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: {
-          user: { id: 'user-123', email: 'user@example.com' },
-          session: { access_token: 'supabase-token' },
-        },
-        error: null,
-      });
-
-      const profileChain = createMockQueryChain({
+      // Single combined query (auth + profile fields)
+      const userChain = createMockQueryChain({
         data: {
           id: 'user-123',
+          email: 'user@example.com',
+          password_hash: 'hashed-password',
+          auth_provider: 'email',
+          username: 'testuser',
+          role: 'user',
           has_completed_onboarding: true,
           is_deactivated: false,
+          is_suspended: false,
+          is_deleted: false,
         },
         error: null,
       });
-      mockAdminSupabase.client.from.mockReturnValueOnce(profileChain);
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
+
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
       const result = await service.login(validDto);
 
@@ -276,19 +292,19 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
           }),
         }),
       );
-      expect(
-        mockClientSupabase.client.auth.signInWithPassword,
-      ).toHaveBeenCalledWith({
-        email: 'user@example.com',
-        password: 'password123',
-      });
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        'password123',
+        'hashed-password',
+      );
     });
 
-    it('should throw UnauthorizedException for invalid credentials', async () => {
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: { user: null, session: null },
-        error: { message: 'Invalid login credentials', code: 'invalid_grant' },
+    it('should throw UnauthorizedException for invalid credentials (user not found)', async () => {
+      // User lookup — not found
+      const userChain = createMockQueryChain({
+        data: null,
+        error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       await expect(service.login(validDto)).rejects.toThrow(
         UnauthorizedException,
@@ -298,59 +314,72 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
       );
     });
 
+    it('should throw UnauthorizedException for invalid password', async () => {
+      // User lookup by email
+      const userChain = createMockQueryChain({
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          password_hash: 'hashed-password',
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+          auth_provider: 'email',
+        },
+        error: null,
+      });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
+
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.login(validDto)).rejects.toThrow(
+        'Invalid email or password',
+      );
+    });
+
     it('should throw BadRequestException for invalid email format', async () => {
       const dto = { email: 'bad-email', password: 'password123' };
-      await expect(service.login(dto)).rejects.toThrow(BadRequestException);
       await expect(service.login(dto)).rejects.toThrow('Invalid email format');
     });
 
     it('should throw BadRequestException for short password', async () => {
       const dto = { email: 'user@example.com', password: 'short' };
-      await expect(service.login(dto)).rejects.toThrow(BadRequestException);
       await expect(service.login(dto)).rejects.toThrow(
         'Invalid password format',
       );
     });
 
-    it('should throw UnauthorizedException when email is not confirmed', async () => {
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: { user: null, session: null },
-        error: { message: 'Email not confirmed', code: 'email_not_confirmed' },
-      });
-
-      await expect(service.login(validDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.login(validDto)).rejects.toThrow(
-        'Please confirm your email address',
-      );
-    });
-
-    it('should throw UnauthorizedException when no session is returned', async () => {
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
+    it('should throw UnauthorizedException when user has no password_hash', async () => {
+      const userChain = createMockQueryChain({
         data: {
-          user: { id: 'user-123', email: 'user@example.com' },
-          session: null,
+          id: 'user-123',
+          email: 'user@example.com',
+          password_hash: null,
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+          auth_provider: 'email',
         },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       await expect(service.login(validDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.login(validDto)).rejects.toThrow(
-        'Login failed - unable to create session',
+        'Invalid email or password',
       );
     });
 
-    it('should throw InternalServerErrorException on fetch failure', async () => {
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: { user: null, session: null },
-        error: { message: 'fetch failed', code: 'network_error' },
+    it('should throw UnauthorizedException for Google-only account', async () => {
+      const userChain = createMockQueryChain({
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          password_hash: null,
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+          auth_provider: 'google',
+        },
+        error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       await expect(service.login(validDto)).rejects.toThrow(
-        InternalServerErrorException,
+        'This account uses Google sign-in',
       );
     });
   });
@@ -371,16 +400,16 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
         type: 'signup',
       });
 
+      // Profile lookup by email
       const profileChain = createMockQueryChain({
         data: { id: 'user-123', username: 'testuser' },
         error: null,
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(profileChain);
 
-      mockAdminSupabase.client.auth.admin.updateUserById.mockResolvedValue({
-        data: {},
-        error: null,
-      });
+      // email_confirmed_at update
+      const updateChain = createMockQueryChain({ data: null, error: null });
+      mockAdminSupabase.client.from.mockReturnValueOnce(updateChain);
 
       const result = await service.verifyOtp(email, token);
 
@@ -396,9 +425,6 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
           },
         }),
       );
-      expect(
-        mockAdminSupabase.client.auth.admin.updateUserById,
-      ).toHaveBeenCalledWith('user-123', { email_confirm: true });
       expect(mockEmail.sendWelcomeEmail).toHaveBeenCalledWith(
         email,
         'testuser',
@@ -472,16 +498,16 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
         type: 'signup',
       });
 
+      // Profile lookup by email
       const profileChain = createMockQueryChain({
         data: { id: 'user-123', username: 'testuser' },
         error: null,
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(profileChain);
 
-      mockAdminSupabase.client.auth.admin.updateUserById.mockResolvedValue({
-        data: {},
-        error: null,
-      });
+      // email_confirmed_at update
+      const updateChain = createMockQueryChain({ data: null, error: null });
+      mockAdminSupabase.client.from.mockReturnValueOnce(updateChain);
 
       await service.verifyOtp(email, token);
 

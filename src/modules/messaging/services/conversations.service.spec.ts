@@ -18,7 +18,12 @@ jest.mock('../../../database/supabase.client', () => ({
 
 jest.mock('../../../common/utils/logger.util', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 describe('ConversationsService', () => {
@@ -46,9 +51,9 @@ describe('ConversationsService', () => {
     };
 
     service = new ConversationsService(
-      mockConfigService as any,
-      mockEncryption as any,
-      mockIdentityReveal as any,
+      mockConfigService,
+      mockEncryption,
+      mockIdentityReveal,
     );
   });
 
@@ -134,27 +139,51 @@ describe('ConversationsService', () => {
 
       // Chain setup:
       // 1. conversations query
-      const convsChain = createMockQueryChain({ data: conversations, error: null });
+      const convsChain = createMockQueryChain({
+        data: conversations,
+        error: null,
+      });
       // 2. user_profiles batch fetch
-      const usersChain = createMockQueryChain({ data: otherUsers, error: null });
+      const usersChain = createMockQueryChain({
+        data: otherUsers,
+        error: null,
+      });
       // 3. Promise.all: lastMessages query
-      const lastMsgChain = createMockQueryChain({ data: lastMessages, error: null });
+      const lastMsgChain = createMockQueryChain({
+        data: lastMessages,
+        error: null,
+      });
       // 4. Promise.all: unread counts query
-      const unreadCountsChain = createMockQueryChain({ data: null, error: null, count: 2 });
+      const unreadCountsChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 2,
+      });
       // 5. unread messages re-query
-      const unreadMsgChain = createMockQueryChain({ data: unreadMessages, error: null });
+      const unreadMsgChain = createMockQueryChain({
+        data: unreadMessages,
+        error: null,
+      });
       // 6. count query for pagination
-      const countChain = createMockQueryChain({ data: null, error: null, count: 2 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 2,
+      });
 
       mockClient.from
-        .mockReturnValueOnce(convsChain)        // conversations
-        .mockReturnValueOnce(usersChain)        // user_profiles
-        .mockReturnValueOnce(lastMsgChain)      // messages (last messages)
+        .mockReturnValueOnce(convsChain) // conversations
+        .mockReturnValueOnce(usersChain) // user_profiles
+        .mockReturnValueOnce(lastMsgChain) // messages (last messages)
         .mockReturnValueOnce(unreadCountsChain) // messages (unread counts)
-        .mockReturnValueOnce(unreadMsgChain)    // messages (unread re-query)
-        .mockReturnValueOnce(countChain);       // conversations (count)
+        .mockReturnValueOnce(unreadMsgChain) // messages (unread re-query)
+        .mockReturnValueOnce(countChain); // conversations (count)
 
-      const result = await service.getConversations(userId, { chat_type: 'all', limit: 20, offset: 0 });
+      const result = await service.getConversations(userId, {
+        chat_type: 'all',
+        limit: 20,
+        offset: 0,
+      });
 
       expect(result.success).toBe(true);
       expect(result.data.conversations).toHaveLength(2);
@@ -178,7 +207,11 @@ describe('ConversationsService', () => {
       const convsChain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValueOnce(convsChain);
 
-      const result = await service.getConversations(userId, { chat_type: 'all', limit: 20, offset: 0 });
+      const result = await service.getConversations(userId, {
+        chat_type: 'all',
+        limit: 20,
+        offset: 0,
+      });
 
       expect(result.success).toBe(true);
       expect(result.data.conversations).toEqual([]);
@@ -190,7 +223,11 @@ describe('ConversationsService', () => {
       const convsChain = createMockQueryChain({ data: null, error: null });
       mockClient.from.mockReturnValueOnce(convsChain);
 
-      const result = await service.getConversations(userId, { chat_type: 'all', limit: 20, offset: 0 });
+      const result = await service.getConversations(userId, {
+        chat_type: 'all',
+        limit: 20,
+        offset: 0,
+      });
 
       expect(result.success).toBe(true);
       expect(result.data.conversations).toEqual([]);
@@ -198,11 +235,23 @@ describe('ConversationsService', () => {
     });
 
     it('should throw BadRequestException on supabase query error', async () => {
-      const convsChain = createMockQueryChain({ data: null, error: { message: 'query error', details: null, hint: null, code: '500' } });
+      const convsChain = createMockQueryChain({
+        data: null,
+        error: {
+          message: 'query error',
+          details: null,
+          hint: null,
+          code: '500',
+        },
+      });
       mockClient.from.mockReturnValueOnce(convsChain);
 
       await expect(
-        service.getConversations(userId, { chat_type: 'all', limit: 20, offset: 0 }),
+        service.getConversations(userId, {
+          chat_type: 'all',
+          limit: 20,
+          offset: 0,
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -246,13 +295,30 @@ describe('ConversationsService', () => {
         },
       ];
 
-      const convsChain = createMockQueryChain({ data: conversations, error: null });
-      const usersChain = createMockQueryChain({ data: otherUsers, error: null });
+      const convsChain = createMockQueryChain({
+        data: conversations,
+        error: null,
+      });
+      const usersChain = createMockQueryChain({
+        data: otherUsers,
+        error: null,
+      });
       const lastMsgChain = createMockQueryChain({ data: [], error: null });
-      const unreadCountsChain = createMockQueryChain({ data: null, error: null, count: 0 });
+      const unreadCountsChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 0,
+      });
       const unreadMsgChain = createMockQueryChain({ data: [], error: null });
-      const mentorshipChain = createMockQueryChain({ data: mentorshipRelationships, error: null });
-      const countChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const mentorshipChain = createMockQueryChain({
+        data: mentorshipRelationships,
+        error: null,
+      });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 1,
+      });
 
       mockClient.from
         .mockReturnValueOnce(convsChain)
@@ -263,7 +329,11 @@ describe('ConversationsService', () => {
         .mockReturnValueOnce(mentorshipChain)
         .mockReturnValueOnce(countChain);
 
-      const result = await service.getConversations(userId, { chat_type: 'all', limit: 20, offset: 0 });
+      const result = await service.getConversations(userId, {
+        chat_type: 'all',
+        limit: 20,
+        offset: 0,
+      });
 
       expect(result.success).toBe(true);
       expect(result.data.conversations[0].mentorship_context).toEqual({
@@ -309,13 +379,22 @@ describe('ConversationsService', () => {
       };
 
       // 1. user_profiles check
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
       // 2. user_blocks check
       const blockCheckChain = createMockQueryChain({ data: null, error: null });
       // 3. existing conversation check
-      const existingConvChain = createMockQueryChain({ data: null, error: null });
+      const existingConvChain = createMockQueryChain({
+        data: null,
+        error: null,
+      });
       // 4. insert conversation
-      const insertChain = createMockQueryChain({ data: createdConversation, error: null });
+      const insertChain = createMockQueryChain({
+        data: createdConversation,
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(userCheckChain)
@@ -348,9 +427,15 @@ describe('ConversationsService', () => {
         context_id: null,
       };
 
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
       const blockCheckChain = createMockQueryChain({ data: null, error: null });
-      const existingConvChain = createMockQueryChain({ data: existingConversation, error: null });
+      const existingConvChain = createMockQueryChain({
+        data: existingConversation,
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(userCheckChain)
@@ -386,10 +471,19 @@ describe('ConversationsService', () => {
         created_at: '2025-01-15T10:00:00Z',
       };
 
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
       const blockCheckChain = createMockQueryChain({ data: null, error: null });
-      const existingConvChain = createMockQueryChain({ data: null, error: null });
-      const insertConvChain = createMockQueryChain({ data: createdConversation, error: null });
+      const existingConvChain = createMockQueryChain({
+        data: null,
+        error: null,
+      });
+      const insertConvChain = createMockQueryChain({
+        data: createdConversation,
+        error: null,
+      });
       const insertMsgChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -421,7 +515,10 @@ describe('ConversationsService', () => {
     });
 
     it('should throw NotFoundException when other user not found', async () => {
-      const userCheckChain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      const userCheckChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
       mockClient.from.mockReturnValueOnce(userCheckChain);
 
       await expect(
@@ -441,8 +538,14 @@ describe('ConversationsService', () => {
       };
       const block = { id: 'block-001' };
 
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
-      const blockCheckChain = createMockQueryChain({ data: block, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
+      const blockCheckChain = createMockQueryChain({
+        data: block,
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(userCheckChain)
@@ -464,7 +567,10 @@ describe('ConversationsService', () => {
         allow_messages_from: 'no_one',
       };
 
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
       const blockCheckChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -487,9 +593,15 @@ describe('ConversationsService', () => {
         allow_messages_from: 'connections',
       };
 
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
       const blockCheckChain = createMockQueryChain({ data: null, error: null });
-      const followCheckChain = createMockQueryChain({ data: null, error: null });
+      const followCheckChain = createMockQueryChain({
+        data: null,
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(userCheckChain)
@@ -522,11 +634,23 @@ describe('ConversationsService', () => {
         created_at: '2025-01-15T10:00:00Z',
       };
 
-      const userCheckChain = createMockQueryChain({ data: otherUser, error: null });
+      const userCheckChain = createMockQueryChain({
+        data: otherUser,
+        error: null,
+      });
       const blockCheckChain = createMockQueryChain({ data: null, error: null });
-      const followCheckChain = createMockQueryChain({ data: followRecord, error: null });
-      const existingConvChain = createMockQueryChain({ data: null, error: null });
-      const insertChain = createMockQueryChain({ data: createdConversation, error: null });
+      const followCheckChain = createMockQueryChain({
+        data: followRecord,
+        error: null,
+      });
+      const existingConvChain = createMockQueryChain({
+        data: null,
+        error: null,
+      });
+      const insertChain = createMockQueryChain({
+        data: createdConversation,
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(userCheckChain)
@@ -589,20 +713,42 @@ describe('ConversationsService', () => {
       ];
 
       const senderProfiles = [
-        { id: userId, username: 'me', avatar: 'avatar-me', first_name_encrypted: null, last_name_encrypted: null },
-        { id: 'user-002', username: 'alice', avatar: 'avatar1', first_name_encrypted: null, last_name_encrypted: null },
+        {
+          id: userId,
+          username: 'me',
+          avatar: 'avatar-me',
+          first_name_encrypted: null,
+          last_name_encrypted: null,
+        },
+        {
+          id: 'user-002',
+          username: 'alice',
+          avatar: 'avatar1',
+          first_name_encrypted: null,
+          last_name_encrypted: null,
+        },
       ];
 
       // 1. conversation check
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       // 2. messages query
       const msgsChain = createMockQueryChain({ data: messages, error: null });
       // 3. sender profiles
-      const profilesChain = createMockQueryChain({ data: senderProfiles, error: null });
+      const profilesChain = createMockQueryChain({
+        data: senderProfiles,
+        error: null,
+      });
       // 4. mark as delivered (update)
       const deliveredChain = createMockQueryChain({ data: null, error: null });
       // 5. total count
-      const countChain = createMockQueryChain({ data: null, error: null, count: 2 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 2,
+      });
 
       mockClient.from
         .mockReturnValueOnce(convChain)
@@ -611,7 +757,10 @@ describe('ConversationsService', () => {
         .mockReturnValueOnce(deliveredChain)
         .mockReturnValueOnce(countChain);
 
-      const result = await service.getConversationMessages(userId, conversationId);
+      const result = await service.getConversationMessages(
+        userId,
+        conversationId,
+      );
 
       expect(result.success).toBe(true);
       expect(result.data.conversation_id).toBe(conversationId);
@@ -629,7 +778,10 @@ describe('ConversationsService', () => {
     });
 
     it('should throw NotFoundException when conversation not found', async () => {
-      const convChain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      const convChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
       mockClient.from.mockReturnValueOnce(convChain);
 
       await expect(
@@ -645,7 +797,10 @@ describe('ConversationsService', () => {
         user2_identity_revealed: false,
       };
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       mockClient.from.mockReturnValueOnce(convChain);
 
       await expect(
@@ -679,16 +834,32 @@ describe('ConversationsService', () => {
       ];
 
       const senderProfiles = [
-        { id: 'user-002', username: 'alice', avatar: 'avatar1', first_name_encrypted: 'enc_Alice', last_name_encrypted: 'enc_Smith' },
+        {
+          id: 'user-002',
+          username: 'alice',
+          avatar: 'avatar1',
+          first_name_encrypted: 'enc_Alice',
+          last_name_encrypted: 'enc_Smith',
+        },
       ];
 
       mockIdentityReveal.decryptRealName.mockReturnValue('Alice Smith');
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       const msgsChain = createMockQueryChain({ data: messages, error: null });
-      const profilesChain = createMockQueryChain({ data: senderProfiles, error: null });
+      const profilesChain = createMockQueryChain({
+        data: senderProfiles,
+        error: null,
+      });
       // No undelivered messages to mark
-      const countChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 1,
+      });
 
       mockClient.from
         .mockReturnValueOnce(convChain)
@@ -696,10 +867,18 @@ describe('ConversationsService', () => {
         .mockReturnValueOnce(profilesChain)
         .mockReturnValueOnce(countChain);
 
-      const result = await service.getConversationMessages(userId, conversationId);
+      const result = await service.getConversationMessages(
+        userId,
+        conversationId,
+      );
 
-      expect(mockIdentityReveal.decryptRealName).toHaveBeenCalledWith('enc_Alice', 'enc_Smith');
-      expect(result.data.messages[0].sender_info.display_name).toBe('Alice Smith');
+      expect(mockIdentityReveal.decryptRealName).toHaveBeenCalledWith(
+        'enc_Alice',
+        'enc_Smith',
+      );
+      expect(result.data.messages[0].sender_info.display_name).toBe(
+        'Alice Smith',
+      );
     });
 
     it('should mark undelivered messages as delivered', async () => {
@@ -728,14 +907,30 @@ describe('ConversationsService', () => {
       ];
 
       const senderProfiles = [
-        { id: 'user-002', username: 'alice', avatar: 'avatar1', first_name_encrypted: null, last_name_encrypted: null },
+        {
+          id: 'user-002',
+          username: 'alice',
+          avatar: 'avatar1',
+          first_name_encrypted: null,
+          last_name_encrypted: null,
+        },
       ];
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       const msgsChain = createMockQueryChain({ data: messages, error: null });
-      const profilesChain = createMockQueryChain({ data: senderProfiles, error: null });
+      const profilesChain = createMockQueryChain({
+        data: senderProfiles,
+        error: null,
+      });
       const deliveredChain = createMockQueryChain({ data: null, error: null });
-      const countChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 1,
+      });
 
       mockClient.from
         .mockReturnValueOnce(convChain)
@@ -747,7 +942,9 @@ describe('ConversationsService', () => {
       await service.getConversationMessages(userId, conversationId);
 
       // Verify update was called with is_delivered: true
-      expect(deliveredChain.update).toHaveBeenCalledWith({ is_delivered: true });
+      expect(deliveredChain.update).toHaveBeenCalledWith({
+        is_delivered: true,
+      });
       expect(mockClient.from).toHaveBeenCalledWith('messages');
     });
   });
@@ -761,14 +958,19 @@ describe('ConversationsService', () => {
         user2_id: 'user-002',
       };
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
         .mockReturnValueOnce(convChain)
         .mockReturnValueOnce(updateChain);
 
-      const result = await service.clearConversation(userId, { conversation_id: 'conv-001' });
+      const result = await service.clearConversation(userId, {
+        conversation_id: 'conv-001',
+      });
 
       expect(result.success).toBe(true);
       expect(result.data.conversation_id).toBe('conv-001');
@@ -786,14 +988,19 @@ describe('ConversationsService', () => {
         user2_id: userId,
       };
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
         .mockReturnValueOnce(convChain)
         .mockReturnValueOnce(updateChain);
 
-      const result = await service.clearConversation(userId, { conversation_id: 'conv-001' });
+      const result = await service.clearConversation(userId, {
+        conversation_id: 'conv-001',
+      });
 
       expect(result.success).toBe(true);
 
@@ -804,11 +1011,16 @@ describe('ConversationsService', () => {
     });
 
     it('should throw NotFoundException when conversation not found', async () => {
-      const convChain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      const convChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
       mockClient.from.mockReturnValueOnce(convChain);
 
       await expect(
-        service.clearConversation(userId, { conversation_id: 'conv-nonexistent' }),
+        service.clearConversation(userId, {
+          conversation_id: 'conv-nonexistent',
+        }),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -818,7 +1030,10 @@ describe('ConversationsService', () => {
         user2_id: 'other-user-2',
       };
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
       mockClient.from.mockReturnValueOnce(convChain);
 
       await expect(
@@ -832,8 +1047,14 @@ describe('ConversationsService', () => {
         user2_id: 'user-002',
       };
 
-      const convChain = createMockQueryChain({ data: conversation, error: null });
-      const updateChain = createMockQueryChain({ data: null, error: { message: 'update failed' } });
+      const convChain = createMockQueryChain({
+        data: conversation,
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: null,
+        error: { message: 'update failed' },
+      });
 
       mockClient.from
         .mockReturnValueOnce(convChain)

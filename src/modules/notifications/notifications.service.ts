@@ -1,23 +1,33 @@
-import { Injectable, Inject, Logger, NotFoundException, BadRequestException, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  forwardRef,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../../database/supabase.client';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { QueryNotificationDto } from './dto/query-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
-import { NOTIFICATION_FIELDS, NOTIFICATION_FIELDS_WITH_ACTOR } from '../../common/constants/select-fields';
+import {
+  NOTIFICATION_FIELDS,
+  NOTIFICATION_FIELDS_WITH_ACTOR,
+} from '../../common/constants/select-fields';
 import { ChatGateway } from '../messaging/services/websocket.gateway';
 import { PushNotificationService } from './push-notification.service';
 
 const ACTION_VERBS: Record<string, string> = {
-  'forum_like': 'reacted to your topic',
-  'feed_like': 'liked your post',
-  'post_reaction': 'reacted to your post',
-  'forum_comment': 'commented on your topic',
-  'topic_comment': 'commented on your topic',
-  'feed_comment': 'commented on your post',
-  'user_followed': 'followed you',
-  'nook_reply': 'replied to your message',
+  forum_like: 'reacted to your topic',
+  feed_like: 'liked your post',
+  post_reaction: 'reacted to your post',
+  forum_comment: 'commented on your topic',
+  topic_comment: 'commented on your topic',
+  feed_comment: 'commented on your post',
+  user_followed: 'followed you',
+  nook_reply: 'replied to your message',
 };
 
 @Injectable()
@@ -55,7 +65,10 @@ export class NotificationsService {
   /**
    * Check if user has enabled the notification preference for a given type
    */
-  private async shouldNotify(userId: string, notificationType: string): Promise<boolean> {
+  private async shouldNotify(
+    userId: string,
+    notificationType: string,
+  ): Promise<boolean> {
     const prefColumn = NotificationsService.PREFERENCE_MAP[notificationType];
     // Types without a mapping (mentorship status, session updates, identity reveals) always send
     if (!prefColumn) return true;
@@ -63,11 +76,13 @@ export class NotificationsService {
     try {
       const { data } = await this.admin
         .from('user_profiles')
-        .select('push_notifications, notify_on_like, notify_on_comment, notify_on_follow, notify_on_connection_request, notify_on_message, notify_on_mention')
+        .select(
+          'push_notifications, notify_on_like, notify_on_comment, notify_on_follow, notify_on_connection_request, notify_on_message, notify_on_mention',
+        )
         .eq('id', userId)
         .single();
 
-      const prefs = data as any;
+      const prefs = data;
       if (!prefs) return true;
       // Master toggle off → skip all
       if (prefs.push_notifications === false) return false;
@@ -87,8 +102,14 @@ export class NotificationsService {
       // Check user notification preferences before creating
       const allowed = await this.shouldNotify(dto.user_id, dto.type);
       if (!allowed) {
-        this.logger.log(`Notification skipped (user preference): ${dto.type} for user ${dto.user_id}`);
-        return { success: true, message: 'Notification skipped by user preference', data: null };
+        this.logger.log(
+          `Notification skipped (user preference): ${dto.type} for user ${dto.user_id}`,
+        );
+        return {
+          success: true,
+          message: 'Notification skipped by user preference',
+          data: null,
+        };
       }
 
       const notificationData = {
@@ -120,13 +141,18 @@ export class NotificationsService {
         throw error;
       }
 
-      this.logger.log(`Notification created: ${data.id} for user ${dto.user_id}`);
+      this.logger.log(
+        `Notification created: ${data.id} for user ${dto.user_id}`,
+      );
 
       // Push real-time notification via WebSocket
       try {
         this.chatGateway.emitToUser(dto.user_id, 'new_notification', data);
       } catch (wsError) {
-        this.logger.warn('WebSocket push failed (user may be offline):', wsError);
+        this.logger.warn(
+          'WebSocket push failed (user may be offline):',
+          wsError,
+        );
       }
 
       // Send push notification to mobile devices (fire-and-forget)
@@ -190,7 +216,11 @@ export class NotificationsService {
       // Push real-time notifications via WebSocket
       try {
         data.forEach((notification: any) => {
-          this.chatGateway.emitToUser(notification.user_id, 'new_notification', notification);
+          this.chatGateway.emitToUser(
+            notification.user_id,
+            'new_notification',
+            notification,
+          );
         });
       } catch (wsError) {
         this.logger.warn('WebSocket bulk push failed:', wsError);
@@ -226,7 +256,9 @@ export class NotificationsService {
   /**
    * Extract unique actors from a group of notifications
    */
-  private getUniqueActors(group: any[]): { display_name: string; avatar: string | null }[] {
+  private getUniqueActors(
+    group: any[],
+  ): { display_name: string; avatar: string | null }[] {
     const seen = new Set<string>();
     const actors: { display_name: string; avatar: string | null }[] = [];
 
@@ -298,7 +330,10 @@ export class NotificationsService {
     }
 
     // Sort by created_at desc and slice to limit
-    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    result.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
     return result.slice(0, limit);
   }
 
@@ -576,11 +611,14 @@ export class NotificationsService {
   async deleteAll(userId: string) {
     const { error, count } = await this.admin
       .from('notifications')
-      .delete({ count: 'exact' })
+      .delete()
       .eq('user_id', userId);
 
     if (error) {
-      this.logger.error('Failed to delete all notifications', { error, userId });
+      this.logger.error('Failed to delete all notifications', {
+        error,
+        userId,
+      });
       throw new BadRequestException('Failed to clear all notifications');
     }
 
@@ -662,11 +700,11 @@ export class NotificationsService {
 
       const stats = {
         total: data?.length || 0,
-        unread: data?.filter((n) => !n.is_read).length || 0,
+        unread: data?.filter((n: any) => !n.is_read).length || 0,
         byType: {} as Record<string, { total: number; unread: number }>,
       };
 
-      data?.forEach((notification) => {
+      data?.forEach((notification: any) => {
         if (!stats.byType[notification.type]) {
           stats.byType[notification.type] = { total: 0, unread: 0 };
         }

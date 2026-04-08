@@ -371,7 +371,13 @@ export class MentorshipProfileController {
     },
   })
   @ApiResponse({ status: 400, description: 'Failed to submit feedback' })
-  @ApiBody({ schema: { type: 'object', properties: { rating: { type: 'number' }, feedback: { type: 'string' } }, required: ['rating'] } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { rating: { type: 'number' }, feedback: { type: 'string' } },
+      required: ['rating'],
+    },
+  })
   async submitFeedback(
     @Request() req: AuthenticatedRequest,
     @Body() feedbackData: any,

@@ -118,7 +118,16 @@ export class MentorshipChatController {
     summary: 'Schedule mentorship session',
     description: 'Schedule a new mentorship session',
   })
-  @ApiBody({ schema: { type: 'object', properties: { date: { type: 'string' }, duration: { type: 'number' }, notes: { type: 'string' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string' },
+        duration: { type: 'number' },
+        notes: { type: 'string' },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'Session scheduled successfully',

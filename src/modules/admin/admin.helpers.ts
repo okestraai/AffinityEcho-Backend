@@ -31,6 +31,9 @@ export function parsePagination(
   maxLimit = 100,
 ) {
   const p = Math.max(1, parseInt(page ?? '1') || 1);
-  const ps = Math.min(Math.max(1, parseInt(limit ?? String(defaultLimit)) || defaultLimit), maxLimit);
+  const ps = Math.min(
+    Math.max(1, parseInt(limit ?? String(defaultLimit)) || defaultLimit),
+    maxLimit,
+  );
   return { page: p, pageSize: ps, offset: (p - 1) * ps };
 }

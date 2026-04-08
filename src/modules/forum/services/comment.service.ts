@@ -698,7 +698,10 @@ export class CommentService {
               action_url: `/forum/topics/${topicId}#comment-${comment.id}`,
               reference_id: comment.id,
               reference_type: 'forum_comment',
-              metadata: { parent_comment_id: parentCommentId, topic_id: topicId },
+              metadata: {
+                parent_comment_id: parentCommentId,
+                topic_id: topicId,
+              },
               delivery_method: ['in_app'],
             });
           }
@@ -708,9 +711,17 @@ export class CommentService {
       }
 
       // Process @mentions in comment content
-      const usernames = this.mentionService.parseMentions(createCommentDto.content);
+      const usernames = this.mentionService.parseMentions(
+        createCommentDto.content,
+      );
       if (usernames.length > 0) {
-        this.mentionService.processMentions(userId, usernames, 'comment', comment.id, topicId);
+        this.mentionService.processMentions(
+          userId,
+          usernames,
+          'comment',
+          comment.id,
+          topicId,
+        );
       }
 
       // Invalidate AI insights cache for this topic
@@ -775,10 +786,10 @@ export class CommentService {
         .eq('user_id', userId)
         .in(
           'comment_id',
-          allComments.map((c) => c.id),
+          allComments.map((c: any) => c.id),
         );
 
-      (reactions || []).forEach((r) => {
+      (reactions || []).forEach((r: any) => {
         if (!userReactions[r.comment_id]) {
           userReactions[r.comment_id] = { helpful: false, supportive: false };
         }
@@ -793,7 +804,7 @@ export class CommentService {
     const commentMap = new Map<string, any>();
     const rootComments: any[] = [];
 
-    allComments.forEach((comment) => {
+    allComments.forEach((comment: any) => {
       const enriched = {
         ...comment,
         replies: [],
@@ -806,7 +817,7 @@ export class CommentService {
       if (!comment.parent_comment_id) rootComments.push(enriched);
     });
 
-    allComments.forEach((comment) => {
+    allComments.forEach((comment: any) => {
       if (comment.parent_comment_id) {
         const parent = commentMap.get(comment.parent_comment_id);
         if (parent) parent.replies.push(commentMap.get(comment.id));
@@ -825,7 +836,9 @@ export class CommentService {
         const aIsMine = a.user_id === userId ? 0 : 1;
         const bIsMine = b.user_id === userId ? 0 : 1;
         if (aIsMine !== bIsMine) return aIsMine - bIsMine;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
       });
     }
 
@@ -865,7 +878,9 @@ export class CommentService {
 
       const { data: comment } = await this.admin
         .from('forum_comments')
-        .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)')
+        .select(
+          '*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)',
+        )
         .eq('id', commentId)
         .single();
 
@@ -909,7 +924,10 @@ export class CommentService {
           delivery_method: ['in_app'],
         });
       } catch (notifError) {
-        logger.error('Failed to create comment reaction notification:', notifError);
+        logger.error(
+          'Failed to create comment reaction notification:',
+          notifError,
+        );
       }
     }
 
@@ -926,7 +944,9 @@ export class CommentService {
 
     const { data: comment } = await this.admin
       .from('forum_comments')
-      .select('*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)')
+      .select(
+        '*, user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)',
+      )
       .eq('id', commentId)
       .single();
 
@@ -958,20 +978,32 @@ export class CommentService {
     }
 
     // Invalidate AI insights cache for this topic
-    this.okestraService.invalidateCache('topic', comment.topic_id).catch(() => {});
+    this.okestraService
+      .invalidateCache('topic', comment.topic_id)
+      .catch(() => {});
 
     return { success: true, message: 'Comment deleted' };
   }
 
-  private async applyIdentityReveals(userId: string, items: any[]): Promise<void> {
-    const otherAuthorIds = [...new Set(
-      items
-        .filter((item) => item.user_profile?.id && item.user_profile.id !== userId)
-        .map((item) => item.user_profile.id),
-    )];
+  private async applyIdentityReveals(
+    userId: string,
+    items: any[],
+  ): Promise<void> {
+    const otherAuthorIds = [
+      ...new Set(
+        items
+          .filter(
+            (item) => item.user_profile?.id && item.user_profile.id !== userId,
+          )
+          .map((item) => item.user_profile.id),
+      ),
+    ];
 
     // Get revealed IDs using shared utility
-    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      userId,
+      otherAuthorIds,
+    );
 
     items.forEach((item) => {
       if (!item.user_profile) return;
@@ -979,7 +1011,9 @@ export class CommentService {
       const isOwnContent = item.user_profile.id === userId;
       const isRevealed = revealedIds.has(item.user_profile.id);
 
-      let displayName = item.is_anonymous ? 'Anonymous User' : item.user_profile.username;
+      let displayName = item.is_anonymous
+        ? 'Anonymous User'
+        : item.user_profile.username;
 
       if (isOwnContent || isRevealed) {
         const realName = this.identityReveal.decryptRealName(

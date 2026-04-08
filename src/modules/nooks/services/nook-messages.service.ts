@@ -73,7 +73,7 @@ export class NookMessagesService {
     if (error) throw new BadRequestException(error.message);
 
     // Fetch ALL replies in this nook (all descendants, not just direct children)
-    const messageIds = (messages || []).map((m) => m.id);
+    const messageIds = (messages || []).map((m: any) => m.id);
     let allReplyMessages: any[] = [];
 
     if (messageIds.length > 0) {
@@ -89,7 +89,7 @@ export class NookMessagesService {
 
     // Build a map of all messages (top-level + replies) for tree building
     const messageMap = new Map<string, any>();
-    for (const msg of (messages || [])) {
+    for (const msg of messages || []) {
       messageMap.set(msg.id, { ...msg, replies: [] });
     }
     for (const reply of allReplyMessages) {
@@ -98,7 +98,7 @@ export class NookMessagesService {
 
     // Build tree: attach each reply to its parent
     const rootMessages: any[] = [];
-    for (const msg of (messages || [])) {
+    for (const msg of messages || []) {
       rootMessages.push(messageMap.get(msg.id));
     }
     for (const reply of allReplyMessages) {
@@ -112,14 +112,18 @@ export class NookMessagesService {
     const otherUserIds: string[] = [];
     const collectUserIds = (msgs: any[]) => {
       for (const msg of msgs) {
-        if (msg.user_id && msg.user_id !== userId) otherUserIds.push(msg.user_id);
+        if (msg.user_id && msg.user_id !== userId)
+          otherUserIds.push(msg.user_id);
         if (msg.replies?.length) collectUserIds(msg.replies);
       }
     };
     collectUserIds(rootMessages);
 
     // Get revealed user IDs in a single query
-    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherUserIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      userId,
+      otherUserIds,
+    );
 
     // Apply identity reveal to messages and replies.
     // Rules:
@@ -132,7 +136,13 @@ export class NookMessagesService {
       const authorId = message.user_id;
       const user = Array.isArray(message.user) ? message.user[0] : message.user;
       const showIdentity = authorId === userId || revealedIds.has(authorId);
-      const displayName = this.resolveDisplayName(user, revealedIds, userId, message.is_anonymous, authorId);
+      const displayName = this.resolveDisplayName(
+        user,
+        revealedIds,
+        userId,
+        message.is_anonymous,
+        authorId,
+      );
 
       return {
         id: message.id,
@@ -168,7 +178,9 @@ export class NookMessagesService {
       const aIsMine = a.is_mine ? 0 : 1;
       const bIsMine = b.is_mine ? 0 : 1;
       if (aIsMine !== bIsMine) return aIsMine - bIsMine;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     });
 
     return {
@@ -280,7 +292,13 @@ export class NookMessagesService {
     // Process @mentions in message content
     const usernames = this.mentionService.parseMentions(content);
     if (usernames.length > 0) {
-      this.mentionService.processMentions(userId, usernames, 'nook_message', message.id, nookId);
+      this.mentionService.processMentions(
+        userId,
+        usernames,
+        'nook_message',
+        message.id,
+        nookId,
+      );
     }
 
     // Send nook reply notification when replying to another user's message
@@ -387,7 +405,12 @@ export class NookMessagesService {
     };
   }
 
-  async editMessage(nookId: string, messageId: string, userId: string, content: string) {
+  async editMessage(
+    nookId: string,
+    messageId: string,
+    userId: string,
+    content: string,
+  ) {
     const { data: message, error: fetchError } = await this.admin
       .from('nook_messages')
       .select('id, user_id, nook_id, is_removed')
@@ -395,9 +418,12 @@ export class NookMessagesService {
       .eq('nook_id', nookId)
       .single();
 
-    if (fetchError || !message) throw new NotFoundException('Message not found');
-    if (message.user_id !== userId) throw new ForbiddenException('Only the message author can edit');
-    if (message.is_removed) throw new BadRequestException('Cannot edit a removed message');
+    if (fetchError || !message)
+      throw new NotFoundException('Message not found');
+    if (message.user_id !== userId)
+      throw new ForbiddenException('Only the message author can edit');
+    if (message.is_removed)
+      throw new BadRequestException('Cannot edit a removed message');
 
     const { data: nook } = await this.admin
       .from('nooks')

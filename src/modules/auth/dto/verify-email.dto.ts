@@ -5,7 +5,7 @@ import { IsString, IsNotEmpty } from 'class-validator';
 export class VerifyEmailDto {
   @ApiProperty({
     description: 'Email verification token from verification email',
-    example: 'abc123def456...'
+    example: 'abc123def456...',
   })
   @IsString()
   @IsNotEmpty()
@@ -15,7 +15,7 @@ export class VerifyEmailDto {
 export class ResendVerificationDto {
   @ApiProperty({
     description: 'Email address to resend verification to',
-    example: 'user@example.com'
+    example: 'user@example.com',
   })
   @IsString()
   @IsNotEmpty()

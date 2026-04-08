@@ -55,9 +55,9 @@ interface RankedFeedItem extends FeedItem {
 // Engagement signal weights
 const WEIGHTS = {
   LIKE: 1.0,
-  COMMENT: 3.0,   // Comments take effort — strongest organic signal
-  SHARE: 5.0,     // Shares = active endorsement
-  VIEW: 0.1,      // Passive, low weight
+  COMMENT: 3.0, // Comments take effort — strongest organic signal
+  SHARE: 5.0, // Shares = active endorsement
+  VIEW: 0.1, // Passive, low weight
 };
 
 // Time decay half-life in hours.
@@ -76,7 +76,7 @@ const MAX_ITEMS_PER_AUTHOR = 2;
 const DIVERSITY_CAPS = {
   post: 0.45,
   topic: 0.45,
-  nook_message: 0.20,
+  nook_message: 0.2,
 };
 
 @Injectable()
@@ -93,7 +93,8 @@ export class FeedRankingService {
     if (items.length === 0) return [];
 
     const now = Date.now();
-    const windowMs = FeedRankingService.TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const windowMs =
+      FeedRankingService.TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
     const recentItems = items.filter(
       (item) => now - new Date(item.created_at).getTime() < windowMs,
@@ -148,11 +149,15 @@ export class FeedRankingService {
    *   - deterministic jitter  (prevents identical feeds for users with similar profiles)
    *   - cold-start mode  (for new users with no history — freshness-first)
    */
-  rankByEngagement(items: FeedItem[], context: RankingContext = {}): RankedFeedItem[] {
+  rankByEngagement(
+    items: FeedItem[],
+    context: RankingContext = {},
+  ): RankedFeedItem[] {
     if (items.length === 0) return [];
 
     const now = Date.now();
-    const isColdStart = !context.userAffinities || context.userAffinities.size === 0;
+    const isColdStart =
+      !context.userAffinities || context.userAffinities.size === 0;
 
     const scored = items.map((item) => {
       const score = this.calculateScore(item, now, context, isColdStart);
@@ -171,14 +176,20 @@ export class FeedRankingService {
    * Each view halves the effective score:
    *   suppressedScore = originalScore / (1 + seenCount * 0.5)
    */
-  applySuppression(items: RankedFeedItem[], seenMap: Map<string, number>): RankedFeedItem[] {
+  applySuppression(
+    items: RankedFeedItem[],
+    seenMap: Map<string, number>,
+  ): RankedFeedItem[] {
     if (seenMap.size === 0) return items;
 
     const suppressed = items.map((item) => {
       const seenCount = seenMap.get(item.content_id) || 0;
       if (seenCount === 0) return item;
       const suppressionFactor = 1 / (1 + seenCount * 0.5);
-      return { ...item, engagement_score: item.engagement_score * suppressionFactor };
+      return {
+        ...item,
+        engagement_score: item.engagement_score * suppressionFactor,
+      };
     });
 
     suppressed.sort((a, b) => b.engagement_score - a.engagement_score);
@@ -196,7 +207,10 @@ export class FeedRankingService {
    * @param items  Sorted ranked items (best first)
    * @param limit  Total number of items needed (e.g. page * pageSize for multi-page consistency)
    */
-  applyDiversityConstraints(items: RankedFeedItem[], limit: number): RankedFeedItem[] {
+  applyDiversityConstraints(
+    items: RankedFeedItem[],
+    limit: number,
+  ): RankedFeedItem[] {
     if (items.length === 0) return [];
 
     const maxPerType: Record<string, number> = {
@@ -205,7 +219,11 @@ export class FeedRankingService {
       nook_message: Math.ceil(limit * DIVERSITY_CAPS.nook_message),
     };
 
-    const typeCounts: Record<string, number> = { post: 0, topic: 0, nook_message: 0 };
+    const typeCounts: Record<string, number> = {
+      post: 0,
+      topic: 0,
+      nook_message: 0,
+    };
     const authorCounts = new Map<string, number>();
     const result: RankedFeedItem[] = [];
     const skipped: RankedFeedItem[] = [];
@@ -292,7 +310,15 @@ export class FeedRankingService {
       const coldJitter = context.userId
         ? (this.simpleHash(context.userId + item.content_id) % 100) / 200
         : 0;
-      return Math.round((rawScore * decayFactor + velocityBonus + coldStartBoost + coldJitter) * 100) / 100;
+      return (
+        Math.round(
+          (rawScore * decayFactor +
+            velocityBonus +
+            coldStartBoost +
+            coldJitter) *
+            100,
+        ) / 100
+      );
     }
 
     // 5. Tag affinity boost — content matching user's engaged topics
@@ -344,7 +370,7 @@ export class FeedRankingService {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash);

@@ -12,13 +12,51 @@ import { AdminUsersService } from './admin-users.service';
 import PDFDocument from 'pdfkit';
 
 // Maps API type names to their source tables, content column, author column, and hidden-column support
-const CONTENT_CONFIG: Record<string, { table: string; contentCol: string; authorCol: string; hasHiddenCols: boolean }> = {
-  feed_post:     { table: 'feed_posts',     contentCol: 'content',     authorCol: 'user_id',    hasHiddenCols: true },
-  feed_comment:  { table: 'feed_comments',  contentCol: 'content',     authorCol: 'user_id',    hasHiddenCols: false },
-  forum_topic:   { table: 'forum_topics',   contentCol: 'content',     authorCol: 'user_id',    hasHiddenCols: true },
-  forum_comment: { table: 'forum_comments', contentCol: 'content',     authorCol: 'user_id',    hasHiddenCols: true },
-  nook:          { table: 'nooks',          contentCol: 'description', authorCol: 'creator_id', hasHiddenCols: true },
-  nook_message:  { table: 'nook_messages',  contentCol: 'content',     authorCol: 'user_id',    hasHiddenCols: true },
+const CONTENT_CONFIG: Record<
+  string,
+  {
+    table: string;
+    contentCol: string;
+    authorCol: string;
+    hasHiddenCols: boolean;
+  }
+> = {
+  feed_post: {
+    table: 'feed_posts',
+    contentCol: 'content',
+    authorCol: 'user_id',
+    hasHiddenCols: true,
+  },
+  feed_comment: {
+    table: 'feed_comments',
+    contentCol: 'content',
+    authorCol: 'user_id',
+    hasHiddenCols: false,
+  },
+  forum_topic: {
+    table: 'forum_topics',
+    contentCol: 'content',
+    authorCol: 'user_id',
+    hasHiddenCols: true,
+  },
+  forum_comment: {
+    table: 'forum_comments',
+    contentCol: 'content',
+    authorCol: 'user_id',
+    hasHiddenCols: true,
+  },
+  nook: {
+    table: 'nooks',
+    contentCol: 'description',
+    authorCol: 'creator_id',
+    hasHiddenCols: true,
+  },
+  nook_message: {
+    table: 'nook_messages',
+    contentCol: 'content',
+    authorCol: 'user_id',
+    hasHiddenCols: true,
+  },
 };
 
 @Injectable()
@@ -55,7 +93,9 @@ export class AdminModerationService {
       const cfg = CONTENT_CONFIG[type];
       if (!cfg) continue;
 
-      const hiddenCols = cfg.hasHiddenCols ? ', is_hidden, hidden_by, hidden_at, hidden_reason' : '';
+      const hiddenCols = cfg.hasHiddenCols
+        ? ', is_hidden, hidden_by, hidden_at, hidden_reason'
+        : '';
       const selectFields = `id, ${cfg.contentCol}, ${cfg.authorCol}, created_at, updated_at${hiddenCols}`;
 
       let sourceQuery = this.admin
@@ -80,7 +120,9 @@ export class AdminModerationService {
       // Collect all content IDs for batch fetching
       const contentIds = sourceData.map((item: any) => item.id);
       const userIds = new Set(
-        sourceData.map((item: any) => item[cfg.authorCol]).filter((id: any) => id),
+        sourceData
+          .map((item: any) => item[cfg.authorCol])
+          .filter((id: any) => id),
       );
       const moderatorIds = new Set(
         sourceData.map((item: any) => item.hidden_by).filter((id: any) => id),
@@ -134,7 +176,7 @@ export class AdminModerationService {
 
       // Now process all items with cached data
       for (const item of sourceData) {
-        const cmData = moderationMap.get((item as any).id);
+        const cmData = moderationMap.get(item.id);
 
         // Determine moderation status
         let moderationStatus = 'visible';
@@ -143,7 +185,7 @@ export class AdminModerationService {
         if (cmData) {
           moderationStatus = cmData.moderation_status;
           reportsCount = cmData.reports_count || 0;
-        } else if ((item as any).is_hidden) {
+        } else if (item.is_hidden) {
           moderationStatus = 'hidden';
         }
 
@@ -153,33 +195,32 @@ export class AdminModerationService {
         }
 
         // Get author from map
-        const authorId = (item as any)[cfg.authorCol];
+        const authorId = item[cfg.authorCol];
         const author = authorId ? userMap.get(authorId) || null : null;
 
         // Get moderator from map
-        const moderatorId = (item as any).hidden_by || cmData?.moderated_by;
+        const moderatorId = item.hidden_by || cmData?.moderated_by;
         const moderatedBy = moderatorId
           ? userMap.get(moderatorId) || null
           : null;
 
-        const contentValue = (item as any)[cfg.contentCol];
+        const contentValue = item[cfg.contentCol];
 
         allContent.push({
           id: cmData?.id || randomUUID(),
           type: type,
-          content_id: (item as any).id,
+          content_id: item.id,
           author,
           preview: contentValue ? String(contentValue).slice(0, 200) : null,
           full_content: contentValue,
           moderation_status: moderationStatus,
-          moderation_reason:
-            (item as any).hidden_reason || cmData?.moderation_reason,
+          moderation_reason: item.hidden_reason || cmData?.moderation_reason,
           reports_count: reportsCount,
-          created_at: (item as any).created_at,
-          updated_at: (item as any).updated_at,
-          moderated_at: (item as any).hidden_at || cmData?.moderated_at,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          moderated_at: item.hidden_at || cmData?.moderated_at,
           moderated_by: moderatedBy,
-          is_hidden: (item as any).is_hidden,
+          is_hidden: item.is_hidden,
         });
       }
     }
@@ -188,12 +229,14 @@ export class AdminModerationService {
     const sortField = query.sortBy || 'created_at';
     const sortAsc = query.sortOrder === 'asc';
     allContent.sort((a, b) => {
-      const aVal = sortField === 'reports_count'
-        ? (a.reports_count ?? 0)
-        : new Date(a[sortField] ?? 0).getTime();
-      const bVal = sortField === 'reports_count'
-        ? (b.reports_count ?? 0)
-        : new Date(b[sortField] ?? 0).getTime();
+      const aVal =
+        sortField === 'reports_count'
+          ? (a.reports_count ?? 0)
+          : new Date(a[sortField] ?? 0).getTime();
+      const bVal =
+        sortField === 'reports_count'
+          ? (b.reports_count ?? 0)
+          : new Date(b[sortField] ?? 0).getTime();
       return sortAsc ? aVal - bVal : bVal - aVal;
     });
 
@@ -231,7 +274,9 @@ export class AdminModerationService {
     if (!cfg)
       throw new BadRequestException(`Invalid content type: ${contentType}`);
 
-    const hiddenCols = cfg.hasHiddenCols ? ', is_hidden, hidden_by, hidden_at, hidden_reason' : '';
+    const hiddenCols = cfg.hasHiddenCols
+      ? ', is_hidden, hidden_by, hidden_at, hidden_reason'
+      : '';
     const selectFields = `id, ${cfg.contentCol}, ${cfg.authorCol}, created_at, updated_at${hiddenCols}`;
 
     // Get source content
@@ -246,7 +291,7 @@ export class AdminModerationService {
 
     // Get author
     let author: any = null;
-    const sourceAuthorId = (source as any)[cfg.authorCol];
+    const sourceAuthorId = source[cfg.authorCol];
     if (sourceAuthorId) {
       const { data: userData } = await this.admin
         .from('user_profiles')
@@ -266,7 +311,7 @@ export class AdminModerationService {
 
     // Get moderator info
     let moderatedBy: any = null;
-    const moderatorId = (source as any).hidden_by || cmData?.moderated_by;
+    const moderatorId = source.hidden_by || cmData?.moderated_by;
     if (moderatorId) {
       const { data: modData } = await this.admin
         .from('user_profiles')
@@ -276,7 +321,7 @@ export class AdminModerationService {
       moderatedBy = modData;
     }
 
-    const contentValue = (source as any)[cfg.contentCol];
+    const contentValue = source[cfg.contentCol];
 
     return {
       success: true,
@@ -288,15 +333,14 @@ export class AdminModerationService {
         content: contentValue,
         moderation_status:
           cmData?.moderation_status ||
-          ((source as any).is_hidden ? 'hidden' : 'visible'),
-        moderation_reason:
-          (source as any).hidden_reason || cmData?.moderation_reason,
+          (source.is_hidden ? 'hidden' : 'visible'),
+        moderation_reason: source.hidden_reason || cmData?.moderation_reason,
         reports_count: cmData?.reports_count || 0,
-        created_at: (source as any).created_at,
-        updated_at: (source as any).updated_at,
-        moderated_at: (source as any).hidden_at || cmData?.moderated_at,
+        created_at: source.created_at,
+        updated_at: source.updated_at,
+        moderated_at: source.hidden_at || cmData?.moderated_at,
         moderated_by: moderatedBy,
-        is_hidden: (source as any).is_hidden,
+        is_hidden: source.is_hidden,
       },
     };
   }
@@ -580,7 +624,9 @@ export class AdminModerationService {
       const cfg = CONTENT_CONFIG[type];
       if (!cfg) continue;
 
-      const hiddenCols = cfg.hasHiddenCols ? ', is_hidden, hidden_by, hidden_at, hidden_reason' : '';
+      const hiddenCols = cfg.hasHiddenCols
+        ? ', is_hidden, hidden_by, hidden_at, hidden_reason'
+        : '';
       const selectFields = `id, ${cfg.contentCol}, ${cfg.authorCol}, created_at, updated_at${hiddenCols}`;
 
       let sourceQuery = this.admin
@@ -604,7 +650,9 @@ export class AdminModerationService {
       // Collect IDs for batch fetching
       const contentIds = sourceData.map((item: any) => item.id);
       const userIds = new Set(
-        sourceData.map((item: any) => item[cfg.authorCol]).filter((id: any) => id),
+        sourceData
+          .map((item: any) => item[cfg.authorCol])
+          .filter((id: any) => id),
       );
       const moderatorIds = new Set(
         sourceData.map((item: any) => item.hidden_by).filter((id: any) => id),
@@ -656,7 +704,7 @@ export class AdminModerationService {
 
       // Process all items
       for (const item of sourceData) {
-        const cmData = moderationMap.get((item as any).id);
+        const cmData = moderationMap.get(item.id);
 
         let moderationStatus = 'visible';
         let reportsCount = 0;
@@ -664,7 +712,7 @@ export class AdminModerationService {
         if (cmData) {
           moderationStatus = cmData.moderation_status;
           reportsCount = cmData.reports_count || 0;
-        } else if ((item as any).is_hidden) {
+        } else if (item.is_hidden) {
           moderationStatus = 'hidden';
         }
 
@@ -673,20 +721,20 @@ export class AdminModerationService {
           continue;
         }
 
-        const authorId = (item as any)[cfg.authorCol];
+        const authorId = item[cfg.authorCol];
         const author = authorId ? userMap.get(authorId) || null : null;
 
-        const moderatorId = (item as any).hidden_by || cmData?.moderated_by;
+        const moderatorId = item.hidden_by || cmData?.moderated_by;
         const moderatedBy = moderatorId
           ? userMap.get(moderatorId) || null
           : null;
 
-        const contentValue = (item as any)[cfg.contentCol];
+        const contentValue = item[cfg.contentCol];
 
         allContent.push({
           id: cmData?.id || randomUUID(),
           type: type,
-          content_id: (item as any).id,
+          content_id: item.id,
           author_name: author?.username || 'Unknown',
           author_email: author?.email || 'N/A',
           content_preview: contentValue
@@ -694,14 +742,13 @@ export class AdminModerationService {
             : null,
           full_content: contentValue,
           moderation_status: moderationStatus,
-          moderation_reason:
-            (item as any).hidden_reason || cmData?.moderation_reason,
+          moderation_reason: item.hidden_reason || cmData?.moderation_reason,
           reports_count: reportsCount,
-          created_at: (item as any).created_at,
-          updated_at: (item as any).updated_at,
-          moderated_at: (item as any).hidden_at || cmData?.moderated_at,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          moderated_at: item.hidden_at || cmData?.moderated_at,
           moderated_by_name: moderatedBy?.username || 'N/A',
-          is_hidden: (item as any).is_hidden,
+          is_hidden: item.is_hidden,
         });
       }
     }
@@ -724,8 +771,6 @@ export class AdminModerationService {
       return this.generateContentPDF(allContent, query);
     }
   }
-
-
 
   /**
    * Generate CSV export for content
@@ -844,14 +889,26 @@ export class AdminModerationService {
       let y = 90;
 
       // Summary box
-      const visible = content.filter((c) => c.moderation_status === 'visible').length;
-      const hidden = content.filter((c) => c.moderation_status === 'hidden').length;
-      const removed = content.filter((c) => c.moderation_status === 'removed').length;
+      const visible = content.filter(
+        (c) => c.moderation_status === 'visible',
+      ).length;
+      const hidden = content.filter(
+        (c) => c.moderation_status === 'hidden',
+      ).length;
+      const removed = content.filter(
+        (c) => c.moderation_status === 'removed',
+      ).length;
       const flagged = content.filter((c) => c.reports_count > 0).length;
 
       const summaryBoxHeight = 55;
-      doc.rect(margin, y, pageWidth - 2 * margin, summaryBoxHeight).fill('#f5f3ff');
-      doc.fontSize(8).font('Helvetica-Bold').fillColor('#5b21b6').text('STATUS DISTRIBUTION', margin + 10, y + 8);
+      doc
+        .rect(margin, y, pageWidth - 2 * margin, summaryBoxHeight)
+        .fill('#f5f3ff');
+      doc
+        .fontSize(8)
+        .font('Helvetica-Bold')
+        .fillColor('#5b21b6')
+        .text('STATUS DISTRIBUTION', margin + 10, y + 8);
 
       const statW = (pageWidth - 2 * margin - 20) / 4;
       const stats = [
@@ -863,8 +920,16 @@ export class AdminModerationService {
 
       stats.forEach((stat, i) => {
         const sx = margin + 10 + i * statW;
-        doc.fontSize(16).font('Helvetica-Bold').fillColor(stat.color).text(String(stat.value), sx, y + 20, { width: statW - 5 });
-        doc.fontSize(7).font('Helvetica').fillColor('#6b7280').text(stat.label, sx, y + 40, { width: statW - 5 });
+        doc
+          .fontSize(16)
+          .font('Helvetica-Bold')
+          .fillColor(stat.color)
+          .text(String(stat.value), sx, y + 20, { width: statW - 5 });
+        doc
+          .fontSize(7)
+          .font('Helvetica')
+          .fillColor('#6b7280')
+          .text(stat.label, sx, y + 40, { width: statW - 5 });
       });
 
       y += summaryBoxHeight + 15;
@@ -911,30 +976,49 @@ export class AdminModerationService {
           y += 18;
         }
 
-        doc.rect(margin, y, pageWidth - 2 * margin, rowHeight).fill(idx % 2 === 0 ? '#ffffff' : '#faf5ff');
+        doc
+          .rect(margin, y, pageWidth - 2 * margin, rowHeight)
+          .fill(idx % 2 === 0 ? '#ffffff' : '#faf5ff');
 
         let cx = margin;
         doc.fontSize(7).font('Helvetica').fillColor('#1f2937');
 
-        doc.text((c.type || '-').replace(/_/g, ' '), cx + 4, y + 7, { width: cols[0].width - 8 });
+        doc.text((c.type || '-').replace(/_/g, ' '), cx + 4, y + 7, {
+          width: cols[0].width - 8,
+        });
         cx += cols[0].width;
 
-        doc.text(c.author_name || 'Unknown', cx + 4, y + 7, { width: cols[1].width - 8 });
+        doc.text(c.author_name || 'Unknown', cx + 4, y + 7, {
+          width: cols[1].width - 8,
+        });
         cx += cols[1].width;
 
-        doc.fillColor(statusColors[c.moderation_status] || '#374151').font('Helvetica-Bold')
-          .text((c.moderation_status || '-').toUpperCase(), cx + 4, y + 7, { width: cols[2].width - 8 });
+        doc
+          .fillColor(statusColors[c.moderation_status] || '#374151')
+          .font('Helvetica-Bold')
+          .text((c.moderation_status || '-').toUpperCase(), cx + 4, y + 7, {
+            width: cols[2].width - 8,
+          });
         cx += cols[2].width;
 
-        doc.fillColor(c.reports_count > 0 ? '#ea580c' : '#374151').font('Helvetica-Bold')
-          .text(String(c.reports_count || 0), cx + 4, y + 7, { width: cols[3].width - 8 });
+        doc
+          .fillColor(c.reports_count > 0 ? '#ea580c' : '#374151')
+          .font('Helvetica-Bold')
+          .text(String(c.reports_count || 0), cx + 4, y + 7, {
+            width: cols[3].width - 8,
+          });
         cx += cols[3].width;
 
         const preview = (c.content_preview || '').substring(0, 80);
-        doc.fillColor('#1f2937').font('Helvetica').text(preview, cx + 4, y + 7, { width: cols[4].width - 8 });
+        doc
+          .fillColor('#1f2937')
+          .font('Helvetica')
+          .text(preview, cx + 4, y + 7, { width: cols[4].width - 8 });
         cx += cols[4].width;
 
-        doc.text(c.moderated_by_name || 'N/A', cx + 4, y + 7, { width: cols[5].width - 8 });
+        doc.text(c.moderated_by_name || 'N/A', cx + 4, y + 7, {
+          width: cols[5].width - 8,
+        });
 
         y += rowHeight;
       });

@@ -46,7 +46,7 @@ export class IdentityRevealService {
 
       if (error) throw error;
 
-      const transformed = data.map((reveal) => ({
+      const transformed = data.map((reveal: any) => ({
         id: reveal.id,
         connectionId: reveal.connection_id,
         requesterId: reveal.requester_id,

@@ -8,7 +8,8 @@ export class UserResourcesService {
       data: {
         emergency: {
           title: 'Emergency Services',
-          description: 'If you are in immediate danger, call emergency services',
+          description:
+            'If you are in immediate danger, call emergency services',
           number: '911',
           available: '24/7',
         },
@@ -110,10 +111,17 @@ export class UserResourcesService {
                 description: 'Reporting center for anti-Asian hate',
                 website: 'https://stopaapihate.org',
                 available: 'Online 24/7',
-                languages: ['English', 'Chinese', 'Japanese', 'Korean', 'Vietnamese', 'Thai'],
+                languages: [
+                  'English',
+                  'Chinese',
+                  'Japanese',
+                  'Korean',
+                  'Vietnamese',
+                  'Thai',
+                ],
               },
               {
-                name: 'National Indigenous Women\'s Resource Center',
+                name: "National Indigenous Women's Resource Center",
                 description: 'Support for Native women',
                 phone: '1-855-649-7299',
                 website: 'https://www.niwrc.org',
@@ -186,7 +194,7 @@ export class UserResourcesService {
               'Use inclusive language and avoid stereotypes',
               'Respect different perspectives, experiences, and backgrounds',
               'Address others by their preferred names and pronouns',
-              'Avoid assumptions about someone\'s identity, role, or experience',
+              "Avoid assumptions about someone's identity, role, or experience",
               'Celebrate diversity and learn from different viewpoints',
             ],
           },
@@ -252,7 +260,7 @@ export class UserResourcesService {
             description: 'Standards for posts, comments, and shared content',
             guidelines: [
               'Share accurate and truthful information',
-              'Give proper attribution when sharing others\' work or ideas',
+              "Give proper attribution when sharing others' work or ideas",
               'Keep content relevant to the community and its purpose',
               'Use appropriate tags and categories for your posts',
               'Avoid excessive self-promotion or advertising',
@@ -262,7 +270,8 @@ export class UserResourcesService {
             id: 'reporting',
             title: 'Reporting & Enforcement',
             icon: 'Flag',
-            description: 'How we handle violations and maintain community standards',
+            description:
+              'How we handle violations and maintain community standards',
             guidelines: [
               'Report violations using the built-in reporting tools',
               'Reports are reviewed within 24-48 hours',

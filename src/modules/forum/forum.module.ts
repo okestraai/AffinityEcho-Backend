@@ -10,7 +10,13 @@ import { MentionsModule } from '../mentions/mentions.module';
 import { OkestraModule } from '../okestra/okestra.module';
 
 @Module({
-  imports: [ConfigModule, NotificationsModule, EncryptionModule, MentionsModule, OkestraModule],
+  imports: [
+    ConfigModule,
+    NotificationsModule,
+    EncryptionModule,
+    MentionsModule,
+    OkestraModule,
+  ],
   controllers: [ForumController],
   providers: [ForumService, TopicService, CommentService],
   exports: [ForumService, TopicService, CommentService],

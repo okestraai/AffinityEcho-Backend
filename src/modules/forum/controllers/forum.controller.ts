@@ -85,7 +85,12 @@ export class ForumController {
   })
   @ApiQuery({ name: 'isGlobal', required: false, type: Boolean })
   @ApiQuery({ name: 'category', required: false, type: String })
-  @ApiQuery({ name: 'hashtag', required: false, type: String, description: 'Filter topics by hashtag' })
+  @ApiQuery({
+    name: 'hashtag',
+    required: false,
+    type: String,
+    description: 'Filter topics by hashtag',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({
@@ -418,7 +423,11 @@ export class ForumController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.topicService.getBookmarkedTopics(user.userId, page || 1, limit || 20);
+    return this.topicService.getBookmarkedTopics(
+      user.userId,
+      page || 1,
+      limit || 20,
+    );
   }
 
   // ========== TOPIC PARAMETERIZED ROUTES ==========

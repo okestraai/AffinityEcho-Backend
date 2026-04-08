@@ -10,7 +10,13 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiBody,
+  ApiParam,
+} from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationsService } from './notifications.service';
 import { PushNotificationService } from './push-notification.service';
@@ -39,7 +45,10 @@ export class NotificationsController {
 
   @Get()
   @ApiOperation({ summary: 'Get user notifications' })
-  async getUserNotifications(@Req() req: any, @Query() query: QueryNotificationDto) {
+  async getUserNotifications(
+    @Req() req: any,
+    @Query() query: QueryNotificationDto,
+  ) {
     const userId = req.user.sub;
     return this.notificationsService.getUserNotifications(userId, query);
   }
@@ -78,9 +87,15 @@ export class NotificationsController {
       required: ['notification_ids'],
     },
   })
-  async markGroupAsRead(@Req() req: any, @Body() body: { notification_ids: string[] }) {
+  async markGroupAsRead(
+    @Req() req: any,
+    @Body() body: { notification_ids: string[] },
+  ) {
     const userId = req.user.sub;
-    return this.notificationsService.markGroupAsRead(userId, body.notification_ids);
+    return this.notificationsService.markGroupAsRead(
+      userId,
+      body.notification_ids,
+    );
   }
 
   // Static delete route MUST come before parameterized :id route
@@ -105,11 +120,18 @@ export class NotificationsController {
   @ApiBody({ type: RegisterPushTokenDto })
   async registerPushToken(@Req() req: any, @Body() dto: RegisterPushTokenDto) {
     const userId = req.user.sub;
-    return this.pushService.registerToken(userId, dto.token, dto.platform, dto.device_name);
+    return this.pushService.registerToken(
+      userId,
+      dto.token,
+      dto.platform,
+      dto.device_name,
+    );
   }
 
   @Delete('push-token')
-  @ApiOperation({ summary: 'Remove a push notification token (e.g. on logout)' })
+  @ApiOperation({
+    summary: 'Remove a push notification token (e.g. on logout)',
+  })
   @ApiBody({ type: RemovePushTokenDto })
   async removePushToken(@Req() req: any, @Body() dto: RemovePushTokenDto) {
     const userId = req.user.sub;

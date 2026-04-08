@@ -421,7 +421,9 @@ export class AdminUsersService {
   async getAdminProfile(adminId: string) {
     const { data, error } = await this.admin
       .from('user_profiles')
-      .select('id, username, email, first_name_encrypted, last_name_encrypted, avatar, role, created_at, updated_at')
+      .select(
+        'id, username, email, first_name_encrypted, last_name_encrypted, avatar, role, created_at, updated_at',
+      )
       .eq('id', adminId)
       .single();
 
@@ -447,9 +449,13 @@ export class AdminUsersService {
     adminId: string,
     body: { first_name?: string; last_name?: string; username?: string },
   ) {
-    const update: Record<string, any> = { updated_at: new Date().toISOString() };
-    if (body.first_name !== undefined) update.first_name_encrypted = body.first_name;
-    if (body.last_name !== undefined) update.last_name_encrypted = body.last_name;
+    const update: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (body.first_name !== undefined)
+      update.first_name_encrypted = body.first_name;
+    if (body.last_name !== undefined)
+      update.last_name_encrypted = body.last_name;
     if (body.username !== undefined) {
       // Check username uniqueness
       const { data: existing } = await this.admin
@@ -466,7 +472,9 @@ export class AdminUsersService {
       .from('user_profiles')
       .update(update)
       .eq('id', adminId)
-      .select('id, username, first_name_encrypted, last_name_encrypted, email, avatar, role')
+      .select(
+        'id, username, first_name_encrypted, last_name_encrypted, email, avatar, role',
+      )
       .single();
 
     if (error) throw new BadRequestException(error.message);

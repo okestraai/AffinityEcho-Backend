@@ -1,7 +1,3 @@
-jest.mock('../../database/supabase.client', () => ({
-  supabaseClient: jest.fn(),
-}));
-
 jest.mock('../utils/logger.util', () => ({
   default: {
     info: jest.fn(),
@@ -12,25 +8,22 @@ jest.mock('../utils/logger.util', () => ({
 }));
 
 import { UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { supabaseClient } from '../../database/supabase.client';
 
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
-  let mockSupabase: any;
+  const JWT_SECRET = 'test-jwt-secret-for-guard';
 
-  const mockConfig = { get: jest.fn() } as any;
+  const mockConfig = {
+    get: jest.fn((key: string) => {
+      if (key === 'JWT_SECRET') return JWT_SECRET;
+      return undefined;
+    }),
+  } as any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-
-    mockSupabase = {
-      auth: {
-        getUser: jest.fn(),
-      },
-    };
-
-    (supabaseClient as jest.Mock).mockReturnValue(mockSupabase);
     guard = new JwtAuthGuard(mockConfig);
   });
 
@@ -42,6 +35,14 @@ describe('JwtAuthGuard', () => {
       }),
       request,
     } as any;
+  }
+
+  // Generate a real JWT for testing
+  function generateTestToken(
+    payload: any = { sub: 'user-123', email: 'test@example.com' },
+  ) {
+    const jwtService = new JwtService({ secret: JWT_SECRET });
+    return jwtService.sign(payload);
   }
 
   it('should throw UnauthorizedException when no authorization header', async () => {
@@ -65,69 +66,50 @@ describe('JwtAuthGuard', () => {
     );
   });
 
-  it('should throw UnauthorizedException when Supabase returns error', async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: null },
-      error: { message: 'Invalid token', status: 401 },
-    });
-
+  it('should throw UnauthorizedException for invalid token', async () => {
     const context = createMockContext({
-      authorization: 'Bearer valid-looking-token',
+      authorization: 'Bearer invalid-token',
     });
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(guard.canActivate(context)).rejects.toThrow('Invalid token');
   });
 
-  it('should throw UnauthorizedException when user is null', async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: null },
-      error: null,
-    });
+  it('should throw UnauthorizedException for expired token', async () => {
+    const jwtService = new JwtService({ secret: JWT_SECRET });
+    const expiredToken = jwtService.sign(
+      { sub: 'user-123' },
+      { expiresIn: '0s' },
+    );
+
+    // Small delay to ensure expiration
+    await new Promise((r) => setTimeout(r, 50));
 
     const context = createMockContext({
-      authorization: 'Bearer valid-looking-token',
+      authorization: `Bearer ${expiredToken}`,
     });
     await expect(guard.canActivate(context)).rejects.toThrow(
-      'User not found',
+      'Token has expired',
     );
   });
 
   it('should set request.user and return true for valid token', async () => {
-    const mockUser = {
-      id: 'user-123',
+    const token = generateTestToken({
+      sub: 'user-123',
       email: 'test@example.com',
-      user_metadata: { username: 'testuser' },
-    };
-
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: mockUser },
-      error: null,
     });
-
-    const context = createMockContext({
-      authorization: 'Bearer valid-token',
-    });
+    const context = createMockContext({ authorization: `Bearer ${token}` });
 
     const result = await guard.canActivate(context);
 
     expect(result).toBe(true);
-    expect(context.request.user).toEqual({
-      sub: 'user-123',
-      email: 'test@example.com',
-      user_metadata: { username: 'testuser' },
-    });
+    expect(context.request.user.sub).toBe('user-123');
+    expect(context.request.user.email).toBe('test@example.com');
   });
 
-  it('should throw generic UnauthorizedException on unexpected errors', async () => {
-    mockSupabase.auth.getUser.mockRejectedValue(new Error('Network error'));
-
-    const context = createMockContext({
-      authorization: 'Bearer some-token',
-    });
-
+  it('should throw UnauthorizedException when token has no sub claim', async () => {
+    const token = generateTestToken({ email: 'test@example.com' }); // no sub
+    const context = createMockContext({ authorization: `Bearer ${token}` });
     await expect(guard.canActivate(context)).rejects.toThrow(
-      'Authentication failed',
+      'Invalid token payload',
     );
   });
 });

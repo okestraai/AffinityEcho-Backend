@@ -1,7 +1,4 @@
-import {
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
   createMockQueryChain,
@@ -12,7 +9,6 @@ import {
 // ── Module-level mocks ───────────────────────────────────────────────
 jest.mock('../../../database/supabase.client', () => ({
   supabaseAdmin: jest.fn(),
-  supabaseClient: jest.fn(),
 }));
 
 jest.mock('../../../common/utils/logger.util', () => ({
@@ -25,17 +21,22 @@ jest.mock('../../../common/utils/logger.util', () => ({
   },
 }));
 
-import {
-  supabaseClient,
-  supabaseAdmin,
-} from '../../../database/supabase.client';
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed-password'),
+  compare: jest.fn().mockResolvedValue(true),
+}));
+
+import { supabaseAdmin } from '../../../database/supabase.client';
+import * as bcrypt from 'bcrypt';
 
 // ── Helper factories ─────────────────────────────────────────────────
 
 function createMockJwtService() {
   return {
     sign: jest.fn().mockReturnValue('mock-jwt-token'),
-    verify: jest.fn().mockReturnValue({ sub: 'user-123', email: 'test@example.com' }),
+    verify: jest
+      .fn()
+      .mockReturnValue({ sub: 'user-123', email: 'test@example.com' }),
   };
 }
 
@@ -76,7 +77,6 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
   let mockEncryption: ReturnType<typeof createMockEncryptionUtil>;
   let mockEmail: ReturnType<typeof createMockEmailService>;
   let mockOnboarding: ReturnType<typeof createMockOnboardingService>;
-  let mockClientSupabase: ReturnType<typeof createMockSupabaseClient>;
   let mockAdminSupabase: ReturnType<typeof createMockSupabaseClient>;
 
   beforeEach(() => {
@@ -88,11 +88,13 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     mockEmail = createMockEmailService();
     mockOnboarding = createMockOnboardingService();
 
-    mockClientSupabase = createMockSupabaseClient();
     mockAdminSupabase = createMockSupabaseClient();
 
-    (supabaseClient as jest.Mock).mockReturnValue(mockClientSupabase.client);
     (supabaseAdmin as jest.Mock).mockReturnValue(mockAdminSupabase.client);
+
+    // Reset bcrypt mocks to defaults
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
     service = new AuthService(
       mockConfig as any,
@@ -115,10 +117,12 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         email: 'user@example.com',
       });
 
-      mockClientSupabase.client.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'user@example.com' } },
+      // User lookup by id from user_profiles
+      const userChain = createMockQueryChain({
+        data: { id: 'user-123', email: 'user@example.com' },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       const result = await service.refresh(dto);
 
@@ -144,9 +148,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         throw new Error('jwt expired');
       });
 
-      await expect(service.refresh(dto)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(service.refresh(dto)).rejects.toThrow(UnauthorizedException);
       await expect(service.refresh(dto)).rejects.toThrow(
         'Refresh token has expired',
       );
@@ -157,9 +159,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         throw new Error('jwt malformed');
       });
 
-      await expect(service.refresh(dto)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(service.refresh(dto)).rejects.toThrow(UnauthorizedException);
       await expect(service.refresh(dto)).rejects.toThrow(
         'Invalid refresh token',
       );
@@ -171,16 +171,15 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         email: 'user@example.com',
       });
 
-      mockClientSupabase.client.auth.getUser.mockResolvedValue({
-        data: { user: null },
+      // User lookup — not found
+      const userChain = createMockQueryChain({
+        data: null,
         error: { message: 'User not found' },
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       await expect(service.refresh(dto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.refresh(dto)).rejects.toThrow(
-        'Token refresh failed',
+        'User account no longer exists',
       );
     });
 
@@ -199,9 +198,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         throw new Error('invalid signature');
       });
 
-      await expect(service.refresh(dto)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(service.refresh(dto)).rejects.toThrow(UnauthorizedException);
       await expect(service.refresh(dto)).rejects.toThrow(
         'Invalid refresh token',
       );
@@ -215,46 +212,31 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     const dto = { email: 'user@example.com' };
 
     it('should send OTP successfully', async () => {
-      mockClientSupabase.client.auth.signInWithOtp.mockResolvedValue({
-        data: {},
+      // Username lookup for email personalization
+      const profileChain = createMockQueryChain({
+        data: { username: 'testuser' },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(profileChain);
 
       const result = await service.sendOtp(dto);
 
       expect(result).toEqual(
         expect.objectContaining({
-          message: expect.stringContaining(
-            'One-time password has been sent',
-          ),
+          message: expect.stringContaining('One-time password has been sent'),
         }),
       );
-      expect(
-        mockClientSupabase.client.auth.signInWithOtp,
-      ).toHaveBeenCalledWith({
-        email: 'user@example.com',
-        options: {
-          emailRedirectTo: 'http://localhost:3000/auth/callback',
-        },
-      });
+      expect(mockEmail.sendOtpEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        expect.any(String),
+        'testuser',
+      );
     });
 
     it('should throw BadRequestException for invalid email format', async () => {
       const badDto = { email: 'not-valid' };
       await expect(service.sendOtp(badDto)).rejects.toThrow(
         BadRequestException,
-      );
-    });
-
-    it('should throw BadRequestException on rate limit error', async () => {
-      mockClientSupabase.client.auth.signInWithOtp.mockResolvedValue({
-        data: {},
-        error: { message: 'rate limit exceeded' },
-      });
-
-      await expect(service.sendOtp(dto)).rejects.toThrow(BadRequestException);
-      await expect(service.sendOtp(dto)).rejects.toThrow(
-        'Too many OTP requests',
       );
     });
   });
@@ -266,16 +248,19 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     const dto = { email: 'user@example.com' };
 
     it('should resend OTP successfully', async () => {
+      // Profile lookup
       const profileChain = createMockQueryChain({
         data: { id: 'user-123', username: 'testuser' },
         error: null,
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(profileChain);
 
-      mockAdminSupabase.client.auth.admin.getUserById.mockResolvedValue({
-        data: { user: { email_confirmed_at: null } },
+      // email_confirmed_at check
+      const authChain = createMockQueryChain({
+        data: { email_confirmed_at: null },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(authChain);
 
       const result = await service.resendOtp(dto);
 
@@ -289,9 +274,9 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     });
 
     it('should throw BadRequestException for invalid email', async () => {
-      await expect(
-        service.resendOtp({ email: 'bad' }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.resendOtp({ email: 'bad' })).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw BadRequestException when max attempts reached and cooldown not passed', async () => {
@@ -303,12 +288,8 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         type: 'signup',
       });
 
-      await expect(service.resendOtp(dto)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.resendOtp(dto)).rejects.toThrow(
-        'Too many attempts',
-      );
+      await expect(service.resendOtp(dto)).rejects.toThrow(BadRequestException);
+      await expect(service.resendOtp(dto)).rejects.toThrow('Too many attempts');
     });
 
     it('should throw BadRequestException when resend within 30 seconds', async () => {
@@ -320,29 +301,28 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         type: 'signup',
       });
 
-      await expect(service.resendOtp(dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.resendOtp(dto)).rejects.toThrow(BadRequestException);
       await expect(service.resendOtp(dto)).rejects.toThrow(
         'Please wait 30 seconds',
       );
     });
 
     it('should throw BadRequestException when email is already verified', async () => {
+      // Profile lookup
       const profileChain = createMockQueryChain({
         data: { id: 'user-123', username: 'testuser' },
         error: null,
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(profileChain);
 
-      mockAdminSupabase.client.auth.admin.getUserById.mockResolvedValue({
-        data: { user: { email_confirmed_at: '2024-01-01T00:00:00Z' } },
+      // email_confirmed_at check — already confirmed
+      const authChain = createMockQueryChain({
+        data: { email_confirmed_at: '2024-01-01T00:00:00Z' },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(authChain);
 
-      await expect(service.resendOtp(dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.resendOtp(dto)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -403,12 +383,12 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     });
 
     it('should throw BadRequestException when no valid fields provided', async () => {
-      await expect(
-        service.updateProfile('user-123', {}),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.updateProfile('user-123', {}),
-      ).rejects.toThrow('No valid fields provided to update');
+      await expect(service.updateProfile('user-123', {})).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.updateProfile('user-123', {})).rejects.toThrow(
+        'No valid fields provided to update',
+      );
     });
 
     it('should throw when DB update fails', async () => {
@@ -481,20 +461,23 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
   // ================================================================
   describe('changePassword', () => {
     it('should change password successfully', async () => {
-      mockClientSupabase.client.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'user@example.com' } },
+      // User lookup by id (get email + password_hash)
+      const userChain = createMockQueryChain({
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          password_hash: 'old-hashed-password',
+        },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: { user: { id: 'user-123' }, session: {} },
-        error: null,
-      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
 
-      mockClientSupabase.client.auth.updateUser.mockResolvedValue({
-        data: { user: { id: 'user-123' } },
-        error: null,
-      });
+      // Password hash update
+      const updateChain = createMockQueryChain({ data: null, error: null });
+      mockAdminSupabase.client.from.mockReturnValueOnce(updateChain);
 
       const result = await service.changePassword(
         'user-123',
@@ -503,15 +486,11 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
       );
 
       expect(result).toEqual({ message: 'Password changed successfully' });
-      expect(
-        mockClientSupabase.client.auth.signInWithPassword,
-      ).toHaveBeenCalledWith({
-        email: 'user@example.com',
-        password: 'OldPassword1!',
-      });
-      expect(mockClientSupabase.client.auth.updateUser).toHaveBeenCalledWith({
-        password: 'NewPassword1!',
-      });
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        'OldPassword1!',
+        'old-hashed-password',
+      );
+      expect(bcrypt.hash).toHaveBeenCalledWith('NewPassword1!', 12);
     });
 
     it('should throw BadRequestException for weak new password', async () => {
@@ -524,29 +503,31 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     });
 
     it('should throw BadRequestException when current password is wrong', async () => {
-      mockClientSupabase.client.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'user@example.com' } },
+      // User lookup by id
+      const userChain = createMockQueryChain({
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          password_hash: 'old-hashed-password',
+        },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: { user: null, session: null },
-        error: { message: 'Invalid login credentials' },
-      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(
-        service.changePassword('user-123', 'WrongPass1!', 'NewPassword1!'),
-      ).rejects.toThrow(BadRequestException);
       await expect(
         service.changePassword('user-123', 'WrongPass1!', 'NewPassword1!'),
       ).rejects.toThrow('Current password is incorrect');
     });
 
     it('should throw BadRequestException when user is not found', async () => {
-      mockClientSupabase.client.auth.getUser.mockResolvedValue({
-        data: { user: null },
-        error: { message: 'User not found' },
+      // User lookup — not found
+      const userChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       await expect(
         service.changePassword('user-123', 'OldPass1!', 'NewPassword1!'),
@@ -556,28 +537,31 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
       ).rejects.toThrow('User not found');
     });
 
-    it('should throw BadRequestException when updateUser returns password error', async () => {
-      mockClientSupabase.client.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'user@example.com' } },
+    it('should throw BadRequestException when password update fails in DB', async () => {
+      // User lookup by id
+      const userChain = createMockQueryChain({
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          password_hash: 'old-hashed-password',
+        },
         error: null,
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
-      mockClientSupabase.client.auth.signInWithPassword.mockResolvedValue({
-        data: { user: { id: 'user-123' }, session: {} },
-        error: null,
-      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
 
-      mockClientSupabase.client.auth.updateUser.mockResolvedValue({
+      // Password hash update fails
+      const updateChain = createMockQueryChain({
         data: null,
-        error: { message: 'password is too weak' },
+        error: { message: 'update failed' },
       });
+      mockAdminSupabase.client.from.mockReturnValueOnce(updateChain);
 
       await expect(
         service.changePassword('user-123', 'OldPass1!', 'NewPassword1!'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.changePassword('user-123', 'OldPass1!', 'NewPassword1!'),
-      ).rejects.toThrow('Password does not meet security requirements');
+      ).rejects.toThrow('Password change failed');
     });
   });
 

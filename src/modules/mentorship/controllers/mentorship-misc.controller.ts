@@ -291,9 +291,7 @@ export class MentorshipMiscController {
   @ApiParam({ name: 'userId', description: 'User ID' })
   @ApiOkResponse({ description: 'Profile retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  async getProfileById(
-    @Param('userId', ParseUUIDPipe) userId: string,
-  ) {
+  async getProfileById(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.profileService.getProfile(userId);
   }
 }

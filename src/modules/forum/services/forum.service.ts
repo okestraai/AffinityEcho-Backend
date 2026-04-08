@@ -558,7 +558,7 @@ export class ForumService {
     logger.info('Fetching user joined forums', { userId, companyName });
 
     try {
-      let query = this.admin
+      const query = this.admin
         .from('forum_members')
         .select(
           `
@@ -818,7 +818,7 @@ export class ForumService {
           createdForums.push(...newForums);
           logger.info('SUCCESS - Created forums:', {
             count: newForums.length,
-            names: newForums.map((f) => f.name),
+            names: newForums.map((f: any) => f.name),
           });
         } else {
           logger.warn('No forums were created despite insert attempt');
@@ -928,14 +928,20 @@ export class ForumService {
       // OPTIMIZED: Use cached counts from forum table
       const totalForums = forums?.length || 0;
       const totalTopics =
-        forums?.reduce((sum, forum) => sum + (forum.topic_count || 0), 0) || 0;
+        forums?.reduce(
+          (sum: any, forum: any) => sum + (forum.topic_count || 0),
+          0,
+        ) || 0;
       const totalMembers =
-        forums?.reduce((sum, forum) => sum + (forum.member_count || 0), 0) || 0;
+        forums?.reduce(
+          (sum: any, forum: any) => sum + (forum.member_count || 0),
+          0,
+        ) || 0;
 
       // Get most active forum
       let mostActiveForum = null;
       if (forums && forums.length > 0) {
-        mostActiveForum = forums.reduce((mostActive, forum) => {
+        mostActiveForum = forums.reduce((mostActive: any, forum: any) => {
           if (!mostActive || !mostActive.last_activity) {
             return forum;
           }
@@ -1020,14 +1026,16 @@ export class ForumService {
       }
 
       // Calculate engagement score for each forum (combination of topics and members)
-      const forumsWithMetrics = (forums || []).map((forum) => ({
+      const forumsWithMetrics = (forums || []).map((forum: any) => ({
         ...forum,
         engagementScore:
           (forum.topic_count || 0) * 2 + (forum.member_count || 0),
       }));
 
       // Sort by engagement score (highest first)
-      forumsWithMetrics.sort((a, b) => b.engagementScore - a.engagementScore);
+      forumsWithMetrics.sort(
+        (a: any, b: any) => b.engagementScore - a.engagementScore,
+      );
 
       logger.info('Global forum metrics fetched successfully', {
         count: forumsWithMetrics.length,
@@ -1035,11 +1043,11 @@ export class ForumService {
       return {
         totalGlobalForums: forumsWithMetrics.length,
         totalGlobalTopics: forumsWithMetrics.reduce(
-          (sum, forum) => sum + (forum.topic_count || 0),
+          (sum: any, forum: any) => sum + (forum.topic_count || 0),
           0,
         ),
         totalGlobalMembers: forumsWithMetrics.reduce(
-          (sum, forum) => sum + (forum.member_count || 0),
+          (sum: any, forum: any) => sum + (forum.member_count || 0),
           0,
         ),
         forums: forumsWithMetrics,
@@ -1101,7 +1109,7 @@ export class ForumService {
         };
       }
 
-      const forumIds = forums.map((f) => f.id);
+      const forumIds = forums.map((f: any) => f.id);
 
       // OPTIMIZED: Batch fetch recent topics for all forums at once
       const { data: recentTopics } = await this.admin
@@ -1143,7 +1151,7 @@ export class ForumService {
       });
 
       // Build detailed metrics using cached data
-      const forumsWithDetailedMetrics = forums.map((forum) => {
+      const forumsWithDetailedMetrics = forums.map((forum: any) => {
         const actualTopicCount = forum.topic_count || 0;
         const actualMemberCount = forum.member_count || 0;
 
@@ -1197,16 +1205,16 @@ export class ForumService {
 
       // Calculate overall metrics
       const totalTopics = forumsWithDetailedMetrics.reduce(
-        (sum, forum) => sum + forum.metrics.topicCount,
+        (sum: any, forum: any) => sum + forum.metrics.topicCount,
         0,
       );
       const totalMembers = forumsWithDetailedMetrics.reduce(
-        (sum, forum) => sum + forum.metrics.memberCount,
+        (sum: any, forum: any) => sum + forum.metrics.memberCount,
         0,
       );
 
       // Sort forums by activity level (most active first)
-      const sortedForums = forumsWithDetailedMetrics.sort((a, b) => {
+      const sortedForums = forumsWithDetailedMetrics.sort((a: any, b: any) => {
         const aScore = a.metrics.topicCount * 2 + a.metrics.memberCount;
         const bScore = b.metrics.topicCount * 2 + b.metrics.memberCount;
         return bScore - aScore;
@@ -1221,7 +1229,7 @@ export class ForumService {
           totalMembers > 0
             ? Math.round(
                 sortedForums.reduce(
-                  (sum, forum) => sum + forum.metrics.engagementRate,
+                  (sum: any, forum: any) => sum + forum.metrics.engagementRate,
                   0,
                 ) / sortedForums.length,
               )

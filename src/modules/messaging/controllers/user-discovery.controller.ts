@@ -29,10 +29,20 @@ export class UserDiscoveryController {
   @Get('search')
   @ApiOperation({
     summary: 'Search users for @mention autocomplete',
-    description: 'Search users by username prefix. Returns anonymous display names.',
+    description:
+      'Search users by username prefix. Returns anonymous display names.',
   })
-  @ApiQuery({ name: 'search', required: true, description: 'Username prefix to search for' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default: 5)' })
+  @ApiQuery({
+    name: 'search',
+    required: true,
+    description: 'Username prefix to search for',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max results (default: 5)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Users matching search',
@@ -41,7 +51,12 @@ export class UserDiscoveryController {
         success: true,
         data: {
           users: [
-            { id: 'uuid', username: 'quietstorm', display_name: 'Anonymous User', avatar_emoji: 'User' },
+            {
+              id: 'uuid',
+              username: 'quietstorm',
+              display_name: 'Anonymous User',
+              avatar_emoji: 'User',
+            },
           ],
         },
       },

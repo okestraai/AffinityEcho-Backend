@@ -97,7 +97,7 @@ export class AdminReportsService {
     const sortBy = query.sortBy ?? 'created_at';
     const ascending = query.sortOrder === 'asc';
 
-    let q = this.buildBaseQuery(query, adminId)
+    const q = this.buildBaseQuery(query, adminId)
       .order(sortBy, { ascending })
       .range(offset, offset + pageSize - 1);
 
@@ -173,7 +173,7 @@ export class AdminReportsService {
     const sortBy = query.sortBy ?? 'created_at';
     const ascending = query.sortOrder === 'asc';
 
-    let q = this.buildBaseQuery(query, _adminId).order(sortBy, { ascending });
+    const q = this.buildBaseQuery(query, _adminId).order(sortBy, { ascending });
 
     const { data, error } = await q;
     if (error) throw new BadRequestException(error.message);
@@ -204,8 +204,6 @@ export class AdminReportsService {
       return this.generatePDF(reports, query);
     }
   }
-
-
 
   /**
    * Generate CSV export
@@ -353,7 +351,9 @@ export class AdminReportsService {
       const immediateRisk = reports.filter((r) => r.immediate_risk).length;
 
       const summaryBoxHeight = 55;
-      doc.rect(margin, y, pageWidth - 2 * margin, summaryBoxHeight).fill('#fef2f2');
+      doc
+        .rect(margin, y, pageWidth - 2 * margin, summaryBoxHeight)
+        .fill('#fef2f2');
       doc
         .fontSize(8)
         .font('Helvetica-Bold')
@@ -371,8 +371,16 @@ export class AdminReportsService {
 
       stats.forEach((stat, i) => {
         const sx = margin + 10 + i * statW;
-        doc.fontSize(16).font('Helvetica-Bold').fillColor(stat.color).text(String(stat.value), sx, y + 20, { width: statW - 5 });
-        doc.fontSize(7).font('Helvetica').fillColor('#6b7280').text(stat.label, sx, y + 40, { width: statW - 5 });
+        doc
+          .fontSize(16)
+          .font('Helvetica-Bold')
+          .fillColor(stat.color)
+          .text(String(stat.value), sx, y + 20, { width: statW - 5 });
+        doc
+          .fontSize(7)
+          .font('Helvetica')
+          .fillColor('#6b7280')
+          .text(stat.label, sx, y + 40, { width: statW - 5 });
       });
 
       y += summaryBoxHeight + 15;
@@ -432,23 +440,57 @@ export class AdminReportsService {
         doc.fontSize(7).font('Helvetica').fillColor('#1f2937');
 
         const refNum = r.reference_number || '-';
-        doc.font('Helvetica-Bold').text(refNum, cx + 4, y + 7, { width: cols[0].width - 8 });
+        doc
+          .font('Helvetica-Bold')
+          .text(refNum, cx + 4, y + 7, { width: cols[0].width - 8 });
         cx += cols[0].width;
 
-        doc.font('Helvetica').text(r.incident_type || '-', cx + 4, y + 7, { width: cols[1].width - 8 });
+        doc.font('Helvetica').text(r.incident_type || '-', cx + 4, y + 7, {
+          width: cols[1].width - 8,
+        });
         cx += cols[1].width;
 
-        const statusColor = r.status === 'submitted' ? '#92400e' : r.status === 'under_review' ? '#1e40af' : r.status === 'resolved' ? '#065f46' : '#374151';
-        doc.fillColor(statusColor).text((r.status || '-').replace('_', ' ').toUpperCase(), cx + 4, y + 7, { width: cols[2].width - 8 });
+        const statusColor =
+          r.status === 'submitted'
+            ? '#92400e'
+            : r.status === 'under_review'
+              ? '#1e40af'
+              : r.status === 'resolved'
+                ? '#065f46'
+                : '#374151';
+        doc
+          .fillColor(statusColor)
+          .text(
+            (r.status || '-').replace('_', ' ').toUpperCase(),
+            cx + 4,
+            y + 7,
+            { width: cols[2].width - 8 },
+          );
         cx += cols[2].width;
 
-        doc.fillColor(priorityColors[r.priority] || '#374151').font('Helvetica-Bold').text((r.priority || '-').toUpperCase(), cx + 4, y + 7, { width: cols[3].width - 8 });
+        doc
+          .fillColor(priorityColors[r.priority] || '#374151')
+          .font('Helvetica-Bold')
+          .text((r.priority || '-').toUpperCase(), cx + 4, y + 7, {
+            width: cols[3].width - 8,
+          });
         cx += cols[3].width;
 
-        doc.fillColor('#1f2937').font('Helvetica').text(r.reporter_name || 'Anonymous', cx + 4, y + 7, { width: cols[4].width - 8 });
+        doc
+          .fillColor('#1f2937')
+          .font('Helvetica')
+          .text(r.reporter_name || 'Anonymous', cx + 4, y + 7, {
+            width: cols[4].width - 8,
+          });
         cx += cols[4].width;
 
-        const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-';
+        const dateStr = r.created_at
+          ? new Date(r.created_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : '-';
         doc.text(dateStr, cx + 4, y + 7, { width: cols[5].width - 8 });
         cx += cols[5].width;
 

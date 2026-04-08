@@ -151,7 +151,9 @@ export class IdentityRevealService {
           );
         }
       } catch (notifyError) {
-        logger.warn('Failed to send identity reveal notification', { notifyError });
+        logger.warn('Failed to send identity reveal notification', {
+          notifyError,
+        });
       }
 
       return {
@@ -180,7 +182,10 @@ export class IdentityRevealService {
   async respondToReveal(userId: string, dto: RespondIdentityRevealDto) {
     // Normalize action: accept "accepted"/"rejected" as aliases
     const normalizedAction = dto.action.replace(/ed$/, '');
-    dto.action = normalizedAction === 'accept' || normalizedAction === 'reject' ? normalizedAction : dto.action;
+    dto.action =
+      normalizedAction === 'accept' || normalizedAction === 'reject'
+        ? normalizedAction
+        : dto.action;
 
     logger.info('Responding to identity reveal', {
       userId,
@@ -267,10 +272,13 @@ export class IdentityRevealService {
             });
           }
         } else {
-          logger.warn('No conversations found between users for identity reveal', {
-            requesterId: reveal.requester_id,
-            responderId: reveal.responder_id,
-          });
+          logger.warn(
+            'No conversations found between users for identity reveal',
+            {
+              requesterId: reveal.requester_id,
+              responderId: reveal.responder_id,
+            },
+          );
         }
       }
 
@@ -349,10 +357,13 @@ export class IdentityRevealService {
         .eq('id', revealId)
         .single();
 
-      if (error || !reveal) throw new NotFoundException('Identity reveal request not found');
+      if (error || !reveal)
+        throw new NotFoundException('Identity reveal request not found');
 
       if (reveal.requester_id !== userId) {
-        throw new ForbiddenException('Only the requester can cancel a reveal request');
+        throw new ForbiddenException(
+          'Only the requester can cancel a reveal request',
+        );
       }
 
       if (reveal.status !== 'pending') {
@@ -405,7 +416,7 @@ export class IdentityRevealService {
 
       if (error) throw error;
 
-      const transformed = reveals.map((reveal) => ({
+      const transformed = reveals.map((reveal: any) => ({
         id: reveal.id,
         connection_id: reveal.connection_id,
         conversation_id: reveal.connection?.conversation_id,
@@ -499,7 +510,8 @@ export class IdentityRevealService {
             ? {
                 id: pendingReveal.id,
                 status: pendingReveal.status,
-                direction: pendingReveal.requester_id === userId ? 'sent' : 'received',
+                direction:
+                  pendingReveal.requester_id === userId ? 'sent' : 'received',
               }
             : null,
           can_request: !isRevealed && !pendingReveal,

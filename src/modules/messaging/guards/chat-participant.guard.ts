@@ -24,7 +24,9 @@ export class ChatParticipantGuard implements CanActivate {
     const userId = user?.id || user?.userId || user?.sub || user?.user_id;
 
     if (!userId) {
-      logger.warn('No user ID found in request', { module: 'ChatParticipantGuard' });
+      logger.warn('No user ID found in request', {
+        module: 'ChatParticipantGuard',
+      });
       throw new ForbiddenException('User ID not found');
     }
 
@@ -65,7 +67,10 @@ export class ChatParticipantGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof ForbiddenException) throw error;
-      logger.error('Failed to verify conversation access', { module: 'ChatParticipantGuard', error });
+      logger.error('Failed to verify conversation access', {
+        module: 'ChatParticipantGuard',
+        error,
+      });
       throw new ForbiddenException('Failed to verify conversation access');
     }
   }

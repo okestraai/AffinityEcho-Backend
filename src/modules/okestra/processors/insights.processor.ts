@@ -27,9 +27,7 @@ export class InsightsProcessor extends WorkerHost {
 
   async process(job: Job<InsightsJobPayload>): Promise<void> {
     const { contentType, contentId, contentHash } = job.data;
-    this.logger.log(
-      `Processing insights for ${contentType}:${contentId}`,
-    );
+    this.logger.log(`Processing insights for ${contentType}:${contentId}`);
 
     const cacheKey = `okestra:insights:${contentType}:${contentId}`;
     const lockKey = `okestra:lock:${contentType}:${contentId}`;
@@ -37,9 +35,7 @@ export class InsightsProcessor extends WorkerHost {
     // Check if already generated while queued
     const existing = await this.redis.get<CachedInsights>(cacheKey);
     if (existing && existing.contentHash === contentHash) {
-      this.logger.debug(
-        `Already up-to-date for ${contentType}:${contentId}`,
-      );
+      this.logger.debug(`Already up-to-date for ${contentType}:${contentId}`);
       return;
     }
 
@@ -60,8 +56,7 @@ export class InsightsProcessor extends WorkerHost {
         contentId,
       };
 
-      const ttl =
-        contentType === 'topic' ? this.TOPIC_TTL : this.NOOK_TTL;
+      const ttl = contentType === 'topic' ? this.TOPIC_TTL : this.NOOK_TTL;
       await this.redis.set(cacheKey, cachedData, ttl);
 
       this.logger.log(

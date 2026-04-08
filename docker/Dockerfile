@@ -21,8 +21,10 @@ WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup
 
+RUN apk add --no-cache python3 make g++
+
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev
 
 COPY prisma ./prisma
 COPY prisma.config.ts ./

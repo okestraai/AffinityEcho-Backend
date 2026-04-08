@@ -1,5 +1,5 @@
 // password.dto.ts - Add this new DTO
-import { IsString, IsEmail, MinLength,  Length } from 'class-validator';
+import { IsString, IsEmail, MinLength, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ResetPasswordWithOtpDto {
@@ -15,6 +15,6 @@ export class ResetPasswordWithOtpDto {
   @ApiProperty({ example: '123456' })
   @IsString()
   @MinLength(6)
-   @Length(6, 6)
+  @Length(6, 6)
   otp!: string;
 }

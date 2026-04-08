@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '../../../database/supabase.client';
 import {
   ContentType,
   OkestraInsightsResult,
@@ -91,19 +91,15 @@ Return ONLY the JSON object.`;
 @Injectable()
 export class OkestraLlmService {
   private readonly logger = new Logger(OkestraLlmService.name);
-  private admin: SupabaseClient;
+  private admin;
   private vllmChatUrl: string;
   private cfClientId: string;
   private cfClientSecret: string;
 
   constructor(private config: ConfigService) {
-    const supabaseUrl = this.config.get<string>('SUPABASE_URL')!;
-    const serviceRoleKey = this.config.get<string>(
-      'SUPABASE_SERVICE_ROLE_KEY',
-    )!;
-    this.admin = createClient(supabaseUrl, serviceRoleKey);
+    this.admin = supabaseAdmin(config);
 
-    // Direct vLLM connection (bypasses Supabase Edge Function)
+    // Direct vLLM connection
     this.vllmChatUrl =
       this.config.get<string>('VLLM_CHAT_URL') ||
       'https://chat.affinityecho.com';
@@ -135,46 +131,38 @@ export class OkestraLlmService {
     );
 
     // Call vLLM directly (OpenAI-compatible /v1/chat/completions)
-    const response = await fetch(
-      `${this.vllmChatUrl}/v1/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'CF-Access-Client-Id': this.cfClientId,
-          'CF-Access-Client-Secret': this.cfClientSecret,
-        },
-        body: JSON.stringify({
-          model:
-            'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4',
-          messages: [
-            { role: 'system', content: OKESTRA_SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: JSON.stringify(threadPayload),
-            },
-          ],
-          max_tokens: 1024,
-          temperature: 0.3,
-        }),
+    const response = await fetch(`${this.vllmChatUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'CF-Access-Client-Id': this.cfClientId,
+        'CF-Access-Client-Secret': this.cfClientSecret,
       },
-    );
+      body: JSON.stringify({
+        model: 'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4',
+        messages: [
+          { role: 'system', content: OKESTRA_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: JSON.stringify(threadPayload),
+          },
+        ],
+        max_tokens: 1024,
+        temperature: 0.3,
+      }),
+    });
 
     if (!response.ok) {
       const errorData = await response
         .json()
         .catch(() => ({ error: 'Unknown error' }));
-      throw new Error(
-        `vLLM error: ${errorData.error || response.status}`,
-      );
+      throw new Error(`vLLM error: ${errorData.error || response.status}`);
     }
 
     const data = await response.json();
 
     if (data.error) {
-      throw new Error(
-        `LLM Error: ${data.error.message || String(data.error)}`,
-      );
+      throw new Error(`LLM Error: ${data.error.message || String(data.error)}`);
     }
 
     if (!data.choices?.[0]?.message?.content) {
@@ -189,10 +177,7 @@ export class OkestraLlmService {
     }
   }
 
-  private async fetchContentData(
-    contentType: ContentType,
-    contentId: string,
-  ) {
+  private async fetchContentData(contentType: ContentType, contentId: string) {
     if (contentType === 'topic') {
       return this.fetchTopicData(contentId);
     }
@@ -237,17 +222,14 @@ export class OkestraLlmService {
       authorId: topicData?.user_id,
       authorUsername: topicData?.is_anonymous
         ? 'Anonymous'
-        : (topicData?.user_profiles as any)?.username || 'Anonymous',
+        : topicData?.user_profiles?.username || 'Anonymous',
     };
 
-    const comments = (commentsData || []).map((c) => ({
+    const comments = (commentsData || []).map((c: any) => ({
       content: c.content,
       authorId: c.user_id,
-      authorUsername:
-        (c.user_profiles as any)?.username || 'Anonymous',
-      reactions:
-        (c.helpful_count || 0) +
-        (c.supportive_count || 0),
+      authorUsername: c.user_profiles?.username || 'Anonymous',
+      reactions: (c.helpful_count || 0) + (c.supportive_count || 0),
     }));
 
     this.logger.debug(
@@ -267,9 +249,7 @@ export class OkestraLlmService {
       .single();
 
     if (nookError) {
-      this.logger.error(
-        `Failed to fetch nook ${nookId}: ${nookError.message}`,
-      );
+      this.logger.error(`Failed to fetch nook ${nookId}: ${nookError.message}`);
     }
 
     const { data: messagesData, error: messagesError } = await this.admin
@@ -296,7 +276,7 @@ export class OkestraLlmService {
       authorUsername: 'Anonymous',
     };
 
-    const comments = (messagesData || []).map((m) => ({
+    const comments = (messagesData || []).map((m: any) => ({
       content: m.content,
       authorId: m.user_id,
       authorUsername: 'Anonymous',
@@ -372,8 +352,7 @@ export class OkestraLlmService {
 
       userContext.engagerContext = {
         hasCommented: userComments.length > 0,
-        commentIds:
-          userComments.length > 0 ? userCommentIds : undefined,
+        commentIds: userComments.length > 0 ? userCommentIds : undefined,
         hasReacted: false,
       };
     }
@@ -403,8 +382,7 @@ export class OkestraLlmService {
       cleanContent = cleanContent.slice(7);
     else if (cleanContent.startsWith('```'))
       cleanContent = cleanContent.slice(3);
-    if (cleanContent.endsWith('```'))
-      cleanContent = cleanContent.slice(0, -3);
+    if (cleanContent.endsWith('```')) cleanContent = cleanContent.slice(0, -3);
     cleanContent = cleanContent.trim();
 
     const jsonStart = cleanContent.indexOf('{');
@@ -415,21 +393,15 @@ export class OkestraLlmService {
       return this.getFallbackResponse();
     }
 
-    const parsed = JSON.parse(
-      cleanContent.substring(jsonStart, jsonEnd + 1),
-    );
+    const parsed = JSON.parse(cleanContent.substring(jsonStart, jsonEnd + 1));
 
     return {
       tldr: parsed.tldr || 'Thread analysis completed.',
       overallSentiment: parsed.overallSentiment || 'Neutral',
       keyThemes: Array.isArray(parsed.keyThemes) ? parsed.keyThemes : [],
       themes: Array.isArray(parsed.themes) ? parsed.themes : [],
-      actionItems: Array.isArray(parsed.actionItems)
-        ? parsed.actionItems
-        : [],
-      safetyFlags: Array.isArray(parsed.safetyFlags)
-        ? parsed.safetyFlags
-        : [],
+      actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : [],
+      safetyFlags: Array.isArray(parsed.safetyFlags) ? parsed.safetyFlags : [],
     };
   }
 

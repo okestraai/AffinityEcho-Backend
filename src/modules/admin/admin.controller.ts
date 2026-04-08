@@ -196,7 +196,11 @@ export class AdminController {
 
   @Get('profile')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Get own admin profile', description: 'Returns the authenticated admin\'s stored profile including first_name and last_name.' })
+  @ApiOperation({
+    summary: 'Get own admin profile',
+    description:
+      "Returns the authenticated admin's stored profile including first_name and last_name.",
+  })
   @ApiResponse({
     status: 200,
     description: 'Admin profile',
@@ -224,7 +228,11 @@ export class AdminController {
 
   @Patch('profile')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Update own admin profile', description: 'Update the authenticated admin\'s first_name, last_name, or username.' })
+  @ApiOperation({
+    summary: 'Update own admin profile',
+    description:
+      "Update the authenticated admin's first_name, last_name, or username.",
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -235,10 +243,23 @@ export class AdminController {
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Profile updated', schema: { example: { success: true, data: { id: 'uuid', username: 'johndoe_admin', role: 'admin' } } } })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile updated',
+    schema: {
+      example: {
+        success: true,
+        data: { id: 'uuid', username: 'johndoe_admin', role: 'admin' },
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Username already taken' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  updateAdminProfile(@Req() req: any, @Body() body: { first_name?: string; last_name?: string; username?: string }) {
+  updateAdminProfile(
+    @Req() req: any,
+    @Body()
+    body: { first_name?: string; last_name?: string; username?: string },
+  ) {
     return this.users.updateAdminProfile(req.user.userId, body);
   }
 
@@ -246,7 +267,11 @@ export class AdminController {
 
   @Get('settings')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Get system settings', description: 'Returns all platform-wide settings (general, security, notifications, moderation). Requires admin role.' })
+  @ApiOperation({
+    summary: 'Get system settings',
+    description:
+      'Returns all platform-wide settings (general, security, notifications, moderation). Requires admin role.',
+  })
   @ApiResponse({
     status: 200,
     description: 'System settings',
@@ -306,12 +331,21 @@ export class AdminController {
 
   @Put('settings/:key')
   @UseGuards(SuperAdminGuard)
-  @ApiOperation({ summary: 'Update a settings section', description: 'Partially updates one settings section. Only super_admin can update settings.' })
-  @ApiParam({ name: 'key', description: 'Settings section key', enum: ['general', 'security', 'notifications', 'moderation'] })
+  @ApiOperation({
+    summary: 'Update a settings section',
+    description:
+      'Partially updates one settings section. Only super_admin can update settings.',
+  })
+  @ApiParam({
+    name: 'key',
+    description: 'Settings section key',
+    enum: ['general', 'security', 'notifications', 'moderation'],
+  })
   @ApiBody({
     schema: {
       type: 'object',
-      description: 'Partial settings object to merge into the existing section. Only provided keys are updated.',
+      description:
+        'Partial settings object to merge into the existing section. Only provided keys are updated.',
       example: {
         maintenance_mode: true,
         support_email: 'support@affinityecho.com',
@@ -322,7 +356,11 @@ export class AdminController {
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Settings updated', schema: { example: { success: true, data: { key: 'general', value: {} } } } })
+  @ApiResponse({
+    status: 200,
+    description: 'Settings updated',
+    schema: { example: { success: true, data: { key: 'general', value: {} } } },
+  })
   @ApiResponse({ status: 400, description: 'Invalid settings key' })
   @ApiResponse({ status: 403, description: 'Forbidden — super_admin only' })
   updateSettings(
@@ -330,7 +368,13 @@ export class AdminController {
     @Param('key') key: string,
     @Body() body: Record<string, any>,
   ) {
-    return this.settings.updateSettings(req.user.userId, req.user.username, key as any, body, ip(req));
+    return this.settings.updateSettings(
+      req.user.userId,
+      req.user.username,
+      key as any,
+      body,
+      ip(req),
+    );
   }
 
   // ─── 1d. PERMISSION MANAGEMENT (super_admin only) ────────────────────────────
@@ -339,7 +383,8 @@ export class AdminController {
   @UseGuards(SuperAdminGuard)
   @ApiOperation({
     summary: 'Get admin permissions',
-    description: 'Returns the permission set for a specific admin or moderator user. Only super_admin can access.',
+    description:
+      'Returns the permission set for a specific admin or moderator user. Only super_admin can access.',
   })
   @ApiParam({ name: 'adminId', description: 'Admin user UUID' })
   @ApiResponse({
@@ -369,7 +414,8 @@ export class AdminController {
   @UseGuards(SuperAdminGuard)
   @ApiOperation({
     summary: 'Update admin permissions',
-    description: 'Replaces the full permission set for an admin or moderator. Only super_admin can modify permissions.',
+    description:
+      'Replaces the full permission set for an admin or moderator. Only super_admin can modify permissions.',
   })
   @ApiParam({ name: 'adminId', description: 'Admin user UUID' })
   @ApiBody({
@@ -380,7 +426,12 @@ export class AdminController {
         permissions: {
           type: 'array',
           items: { type: 'string' },
-          example: ['users:view', 'users:suspend', 'reports:view', 'reports:update'],
+          example: [
+            'users:view',
+            'users:suspend',
+            'reports:view',
+            'reports:update',
+          ],
         },
       },
     },
@@ -401,7 +452,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 400, description: 'Invalid permission key(s)' })
-  @ApiResponse({ status: 403, description: 'Forbidden — super_admin only or cannot modify super_admin' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — super_admin only or cannot modify super_admin',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   updateAdminPermissions(
     @Req() req: any,
@@ -525,7 +579,10 @@ export class AdminController {
     status: 400,
     description: 'Invalid request — reason required',
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires users:suspend permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires users:suspend permission',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   suspendUser(
     @Req() req: any,
@@ -565,7 +622,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 200, description: 'User unsuspended' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires users:suspend permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires users:suspend permission',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   unsuspendUser(
     @Req() req: any,
@@ -644,7 +704,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 204, description: 'User deleted' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires users:delete permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires users:delete permission',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   deleteUser(
     @Req() req: any,
@@ -691,7 +754,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 201, description: 'Notification sent' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires users:notify permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires users:notify permission',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   notifyUser(
     @Req() req: any,
@@ -1226,7 +1292,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 204, description: 'Content permanently deleted' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires content:remove permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires content:remove permission',
+  })
   @ApiResponse({ status: 404, description: 'Content not found' })
   deleteContent(
     @Req() req: any,
@@ -1249,14 +1318,30 @@ export class AdminController {
   @Get('forums/export')
   @UseGuards(PermissionGuard)
   @RequirePermission('forums:export')
-  @ApiOperation({ summary: 'Export forums', description: 'Export forums list as CSV or PDF.' })
-  @ApiResponse({ status: 200, description: 'File download', content: { 'text/csv': { schema: { type: 'string', format: 'binary' } }, 'application/pdf': { schema: { type: 'string', format: 'binary' } } } })
+  @ApiOperation({
+    summary: 'Export forums',
+    description: 'Export forums list as CSV or PDF.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'File download',
+    content: {
+      'text/csv': { schema: { type: 'string', format: 'binary' } },
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async exportForums(@Query() query: { search?: string; type?: string; format?: 'csv' | 'pdf' }, @Res() res: Response) {
+  async exportForums(
+    @Query() query: { search?: string; type?: string; format?: 'csv' | 'pdf' },
+    @Res() res: Response,
+  ) {
     const format = query.format || 'csv';
     const result = await this.forums.exportForums(query, format);
     res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
     res.setHeader('Content-Length', result.buffer.length);
     return res.send(result.buffer);
   }
@@ -1340,7 +1425,10 @@ export class AdminController {
     description: 'Forum created',
     schema: { example: { id: 'forum-uuid', name: 'Mental Health Support' } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires forums:create permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires forums:create permission',
+  })
   createForum(@Req() req: any, @Body() body: any) {
     return this.forums.createForum(
       req.user.userId,
@@ -1375,7 +1463,10 @@ export class AdminController {
     description: 'Forum updated',
     schema: { example: { success: true } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires forums:update permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires forums:update permission',
+  })
   @ApiResponse({ status: 404, description: 'Forum not found' })
   updateForum(
     @Req() req: any,
@@ -1414,7 +1505,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 204, description: 'Forum deleted' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires forums:delete permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires forums:delete permission',
+  })
   @ApiResponse({ status: 404, description: 'Forum not found' })
   deleteForum(
     @Req() req: any,
@@ -1435,14 +1529,36 @@ export class AdminController {
   @Get('nooks/export')
   @UseGuards(PermissionGuard)
   @RequirePermission('nooks:export')
-  @ApiOperation({ summary: 'Export nooks', description: 'Export nooks list as CSV or PDF.' })
-  @ApiResponse({ status: 200, description: 'File download', content: { 'text/csv': { schema: { type: 'string', format: 'binary' } }, 'application/pdf': { schema: { type: 'string', format: 'binary' } } } })
+  @ApiOperation({
+    summary: 'Export nooks',
+    description: 'Export nooks list as CSV or PDF.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'File download',
+    content: {
+      'text/csv': { schema: { type: 'string', format: 'binary' } },
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async exportNooks(@Query() query: { search?: string; scope?: string; is_locked?: string; format?: 'csv' | 'pdf' }, @Res() res: Response) {
+  async exportNooks(
+    @Query()
+    query: {
+      search?: string;
+      scope?: string;
+      is_locked?: string;
+      format?: 'csv' | 'pdf';
+    },
+    @Res() res: Response,
+  ) {
     const format = query.format || 'csv';
     const result = await this.nooks.exportNooks(query, format);
     res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
     res.setHeader('Content-Length', result.buffer.length);
     return res.send(result.buffer);
   }
@@ -1477,7 +1593,10 @@ export class AdminController {
       },
     },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires nooks:view permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires nooks:view permission',
+  })
   listNooks(@Query() query: any) {
     return this.nooks.listNooks(query);
   }
@@ -1519,7 +1638,10 @@ export class AdminController {
     description: 'Nook created',
     schema: { example: { id: 'nook-uuid', name: 'HR Policy Review Group' } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires nooks:create permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires nooks:create permission',
+  })
   createNook(@Req() req: any, @Body() body: any) {
     return this.nooks.createNook(
       req.user.userId,
@@ -1558,7 +1680,10 @@ export class AdminController {
     description: 'Nook updated',
     schema: { example: { success: true } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires nooks:update permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires nooks:update permission',
+  })
   @ApiResponse({ status: 404, description: 'Nook not found' })
   updateNook(
     @Req() req: any,
@@ -1594,7 +1719,10 @@ export class AdminController {
     },
   })
   @ApiResponse({ status: 204, description: 'Nook deleted' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires nooks:delete permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires nooks:delete permission',
+  })
   @ApiResponse({ status: 404, description: 'Nook not found' })
   deleteNook(
     @Req() req: any,
@@ -1634,7 +1762,10 @@ export class AdminController {
     description: 'Member removed',
     schema: { example: { success: true } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires nooks:remove_member permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires nooks:remove_member permission',
+  })
   @ApiResponse({ status: 404, description: 'Nook or member not found' })
   removeNookMember(
     @Req() req: any,
@@ -1657,14 +1788,36 @@ export class AdminController {
   @Get('notifications/export')
   @UseGuards(PermissionGuard)
   @RequirePermission('notifications:export')
-  @ApiOperation({ summary: 'Export broadcast notifications', description: 'Export notification campaigns as CSV or PDF.' })
-  @ApiResponse({ status: 200, description: 'File download', content: { 'text/csv': { schema: { type: 'string', format: 'binary' } }, 'application/pdf': { schema: { type: 'string', format: 'binary' } } } })
+  @ApiOperation({
+    summary: 'Export broadcast notifications',
+    description: 'Export notification campaigns as CSV or PDF.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'File download',
+    content: {
+      'text/csv': { schema: { type: 'string', format: 'binary' } },
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async exportNotifications(@Query() query: { status?: string; audience?: string; type?: string; format?: 'csv' | 'pdf' }, @Res() res: Response) {
+  async exportNotifications(
+    @Query()
+    query: {
+      status?: string;
+      audience?: string;
+      type?: string;
+      format?: 'csv' | 'pdf';
+    },
+    @Res() res: Response,
+  ) {
     const format = query.format || 'csv';
     const result = await this.notifications.exportNotifications(query, format);
     res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
     res.setHeader('Content-Length', result.buffer.length);
     return res.send(result.buffer);
   }
@@ -1698,7 +1851,10 @@ export class AdminController {
       },
     },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires notifications:view permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires notifications:view permission',
+  })
   listNotifications(@Query() query: any) {
     return this.notifications.listNotifications(query);
   }
@@ -1741,7 +1897,10 @@ export class AdminController {
     description: 'Notification created',
     schema: { example: { id: 'notif-uuid', title: 'Scheduled Maintenance' } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires notifications:create permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires notifications:create permission',
+  })
   createNotification(@Req() req: any, @Body() body: any) {
     return this.notifications.createNotification(
       req.user.userId,
@@ -1765,7 +1924,10 @@ export class AdminController {
     description: 'Notification sent',
     schema: { example: { success: true, recipients: 1200 } },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires notifications:send permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires notifications:send permission',
+  })
   @ApiResponse({ status: 404, description: 'Notification not found' })
   @ApiResponse({ status: 409, description: 'Notification already sent' })
   sendNotification(@Req() req: any, @Param('id') id: string) {
@@ -1788,7 +1950,10 @@ export class AdminController {
   })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({ status: 204, description: 'Notification deleted' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires notifications:delete permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires notifications:delete permission',
+  })
   @ApiResponse({ status: 404, description: 'Notification not found' })
   @ApiResponse({
     status: 409,
@@ -1808,17 +1973,39 @@ export class AdminController {
   @Get('logs/export')
   @UseGuards(PermissionGuard)
   @RequirePermission('logs:export')
-  @ApiOperation({ summary: 'Export audit logs', description: 'Export admin audit logs as CSV or PDF.' })
-  @ApiResponse({ status: 200, description: 'File download', content: { 'text/csv': { schema: { type: 'string', format: 'binary' } }, 'application/pdf': { schema: { type: 'string', format: 'binary' } } } })
+  @ApiOperation({
+    summary: 'Export audit logs',
+    description: 'Export admin audit logs as CSV or PDF.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'File download',
+    content: {
+      'text/csv': { schema: { type: 'string', format: 'binary' } },
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async exportLogs(
-    @Query() query: { search?: string; adminId?: string; action?: string; targetType?: string; from?: string; to?: string; format?: 'csv' | 'pdf' },
+    @Query()
+    query: {
+      search?: string;
+      adminId?: string;
+      action?: string;
+      targetType?: string;
+      from?: string;
+      to?: string;
+      format?: 'csv' | 'pdf';
+    },
     @Res() res: Response,
   ) {
     const format = query.format || 'csv';
     const result = await this.logs.exportLogs(query, format);
     res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
     res.setHeader('Content-Length', result.buffer.length);
     return res.send(result.buffer);
   }
@@ -1856,7 +2043,10 @@ export class AdminController {
       },
     },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires logs:view permission' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires logs:view permission',
+  })
   getLogs(@Query() query: AdminLogQueryDto) {
     return this.logs.getLogs(query);
   }

@@ -66,15 +66,19 @@ export class MentionService {
         .select('blocker_id, blocked_id')
         .or(
           `and(blocker_id.eq.${mentionerId},blocked_id.in.(${validUserIds.join(',')})),` +
-          `and(blocked_id.eq.${mentionerId},blocker_id.in.(${validUserIds.join(',')}))`,
+            `and(blocked_id.eq.${mentionerId},blocker_id.in.(${validUserIds.join(',')}))`,
         );
 
       const blockedIds = new Set<string>();
       (blocks || []).forEach((b: any) => {
-        blockedIds.add(b.blocker_id === mentionerId ? b.blocked_id : b.blocker_id);
+        blockedIds.add(
+          b.blocker_id === mentionerId ? b.blocked_id : b.blocker_id,
+        );
       });
 
-      const mentionableUsers = validUsers.filter((u: any) => !blockedIds.has(u.id));
+      const mentionableUsers = validUsers.filter(
+        (u: any) => !blockedIds.has(u.id),
+      );
       if (mentionableUsers.length === 0) return;
 
       // Upsert mentions
@@ -86,11 +90,9 @@ export class MentionService {
         context_id: contextId || null,
       }));
 
-      await this.admin
-        .from('mentions')
-        .upsert(mentionRows, {
-          onConflict: 'mentioner_id,mentioned_user_id,content_type,content_id',
-        });
+      await this.admin.from('mentions').upsert(mentionRows, {
+        onConflict: 'mentioner_id,mentioned_user_id,content_type,content_id',
+      });
 
       // Get mentioner username for notification message
       const { data: mentioner } = await this.admin

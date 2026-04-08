@@ -173,12 +173,15 @@ export class ChatGateway
       username: user.username,
     });
 
-    this.logger.log(`📥 ${user.username} joined conversation: ${conversationId}`, {
-      room,
-      socketId: client.id,
-      totalClientsInRoom: roomClients.length,
-      clientIds: roomClients.map((s) => s.id),
-    });
+    this.logger.log(
+      `📥 ${user.username} joined conversation: ${conversationId}`,
+      {
+        room,
+        socketId: client.id,
+        totalClientsInRoom: roomClients.length,
+        clientIds: roomClients.map((s) => s.id),
+      },
+    );
   }
 
   @UseGuards(WsJwtGuard)

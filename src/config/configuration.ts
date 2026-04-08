@@ -3,10 +3,9 @@ export default () => ({
     url: process.env.DATABASE_URL,
     directUrl: process.env.DIRECT_URL,
   },
-  supabase: {
-    url: process.env.SUPABASE_URL,
-    anonKey: process.env.SUPABASE_ANON_KEY,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   },
   jwt: {
     secret: process.env.JWT_SECRET,

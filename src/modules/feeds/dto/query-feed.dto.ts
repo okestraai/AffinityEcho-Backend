@@ -100,7 +100,8 @@ export class QueryFeedDto {
   limit?: number;
 
   @ApiProperty({
-    description: 'Content IDs already seen by the client (suppressed in ranking, not permanently hidden)',
+    description:
+      'Content IDs already seen by the client (suppressed in ranking, not permanently hidden)',
     required: false,
     type: [String],
   })

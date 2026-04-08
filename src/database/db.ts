@@ -1,9 +1,9 @@
-import postgres from 'postgres'
+import postgres from 'postgres';
 
-const connectionString = process.env.DATABASE_URL
+const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  throw new Error('Environment variable DATABASE_URL is not set')
+  throw new Error('Environment variable DATABASE_URL is not set');
 }
-const sql = postgres(connectionString)
+const sql = postgres(connectionString);
 
-export default sql
+export default sql;

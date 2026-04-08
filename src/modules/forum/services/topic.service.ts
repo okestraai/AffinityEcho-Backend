@@ -74,7 +74,10 @@ export class TopicService {
       } catch {}
     }
 
-    if (profile.company_alumni_encrypted && Array.isArray(profile.company_alumni_encrypted)) {
+    if (
+      profile.company_alumni_encrypted &&
+      Array.isArray(profile.company_alumni_encrypted)
+    ) {
       for (const alumniEncrypted of profile.company_alumni_encrypted) {
         try {
           companies.push(this.encryption.decrypt(alumniEncrypted));
@@ -241,7 +244,9 @@ export class TopicService {
       const userCompanyList = await this.getUserCompanyList(userId);
       if (userCompanyList.length > 0) {
         // Show global topics OR topics from user's companies (current + alumni)
-        query = query.or(`scope.eq.global,company_name.in.(${userCompanyList.map(c => `"${c}"`).join(',')})`);
+        query = query.or(
+          `scope.eq.global,company_name.in.(${userCompanyList.map((c) => `"${c}"`).join(',')})`,
+        );
       }
     }
 
@@ -259,7 +264,10 @@ export class TopicService {
         break;
       case 'trending':
         query = query
-          .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+          .gte(
+            'created_at',
+            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          )
           .order('comments_count', { ascending: false });
         break;
       case 'relevant':
@@ -303,7 +311,7 @@ export class TopicService {
 
     // Fetch user reactions if logged in
     if (userId && topicsWithReactions.length > 0) {
-      const topicIds = topicsWithReactions.map((t) => t.id);
+      const topicIds = topicsWithReactions.map((t: any) => t.id);
 
       const { data: userReactions } = await this.admin
         .from('topic_reactions')
@@ -399,7 +407,7 @@ export class TopicService {
           : new BadRequestException('Failed to fetch topic');
       }
 
-      let userReactions: UserReaction = {
+      const userReactions: UserReaction = {
         seen: false,
         validated: false,
         inspired: false,
@@ -479,7 +487,7 @@ export class TopicService {
           .eq('id', topicId)
           .single();
 
-        const currentCount = (currentTopic as any)?.[reactionField] || 0;
+        const currentCount = currentTopic?.[reactionField] || 0;
         const newCount = Math.max(0, currentCount - 1);
 
         await this.safeRpc(
@@ -552,7 +560,7 @@ export class TopicService {
         .eq('id', topicId)
         .single();
 
-      const currentCount = (currentTopic as any)?.[reactionField] || 0;
+      const currentCount = currentTopic?.[reactionField] || 0;
       const newCount = currentCount + 1;
 
       await this.safeRpc(
@@ -662,26 +670,46 @@ export class TopicService {
 
       const skip = (page - 1) * limit;
 
-      // Get user's company list (current + alumni) for expanded filtering
-      const userCompanyList = await this.getUserCompanyList(userId);
-      const companyNames = companyName
-        ? [companyName]
-        : userCompanyList;
+      // Fetch company list + forums in PARALLEL
+      const [userCompanyList, forumsResult] = await Promise.all([
+        this.getUserCompanyList(userId),
+        // We'll re-query forums after we have companyNames if needed
+        companyName
+          ? this.admin
+              .from('forums')
+              .select('id')
+              .or(`is_global.eq.true,company_name.in.("${companyName}")`)
+              .then((r: any) => (category ? { ...r } : r)) // category filter applied below
+          : Promise.resolve(null),
+      ]);
 
-      // Get relevant forum IDs
-      const companyFilter = companyNames.length > 0
-        ? `,company_name.in.(${companyNames.map(c => `"${c}"`).join(',')})`
-        : '';
-      let forumQuery = this.admin
-        .from('forums')
-        .select('id')
-        .or(`is_global.eq.true${companyFilter}`);
+      const companyNames = companyName ? [companyName] : userCompanyList;
 
-      if (category) {
-        forumQuery = forumQuery.eq('category', category);
+      // If we didn't have companyName upfront, query forums now with the resolved list
+      let forumsData = forumsResult;
+      if (!forumsData) {
+        const companyFilter =
+          companyNames.length > 0
+            ? `,company_name.in.(${companyNames.map((c: any) => `"${c}"`).join(',')})`
+            : '';
+        let forumQuery = this.admin
+          .from('forums')
+          .select('id')
+          .or(`is_global.eq.true${companyFilter}`);
+        if (category) forumQuery = forumQuery.eq('category', category);
+        forumsData = await forumQuery;
+      } else if (category) {
+        // Apply category filter to already-fetched forums
+        const companyFilter = `,company_name.in.("${companyName}")`;
+        const forumQuery = this.admin
+          .from('forums')
+          .select('id')
+          .or(`is_global.eq.true${companyFilter}`)
+          .eq('category', category);
+        forumsData = await forumQuery;
       }
 
-      const { data: forums, error: forumsError } = await forumQuery;
+      const { data: forums, error: forumsError } = forumsData;
 
       if (forumsError) {
         logger.error('Failed to fetch forums for filtering', {
@@ -700,7 +728,7 @@ export class TopicService {
         };
       }
 
-      const forumIds = forums.map((f) => f.id);
+      const forumIds = forums.map((f: any) => f.id);
 
       // Query topics with optimized selection
       let query = this.admin
@@ -766,7 +794,7 @@ export class TopicService {
       // Get user reactions in batch
       let userReactions: UserReactionsMap = {};
       if (userId && topics && topics.length > 0) {
-        const topicIds = topics.map((t) => t.id);
+        const topicIds = topics.map((t: any) => t.id);
         const { data: reactions } = await this.admin
           .from('topic_reactions')
           .select('topic_id, reaction_type')
@@ -798,7 +826,7 @@ export class TopicService {
         );
       }
 
-      const formattedTopics = (topics || []).map((topic) => {
+      const formattedTopics = (topics || []).map((topic: any) => {
         const reactions = userReactions[topic.id] || {
           seen: false,
           validated: false,
@@ -859,9 +887,14 @@ export class TopicService {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const { data: topics, error, count } = await this.admin
+    const {
+      data: topics,
+      error,
+      count,
+    } = await this.admin
       .from('forum_topics')
-      .select(`
+      .select(
+        `
         id, user_id, forum_id, title, content, is_anonymous, tags, scope,
         company_name, views_count, comments_count,
         reaction_seen_count, reaction_validated_count,
@@ -869,7 +902,9 @@ export class TopicService {
         is_pinned, is_locked, created_at, updated_at,
         forum:forums(id, name),
         user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)
-      `, { count: 'exact' })
+      `,
+        { count: 'exact' },
+      )
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -896,7 +931,11 @@ export class TopicService {
     };
   }
 
-  async getBookmarkedTopics(userId: string, page: number = 1, limit: number = 20) {
+  async getBookmarkedTopics(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -923,9 +962,14 @@ export class TopicService {
       };
     }
 
-    const { data: topics, error, count } = await this.admin
+    const {
+      data: topics,
+      error,
+      count,
+    } = await this.admin
       .from('forum_topics')
-      .select(`
+      .select(
+        `
         id, user_id, forum_id, title, content, is_anonymous, tags, scope,
         company_name, views_count, comments_count,
         reaction_seen_count, reaction_validated_count,
@@ -933,7 +977,9 @@ export class TopicService {
         is_pinned, is_locked, created_at, updated_at,
         forum:forums(id, name),
         user_profile:user_id!inner(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)
-      `, { count: 'exact' })
+      `,
+        { count: 'exact' },
+      )
       .in('id', topicIds)
       .range(from, to);
 
@@ -982,14 +1028,22 @@ export class TopicService {
 
     if (existing) {
       await this.admin.from('feed_bookmarks').delete().eq('id', existing.id);
-      return { success: true, data: { bookmarked: false }, message: 'Bookmark removed' };
+      return {
+        success: true,
+        data: { bookmarked: false },
+        message: 'Bookmark removed',
+      };
     } else {
       await this.admin.from('feed_bookmarks').insert({
         user_id: userId,
         content_type: 'topic',
         content_id: topicId,
       });
-      return { success: true, data: { bookmarked: true }, message: 'Topic bookmarked' };
+      return {
+        success: true,
+        data: { bookmarked: true },
+        message: 'Topic bookmarked',
+      };
     }
   }
 
@@ -997,16 +1051,26 @@ export class TopicService {
    * Check identity reveals and add display_name to user_profile objects.
    * Items must have a user_profile object with id, username, first_name_encrypted, last_name_encrypted.
    */
-  private async applyIdentityReveals(userId: string, items: any[]): Promise<void> {
+  private async applyIdentityReveals(
+    userId: string,
+    items: any[],
+  ): Promise<void> {
     // Collect all other author IDs (self always gets real name)
-    const otherAuthorIds = [...new Set(
-      items
-        .filter((item) => item.user_profile?.id && item.user_profile.id !== userId)
-        .map((item) => item.user_profile.id),
-    )];
+    const otherAuthorIds = [
+      ...new Set(
+        items
+          .filter(
+            (item) => item.user_profile?.id && item.user_profile.id !== userId,
+          )
+          .map((item) => item.user_profile.id),
+      ),
+    ];
 
     // Get revealed IDs using shared utility
-    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      userId,
+      otherAuthorIds,
+    );
 
     items.forEach((item) => {
       if (!item.user_profile) return;
@@ -1014,7 +1078,9 @@ export class TopicService {
       const isOwnContent = item.user_profile.id === userId;
       const isRevealed = revealedIds.has(item.user_profile.id);
 
-      let displayName = item.is_anonymous ? 'Anonymous User' : item.user_profile.username;
+      let displayName = item.is_anonymous
+        ? 'Anonymous User'
+        : item.user_profile.username;
 
       // Don't reveal real name on anonymous content
       if (!item.is_anonymous && (isOwnContent || isRevealed)) {

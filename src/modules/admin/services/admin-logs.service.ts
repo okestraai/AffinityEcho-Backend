@@ -13,11 +13,22 @@ export class AdminLogsService {
   }
 
   async getLogs(query: {
-    page?: string; limit?: string; search?: string;
-    adminId?: string; action?: string; targetType?: string;
-    from?: string; to?: string; sortDir?: string;
+    page?: string;
+    limit?: string;
+    search?: string;
+    adminId?: string;
+    action?: string;
+    targetType?: string;
+    from?: string;
+    to?: string;
+    sortDir?: string;
   }) {
-    const { page, pageSize, offset } = parsePagination(query.page, query.limit, 10, 200);
+    const { page, pageSize, offset } = parsePagination(
+      query.page,
+      query.limit,
+      10,
+      200,
+    );
     const ascending = query.sortDir === 'asc';
 
     let q = this.admin
@@ -36,7 +47,9 @@ export class AdminLogsService {
     if (query.from) q = q.gte('created_at', query.from);
     if (query.to) q = q.lte('created_at', query.to);
     if (query.search) {
-      q = q.or(`admin_username.ilike.%${query.search}%,action.ilike.%${query.search}%,reason.ilike.%${query.search}%`);
+      q = q.or(
+        `admin_username.ilike.%${query.search}%,action.ilike.%${query.search}%,reason.ilike.%${query.search}%`,
+      );
     }
 
     const { data, error, count } = await q;
@@ -50,12 +63,21 @@ export class AdminLogsService {
   }
 
   async exportLogs(
-    query: { search?: string; adminId?: string; action?: string; targetType?: string; from?: string; to?: string },
+    query: {
+      search?: string;
+      adminId?: string;
+      action?: string;
+      targetType?: string;
+      from?: string;
+      to?: string;
+    },
     format: 'csv' | 'pdf',
   ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     let q = this.admin
       .from('admin_logs')
-      .select('id, action, admin_username, target_type, target_id, reason, ip_address, created_at')
+      .select(
+        'id, action, admin_username, target_type, target_id, reason, ip_address, created_at',
+      )
       .order('created_at', { ascending: false });
 
     if (query.adminId) q = q.eq('admin_id', query.adminId);
@@ -64,7 +86,9 @@ export class AdminLogsService {
     if (query.from) q = q.gte('created_at', query.from);
     if (query.to) q = q.lte('created_at', query.to);
     if (query.search) {
-      q = q.or(`admin_username.ilike.%${query.search}%,action.ilike.%${query.search}%,reason.ilike.%${query.search}%`);
+      q = q.or(
+        `admin_username.ilike.%${query.search}%,action.ilike.%${query.search}%,reason.ilike.%${query.search}%`,
+      );
     }
 
     const { data, error } = await q;
@@ -74,13 +98,30 @@ export class AdminLogsService {
     const date = new Date().toISOString().split('T')[0];
 
     if (format === 'csv') {
-      const headers = ['ID', 'Action', 'Admin', 'Target Type', 'Target ID', 'Reason', 'IP Address', 'Created At'];
+      const headers = [
+        'ID',
+        'Action',
+        'Admin',
+        'Target Type',
+        'Target ID',
+        'Reason',
+        'IP Address',
+        'Created At',
+      ];
       const rows = logs.map((l: any) => [
-        l.id, l.action, l.admin_username || '-', l.target_type || '-',
-        l.target_id || '-', (l.reason || '').replace(/"/g, '""'),
-        l.ip_address || '-', l.created_at,
+        l.id,
+        l.action,
+        l.admin_username || '-',
+        l.target_type || '-',
+        l.target_id || '-',
+        (l.reason || '').replace(/"/g, '""'),
+        l.ip_address || '-',
+        l.created_at,
       ]);
-      const csv = [headers.join(','), ...rows.map((r: any[]) => r.map((c) => `"${c}"`).join(','))].join('\n');
+      const csv = [
+        headers.join(','),
+        ...rows.map((r: any[]) => r.map((c) => `"${c}"`).join(',')),
+      ].join('\n');
       return {
         buffer: Buffer.from('\uFEFF' + csv, 'utf-8'),
         filename: `audit-logs-${date}.csv`,
@@ -89,7 +130,16 @@ export class AdminLogsService {
     }
 
     const buffer = await new Promise<Buffer>((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, info: { Title: 'Audit Logs Export', Author: 'AffinityEcho Admin', CreationDate: new Date() } });
+      const doc = new PDFDocument({
+        size: 'A4',
+        layout: 'landscape',
+        margin: 40,
+        info: {
+          Title: 'Audit Logs Export',
+          Author: 'AffinityEcho Admin',
+          CreationDate: new Date(),
+        },
+      });
       const buffers: Buffer[] = [];
       doc.on('data', (c: Buffer) => buffers.push(c));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -99,9 +149,20 @@ export class AdminLogsService {
       const m = 40;
 
       doc.rect(0, 0, pw, 60).fill('#374151');
-      doc.fontSize(16).font('Helvetica-Bold').fillColor('#ffffff').text('Audit Logs Export', m, 18);
-      doc.fontSize(9).font('Helvetica').fillColor('#d1d5db')
-        .text(`Generated: ${new Date().toLocaleString()}  |  Total: ${logs.length} entries`, m, 40);
+      doc
+        .fontSize(16)
+        .font('Helvetica-Bold')
+        .fillColor('#ffffff')
+        .text('Audit Logs Export', m, 18);
+      doc
+        .fontSize(9)
+        .font('Helvetica')
+        .fillColor('#d1d5db')
+        .text(
+          `Generated: ${new Date().toLocaleString()}  |  Total: ${logs.length} entries`,
+          m,
+          40,
+        );
 
       let y = 80;
       const cols = [
@@ -117,28 +178,59 @@ export class AdminLogsService {
         doc.rect(m, y, pw - 2 * m, 18).fill('#1f2937');
         let x = m;
         doc.fontSize(8).font('Helvetica-Bold').fillColor('#ffffff');
-        cols.forEach((col) => { doc.text(col.label, x + 4, y + 5, { width: col.w - 8 }); x += col.w; });
+        cols.forEach((col) => {
+          doc.text(col.label, x + 4, y + 5, { width: col.w - 8 });
+          x += col.w;
+        });
         y += 18;
       };
       drawHeader();
 
       logs.forEach((l: any, i: number) => {
-        if (y + 20 > doc.page.height - 40) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; drawHeader(); }
-        doc.rect(m, y, pw - 2 * m, 20).fill(i % 2 === 0 ? '#ffffff' : '#f9fafb');
+        if (y + 20 > doc.page.height - 40) {
+          doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+          y = 40;
+          drawHeader();
+        }
+        doc
+          .rect(m, y, pw - 2 * m, 20)
+          .fill(i % 2 === 0 ? '#ffffff' : '#f9fafb');
         let x = m;
         doc.fontSize(7).fillColor('#1f2937');
-        doc.font('Helvetica-Bold').text(l.action || '-', x + 4, y + 6, { width: cols[0].w - 8 }); x += cols[0].w;
-        doc.font('Helvetica').text(l.admin_username || '-', x + 4, y + 6, { width: cols[1].w - 8 }); x += cols[1].w;
-        doc.text(l.target_type || '-', x + 4, y + 6, { width: cols[2].w - 8 }); x += cols[2].w;
-        doc.fontSize(6).text(l.target_id || '-', x + 4, y + 7, { width: cols[3].w - 8 }); x += cols[3].w;
-        doc.fontSize(7).text(l.ip_address || '-', x + 4, y + 6, { width: cols[4].w - 8 }); x += cols[4].w;
-        doc.text(l.created_at ? new Date(l.created_at).toLocaleDateString() : '-', x + 4, y + 6, { width: cols[5].w - 8 });
+        doc
+          .font('Helvetica-Bold')
+          .text(l.action || '-', x + 4, y + 6, { width: cols[0].w - 8 });
+        x += cols[0].w;
+        doc.font('Helvetica').text(l.admin_username || '-', x + 4, y + 6, {
+          width: cols[1].w - 8,
+        });
+        x += cols[1].w;
+        doc.text(l.target_type || '-', x + 4, y + 6, { width: cols[2].w - 8 });
+        x += cols[2].w;
+        doc
+          .fontSize(6)
+          .text(l.target_id || '-', x + 4, y + 7, { width: cols[3].w - 8 });
+        x += cols[3].w;
+        doc
+          .fontSize(7)
+          .text(l.ip_address || '-', x + 4, y + 6, { width: cols[4].w - 8 });
+        x += cols[4].w;
+        doc.text(
+          l.created_at ? new Date(l.created_at).toLocaleDateString() : '-',
+          x + 4,
+          y + 6,
+          { width: cols[5].w - 8 },
+        );
         y += 20;
       });
 
       doc.end();
     });
 
-    return { buffer, filename: `audit-logs-${date}.pdf`, contentType: 'application/pdf' };
+    return {
+      buffer,
+      filename: `audit-logs-${date}.pdf`,
+      contentType: 'application/pdf',
+    };
   }
 }

@@ -121,8 +121,7 @@ export class OkestraService {
         contentId,
         userId,
       );
-      const ttl =
-        contentType === 'topic' ? this.TOPIC_TTL : this.NOOK_TTL;
+      const ttl = contentType === 'topic' ? this.TOPIC_TTL : this.NOOK_TTL;
 
       const cachedData: CachedInsights = {
         insights,
@@ -187,10 +186,7 @@ export class OkestraService {
     }
   }
 
-  private getCacheKey(
-    contentType: ContentType,
-    contentId: string,
-  ): string {
+  private getCacheKey(contentType: ContentType, contentId: string): string {
     return `okestra:insights:${contentType}:${contentId}`;
   }
 }

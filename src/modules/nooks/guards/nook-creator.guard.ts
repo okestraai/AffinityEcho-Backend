@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 
@@ -29,7 +34,9 @@ export class NookCreatorGuard implements CanActivate {
 
     if (!nook) {
       // TODO: Add admin check here
-      throw new ForbiddenException('Only creator or admin can perform this action');
+      throw new ForbiddenException(
+        'Only creator or admin can perform this action',
+      );
     }
 
     return true;

@@ -51,7 +51,9 @@ export class FeedPostsService {
 
         if (userProfile?.company_encrypted) {
           try {
-            insertData.company_name = this.encryption.decrypt(userProfile.company_encrypted);
+            insertData.company_name = this.encryption.decrypt(
+              userProfile.company_encrypted,
+            );
           } catch (e) {
             logger.warn('Failed to decrypt company for post stamp', { userId });
           }
@@ -114,7 +116,14 @@ export class FeedPostsService {
 
     try {
       // Fetch post + user engagement data in parallel
-      const [postResult, likeResult, bookmarkResult, shareResult, reactionsResult, allReactionsResult] = await Promise.all([
+      const [
+        postResult,
+        likeResult,
+        bookmarkResult,
+        shareResult,
+        reactionsResult,
+        allReactionsResult,
+      ] = await Promise.all([
         this.admin
           .from('feed_posts')
           .select(
@@ -177,8 +186,14 @@ export class FeedPostsService {
       const formatted = this.formatPost(post);
 
       // Engagement status
-      const userReactionTypes = new Set((reactionsResult.data || []).map((r: any) => r.reaction_type));
-      const reactionCounts: Record<string, number> = { heard: 0, validated: 0, inspired: 0 };
+      const userReactionTypes = new Set(
+        (reactionsResult.data || []).map((r: any) => r.reaction_type),
+      );
+      const reactionCounts: Record<string, number> = {
+        heard: 0,
+        validated: 0,
+        inspired: 0,
+      };
       (allReactionsResult.data || []).forEach((r: any) => {
         if (reactionCounts[r.reaction_type] !== undefined) {
           reactionCounts[r.reaction_type]++;
@@ -189,7 +204,10 @@ export class FeedPostsService {
       const isOwn = post.user_id === userId;
       let shouldReveal = isOwn;
       if (!isOwn) {
-        const revealedIds = await this.identityReveal.getRevealedUserIds(userId, [post.user_id]);
+        const revealedIds = await this.identityReveal.getRevealedUserIds(
+          userId,
+          [post.user_id],
+        );
         shouldReveal = revealedIds.has(post.user_id);
       }
       if (shouldReveal) {
@@ -222,13 +240,22 @@ export class FeedPostsService {
     }
   }
 
-  async getUserPosts(userId: string, page: number = 1, limit: number = 20, requestingUserId?: string) {
+  async getUserPosts(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    requestingUserId?: string,
+  ) {
     logger.info('Fetching user posts', { userId, page, limit });
 
     const offset = (page - 1) * limit;
 
     try {
-      const { data: posts, error, count } = await this.admin
+      const {
+        data: posts,
+        error,
+        count,
+      } = await this.admin
         .from('feed_posts')
         .select(
           `
@@ -255,7 +282,7 @@ export class FeedPostsService {
         throw new BadRequestException('Failed to fetch posts');
       }
 
-      const formatted = (posts || []).map((p) => this.formatPost(p));
+      const formatted = (posts || []).map((p: any) => this.formatPost(p));
 
       // Apply identity reveal for the author
       const viewerId = requestingUserId || userId;
@@ -264,7 +291,9 @@ export class FeedPostsService {
       if (formatted.length > 0) {
         let revealedIds = new Set<string>();
         if (!isOwnPosts) {
-          revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, [userId]);
+          revealedIds = await this.identityReveal.getRevealedUserIds(viewerId, [
+            userId,
+          ]);
         }
 
         const shouldReveal = isOwnPosts || revealedIds.has(userId);
@@ -299,7 +328,11 @@ export class FeedPostsService {
     }
   }
 
-  async updatePost(postId: string, userId: string, dto: Partial<CreatePostDto>) {
+  async updatePost(
+    postId: string,
+    userId: string,
+    dto: Partial<CreatePostDto>,
+  ) {
     logger.info('Updating post', { postId, userId });
 
     try {
@@ -523,9 +556,12 @@ export class FeedPostsService {
       );
 
       // Increment view count
-      const { error: rpcError } = await this.admin.rpc('increment_feed_post_views', {
-        post_id: postId,
-      });
+      const { error: rpcError } = await this.admin.rpc(
+        'increment_feed_post_views',
+        {
+          post_id: postId,
+        },
+      );
 
       if (rpcError) {
         // Fallback if RPC doesn't exist
@@ -596,7 +632,9 @@ export class FeedPostsService {
           : post.user_profile?.username || 'Unknown',
         bio: post.is_anonymous ? null : post.user_profile?.bio || null,
         avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || 'User',
-        is_company_verified: post.is_anonymous ? false : post.user_profile?.is_company_verified || false,
+        is_company_verified: post.is_anonymous
+          ? false
+          : post.user_profile?.is_company_verified || false,
       },
     };
   }

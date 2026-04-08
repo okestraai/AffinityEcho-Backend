@@ -18,7 +18,12 @@ jest.mock('../../../database/supabase.client', () => ({
 
 jest.mock('../../../common/utils/logger.util', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 describe('MentorshipRelationshipsService', () => {
@@ -35,7 +40,7 @@ describe('MentorshipRelationshipsService', () => {
 
     mockConfig = createMockConfigService();
 
-    service = new MentorshipRelationshipsService(mockConfig as any);
+    service = new MentorshipRelationshipsService(mockConfig);
   });
 
   describe('acceptRelationship (updateRelationshipStatus with accept)', () => {
@@ -109,7 +114,11 @@ describe('MentorshipRelationshipsService', () => {
           mentor_id: 'mentor-789',
           mentee_id: userId,
           status: 'pending',
-          mentor: { id: 'mentor-789', username: 'othermentor', avatar: 'c.png' },
+          mentor: {
+            id: 'mentor-789',
+            username: 'othermentor',
+            avatar: 'c.png',
+          },
           mentee: { id: userId, username: 'mentoruser', avatar: 'a.png' },
         },
       ];
@@ -250,9 +259,9 @@ describe('MentorshipRelationshipsService', () => {
       });
       mockClient.from.mockReturnValueOnce(chain);
 
-      await expect(
-        service.getRelationship(relationshipId),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getRelationship(relationshipId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

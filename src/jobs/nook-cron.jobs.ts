@@ -22,7 +22,10 @@ export class NookCronJobs {
       .lt('expires_at', now);
 
     if (error) {
-      logger.error('Error fetching expired nooks', { module: 'NookCron', error: error.message });
+      logger.error('Error fetching expired nooks', {
+        module: 'NookCron',
+        error: error.message,
+      });
       return;
     }
 
@@ -33,9 +36,14 @@ export class NookCronJobs {
         .lt('expires_at', now);
 
       if (deleteError) {
-        logger.error('Error deleting expired nooks', { module: 'NookCron', error: deleteError.message });
+        logger.error('Error deleting expired nooks', {
+          module: 'NookCron',
+          error: deleteError.message,
+        });
       } else {
-        logger.info(`Deleted ${expiredNooks.length} expired nooks`, { module: 'NookCron' });
+        logger.info(`Deleted ${expiredNooks.length} expired nooks`, {
+          module: 'NookCron',
+        });
       }
     }
   }
@@ -51,7 +59,10 @@ export class NookCronJobs {
       .gt('expires_at', now);
 
     if (error) {
-      logger.error('Error fetching nooks for temperature update', { module: 'NookCron', error: error.message });
+      logger.error('Error fetching nooks for temperature update', {
+        module: 'NookCron',
+        error: error.message,
+      });
       return;
     }
 

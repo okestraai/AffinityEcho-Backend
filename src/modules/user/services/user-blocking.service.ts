@@ -154,7 +154,11 @@ export class UserBlockingService {
     const offset = (page - 1) * limit;
 
     try {
-      const { data: blocks, error, count } = await this.admin
+      const {
+        data: blocks,
+        error,
+        count,
+      } = await this.admin
         .from('user_blocks')
         .select(
           `

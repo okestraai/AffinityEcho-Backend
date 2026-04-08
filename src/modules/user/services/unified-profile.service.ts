@@ -73,7 +73,10 @@ export class UnifiedProfileService {
         .single();
 
       if (error || !profile) {
-        this.logger.warn(`Profile not found for user ${userId}`, error?.message);
+        this.logger.warn(
+          `Profile not found for user ${userId}`,
+          error?.message,
+        );
         throw new NotFoundException('Profile not found');
       }
 
@@ -99,7 +102,9 @@ export class UnifiedProfileService {
             career_level: this.decryptField(profile.career_level_encrypted),
             race: this.decryptField(profile.race_encrypted),
             gender: this.decryptField(profile.gender_encrypted),
-            affinity_tags: this.decryptAffinityTags(profile.affinity_tags_encrypted),
+            affinity_tags: this.decryptAffinityTags(
+              profile.affinity_tags_encrypted,
+            ),
           },
           mentor: profile.is_active_mentor
             ? {
@@ -147,10 +152,14 @@ export class UnifiedProfileService {
       // ---- BASIC SECTION ----
       if (dto.basic) {
         if (dto.basic.first_name !== undefined) {
-          updateData.first_name_encrypted = this.encryption.encrypt(dto.basic.first_name);
+          updateData.first_name_encrypted = this.encryption.encrypt(
+            dto.basic.first_name,
+          );
         }
         if (dto.basic.last_name !== undefined) {
-          updateData.last_name_encrypted = this.encryption.encrypt(dto.basic.last_name);
+          updateData.last_name_encrypted = this.encryption.encrypt(
+            dto.basic.last_name,
+          );
         }
         if (dto.basic.username !== undefined) {
           // Validate username uniqueness
@@ -165,12 +174,17 @@ export class UnifiedProfileService {
           }
           updateData.username = dto.basic.username;
         }
-        if (dto.basic.avatar !== undefined) updateData.avatar = dto.basic.avatar;
+        if (dto.basic.avatar !== undefined)
+          updateData.avatar = dto.basic.avatar;
         if (dto.basic.bio !== undefined) updateData.bio = dto.basic.bio;
-        if (dto.basic.job_title !== undefined) updateData.job_title = dto.basic.job_title;
-        if (dto.basic.location !== undefined) updateData.location = dto.basic.location;
-        if (dto.basic.years_experience !== undefined) updateData.years_experience = dto.basic.years_experience;
-        if (dto.basic.skills !== undefined) updateData.skills = dto.basic.skills;
+        if (dto.basic.job_title !== undefined)
+          updateData.job_title = dto.basic.job_title;
+        if (dto.basic.location !== undefined)
+          updateData.location = dto.basic.location;
+        if (dto.basic.years_experience !== undefined)
+          updateData.years_experience = dto.basic.years_experience;
+        if (dto.basic.skills !== undefined)
+          updateData.skills = dto.basic.skills;
       }
 
       // ---- COMPANY SECTION (with alumni logic) ----
@@ -183,12 +197,18 @@ export class UnifiedProfileService {
             .eq('id', userId)
             .single();
 
-          const currentCompany = this.decryptField(currentProfile?.company_encrypted);
+          const currentCompany = this.decryptField(
+            currentProfile?.company_encrypted,
+          );
           const newCompany = dto.company.company_name;
 
-          if (currentCompany && currentCompany.toLowerCase() !== newCompany.toLowerCase()) {
+          if (
+            currentCompany &&
+            currentCompany.toLowerCase() !== newCompany.toLowerCase()
+          ) {
             // Move old company to alumni
-            const existingAlumni: string[] = currentProfile?.company_alumni_encrypted || [];
+            const existingAlumni: string[] =
+              currentProfile?.company_alumni_encrypted || [];
 
             // Decrypt all alumni to check for duplicates
             const decryptedAlumni = existingAlumni
@@ -197,11 +217,16 @@ export class UnifiedProfileService {
 
             // Remove new company from alumni if it was there (user returning to old company)
             const filteredAlumni = existingAlumni.filter(
-              (_, i) => decryptedAlumni[i]?.toLowerCase() !== newCompany.toLowerCase(),
+              (_, i) =>
+                decryptedAlumni[i]?.toLowerCase() !== newCompany.toLowerCase(),
             );
 
             // Add old company to alumni if not already there
-            if (!decryptedAlumni.some((a) => a.toLowerCase() === currentCompany.toLowerCase())) {
+            if (
+              !decryptedAlumni.some(
+                (a) => a.toLowerCase() === currentCompany.toLowerCase(),
+              )
+            ) {
               filteredAlumni.push(this.encryption.encrypt(currentCompany));
             }
 
@@ -226,13 +251,19 @@ export class UnifiedProfileService {
       // ---- IDENTITY SECTION ----
       if (dto.identity) {
         if (dto.identity.career_level !== undefined) {
-          updateData.career_level_encrypted = this.encryption.encrypt(dto.identity.career_level);
+          updateData.career_level_encrypted = this.encryption.encrypt(
+            dto.identity.career_level,
+          );
         }
         if (dto.identity.race !== undefined) {
-          updateData.race_encrypted = this.encryption.encrypt(dto.identity.race);
+          updateData.race_encrypted = this.encryption.encrypt(
+            dto.identity.race,
+          );
         }
         if (dto.identity.gender !== undefined) {
-          updateData.gender_encrypted = this.encryption.encrypt(dto.identity.gender);
+          updateData.gender_encrypted = this.encryption.encrypt(
+            dto.identity.gender,
+          );
         }
         if (dto.identity.affinity_tags !== undefined) {
           updateData.affinity_tags_encrypted = this.encryption.encrypt(
@@ -243,28 +274,46 @@ export class UnifiedProfileService {
 
       // ---- MENTOR SECTION ----
       if (dto.mentor) {
-        if (dto.mentor.mentor_bio !== undefined) updateData.mentor_bio = dto.mentor.mentor_bio;
-        if (dto.mentor.expertise !== undefined) updateData.mentor_expertise = dto.mentor.expertise;
-        if (dto.mentor.industries !== undefined) updateData.mentor_industries = dto.mentor.industries;
-        if (dto.mentor.availability !== undefined) updateData.mentor_availability = dto.mentor.availability;
-        if (dto.mentor.response_time !== undefined) updateData.mentor_response_time = dto.mentor.response_time;
-        if (dto.mentor.mentoring_style !== undefined) updateData.mentor_style = dto.mentor.mentoring_style;
-        if (dto.mentor.languages !== undefined) updateData.mentor_languages = dto.mentor.languages;
-        if (dto.mentor.hourly_rate !== undefined) updateData.mentor_hourly_rate = dto.mentor.hourly_rate;
+        if (dto.mentor.mentor_bio !== undefined)
+          updateData.mentor_bio = dto.mentor.mentor_bio;
+        if (dto.mentor.expertise !== undefined)
+          updateData.mentor_expertise = dto.mentor.expertise;
+        if (dto.mentor.industries !== undefined)
+          updateData.mentor_industries = dto.mentor.industries;
+        if (dto.mentor.availability !== undefined)
+          updateData.mentor_availability = dto.mentor.availability;
+        if (dto.mentor.response_time !== undefined)
+          updateData.mentor_response_time = dto.mentor.response_time;
+        if (dto.mentor.mentoring_style !== undefined)
+          updateData.mentor_style = dto.mentor.mentoring_style;
+        if (dto.mentor.languages !== undefined)
+          updateData.mentor_languages = dto.mentor.languages;
+        if (dto.mentor.hourly_rate !== undefined)
+          updateData.mentor_hourly_rate = dto.mentor.hourly_rate;
       }
 
       // ---- MENTEE SECTION ----
       if (dto.mentee) {
-        if (dto.mentee.mentee_bio !== undefined) updateData.mentee_bio = dto.mentee.mentee_bio;
-        if (dto.mentee.goals !== undefined) updateData.mentee_goals = dto.mentee.goals;
-        if (dto.mentee.interests !== undefined) updateData.mentee_interests = dto.mentee.interests;
-        if (dto.mentee.industries !== undefined) updateData.mentee_industries = dto.mentee.industries;
-        if (dto.mentee.availability !== undefined) updateData.mentee_availability = dto.mentee.availability;
-        if (dto.mentee.urgency !== undefined) updateData.mentee_urgency = dto.mentee.urgency;
-        if (dto.mentee.topic !== undefined) updateData.mentee_topic = dto.mentee.topic;
-        if (dto.mentee.mentored_style !== undefined) updateData.mentored_style = dto.mentee.mentored_style;
-        if (dto.mentee.languages !== undefined) updateData.mentee_languages = dto.mentee.languages;
-        if (dto.mentee.communication_method !== undefined) updateData.communication_method = dto.mentee.communication_method;
+        if (dto.mentee.mentee_bio !== undefined)
+          updateData.mentee_bio = dto.mentee.mentee_bio;
+        if (dto.mentee.goals !== undefined)
+          updateData.mentee_goals = dto.mentee.goals;
+        if (dto.mentee.interests !== undefined)
+          updateData.mentee_interests = dto.mentee.interests;
+        if (dto.mentee.industries !== undefined)
+          updateData.mentee_industries = dto.mentee.industries;
+        if (dto.mentee.availability !== undefined)
+          updateData.mentee_availability = dto.mentee.availability;
+        if (dto.mentee.urgency !== undefined)
+          updateData.mentee_urgency = dto.mentee.urgency;
+        if (dto.mentee.topic !== undefined)
+          updateData.mentee_topic = dto.mentee.topic;
+        if (dto.mentee.mentored_style !== undefined)
+          updateData.mentored_style = dto.mentee.mentored_style;
+        if (dto.mentee.languages !== undefined)
+          updateData.mentee_languages = dto.mentee.languages;
+        if (dto.mentee.communication_method !== undefined)
+          updateData.communication_method = dto.mentee.communication_method;
       }
 
       // ---- EXECUTE UPDATE ----
@@ -280,7 +329,10 @@ export class UnifiedProfileService {
 
       return this.getEditableProfile(userId);
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
         throw error;
       }
       this.logger.error('Failed to update profile', error);

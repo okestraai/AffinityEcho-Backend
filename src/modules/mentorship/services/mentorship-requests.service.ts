@@ -680,20 +680,20 @@ export class MentorshipRequestsService {
 
       // Check if there's a pending request
       const pendingRequest = existingRequests.find(
-        (req) => req.status === 'pending',
+        (req: any) => req.status === 'pending',
       );
 
       // Check if there's an accepted/active request
       const activeRequest = existingRequests.find(
-        (req) => req.status === 'accepted',
+        (req: any) => req.status === 'accepted',
       );
 
       // Determine direction for each request
       const sentRequests = existingRequests.filter(
-        (req) => req.requester_id === currentUserId,
+        (req: any) => req.requester_id === currentUserId,
       );
       const receivedRequests = existingRequests.filter(
-        (req) => req.target_user_id === currentUserId,
+        (req: any) => req.target_user_id === currentUserId,
       );
 
       return {
@@ -704,37 +704,47 @@ export class MentorshipRequestsService {
         data: {
           latestRequest: {
             ...latestRequest,
-            direction: latestRequest.requester_id === currentUserId ? 'sent' : 'received',
+            direction:
+              latestRequest.requester_id === currentUserId
+                ? 'sent'
+                : 'received',
           },
           pendingRequest: pendingRequest
             ? {
                 ...pendingRequest,
-                direction: pendingRequest.requester_id === currentUserId ? 'sent' : 'received',
+                direction:
+                  pendingRequest.requester_id === currentUserId
+                    ? 'sent'
+                    : 'received',
               }
             : undefined,
           activeRequest: activeRequest
             ? {
                 ...activeRequest,
-                direction: activeRequest.requester_id === currentUserId ? 'sent' : 'received',
+                direction:
+                  activeRequest.requester_id === currentUserId
+                    ? 'sent'
+                    : 'received',
               }
             : undefined,
-          allRequests: existingRequests.map((req) => ({
+          allRequests: existingRequests.map((req: any) => ({
             ...req,
             direction: req.requester_id === currentUserId ? 'sent' : 'received',
           })),
           // Summary
           summary: {
             totalRequests: existingRequests.length,
-            pending: existingRequests.filter((req) => req.status === 'pending')
-              .length,
+            pending: existingRequests.filter(
+              (req: any) => req.status === 'pending',
+            ).length,
             accepted: existingRequests.filter(
-              (req) => req.status === 'accepted',
+              (req: any) => req.status === 'accepted',
             ).length,
             declined: existingRequests.filter(
-              (req) => req.status === 'declined',
+              (req: any) => req.status === 'declined',
             ).length,
             cancelled: existingRequests.filter(
-              (req) => req.status === 'cancelled',
+              (req: any) => req.status === 'cancelled',
             ).length,
           },
           // Quick access properties
@@ -1222,7 +1232,7 @@ export class MentorshipRequestsService {
       this.logger.log(`Marking all requests as read for user ${userId}`);
 
       // Find all unread requests for the user
-      let query = this.admin
+      const query = this.admin
         .from('mentorship_direct_requests')
         .select(
           'id, requester_id, target_user_id, is_read_by_requester, is_read_by_target',
@@ -1237,7 +1247,7 @@ export class MentorshipRequestsService {
       }
 
       // Filter based on requestType and unread status
-      let requestsToMark = (requests || []).filter((request) => {
+      const requestsToMark = (requests || []).filter((request: any) => {
         if (request.requester_id === userId && !request.is_read_by_requester) {
           return requestType ? requestType === 'sent' : true;
         }
@@ -1248,7 +1258,7 @@ export class MentorshipRequestsService {
       });
 
       // Mark each request as read
-      const updatePromises = requestsToMark.map(async (request) => {
+      const updatePromises = requestsToMark.map(async (request: any) => {
         const updateData: any = {
           updated_at: new Date().toISOString(),
         };
@@ -1307,103 +1317,108 @@ export class MentorshipRequestsService {
       const metrics = {
         total: allRequests.length,
         sent: {
-          total: allRequests.filter((req) => req.requester_id === userId)
+          total: allRequests.filter((req: any) => req.requester_id === userId)
             .length,
           unread: allRequests.filter(
-            (req) => req.requester_id === userId && !req.is_read_by_requester,
+            (req: any) =>
+              req.requester_id === userId && !req.is_read_by_requester,
           ).length,
           byStatus: {
             pending: allRequests.filter(
-              (req) => req.requester_id === userId && req.status === 'pending',
+              (req: any) =>
+                req.requester_id === userId && req.status === 'pending',
             ).length,
             accepted: allRequests.filter(
-              (req) => req.requester_id === userId && req.status === 'accepted',
+              (req: any) =>
+                req.requester_id === userId && req.status === 'accepted',
             ).length,
             declined: allRequests.filter(
-              (req) => req.requester_id === userId && req.status === 'declined',
+              (req: any) =>
+                req.requester_id === userId && req.status === 'declined',
             ).length,
             cancelled: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.requester_id === userId && req.status === 'cancelled',
             ).length,
           },
           byType: {
             mentor_requests: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.requester_id === userId &&
                 req.request_type === 'mentor_request',
             ).length,
             mentee_requests: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.requester_id === userId &&
                 req.request_type === 'mentee_request',
             ).length,
           },
         },
         received: {
-          total: allRequests.filter((req) => req.target_user_id === userId)
+          total: allRequests.filter((req: any) => req.target_user_id === userId)
             .length,
           unread: allRequests.filter(
-            (req) => req.target_user_id === userId && !req.is_read_by_target,
+            (req: any) =>
+              req.target_user_id === userId && !req.is_read_by_target,
           ).length,
           byStatus: {
             pending: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.target_user_id === userId && req.status === 'pending',
             ).length,
             accepted: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.target_user_id === userId && req.status === 'accepted',
             ).length,
             declined: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.target_user_id === userId && req.status === 'declined',
             ).length,
             cancelled: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.target_user_id === userId && req.status === 'cancelled',
             ).length,
           },
           byType: {
             mentor_requests: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.target_user_id === userId &&
                 req.request_type === 'mentor_request',
             ).length,
             mentee_requests: allRequests.filter(
-              (req) =>
+              (req: any) =>
                 req.target_user_id === userId &&
                 req.request_type === 'mentee_request',
             ).length,
           },
         },
         // Quick access for badges
-        totalUnread: allRequests.filter((req) => {
+        totalUnread: allRequests.filter((req: any) => {
           if (req.requester_id === userId) return !req.is_read_by_requester;
           if (req.target_user_id === userId) return !req.is_read_by_target;
           return false;
         }).length,
         pendingReceivedUnread: allRequests.filter(
-          (req) =>
+          (req: any) =>
             req.target_user_id === userId &&
             req.status === 'pending' &&
             !req.is_read_by_target,
         ).length,
         pendingSentUnread: allRequests.filter(
-          (req) =>
+          (req: any) =>
             req.requester_id === userId &&
             req.status === 'pending' &&
             !req.is_read_by_requester,
         ).length,
         // Recent activity
         recentActivity: {
-          last7Days: allRequests.filter((req) => {
+          last7Days: allRequests.filter((req: any) => {
             const createdAt = new Date(req.created_at);
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
             return createdAt >= sevenDaysAgo;
           }).length,
-          last30Days: allRequests.filter((req) => {
+          last30Days: allRequests.filter((req: any) => {
             const createdAt = new Date(req.created_at);
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1458,24 +1473,29 @@ export class MentorshipRequestsService {
       // Count by status
       const sentStats = {
         pending:
-          sentRequests?.filter((r) => r.status === 'pending').length || 0,
+          sentRequests?.filter((r: any) => r.status === 'pending').length || 0,
         accepted:
-          sentRequests?.filter((r) => r.status === 'accepted').length || 0,
+          sentRequests?.filter((r: any) => r.status === 'accepted').length || 0,
         declined:
-          sentRequests?.filter((r) => r.status === 'declined').length || 0,
+          sentRequests?.filter((r: any) => r.status === 'declined').length || 0,
         cancelled:
-          sentRequests?.filter((r) => r.status === 'cancelled').length || 0,
+          sentRequests?.filter((r: any) => r.status === 'cancelled').length ||
+          0,
       };
 
       const receivedStats = {
         pending:
-          receivedRequests?.filter((r) => r.status === 'pending').length || 0,
+          receivedRequests?.filter((r: any) => r.status === 'pending').length ||
+          0,
         accepted:
-          receivedRequests?.filter((r) => r.status === 'accepted').length || 0,
+          receivedRequests?.filter((r: any) => r.status === 'accepted')
+            .length || 0,
         declined:
-          receivedRequests?.filter((r) => r.status === 'declined').length || 0,
+          receivedRequests?.filter((r: any) => r.status === 'declined')
+            .length || 0,
         cancelled:
-          receivedRequests?.filter((r) => r.status === 'cancelled').length || 0,
+          receivedRequests?.filter((r: any) => r.status === 'cancelled')
+            .length || 0,
       };
 
       return {
@@ -1545,13 +1565,27 @@ export class MentorshipRequestsService {
     let affinityTags: string[] = [];
 
     if (raw.company_encrypted) {
-      try { company = this.encryption.decrypt(raw.company_encrypted); } catch { /* skip */ }
+      try {
+        company = this.encryption.decrypt(raw.company_encrypted);
+      } catch {
+        /* skip */
+      }
     }
     if (raw.career_level_encrypted) {
-      try { careerLevel = this.encryption.decrypt(raw.career_level_encrypted); } catch { /* skip */ }
+      try {
+        careerLevel = this.encryption.decrypt(raw.career_level_encrypted);
+      } catch {
+        /* skip */
+      }
     }
     if (raw.affinity_tags_encrypted) {
-      try { affinityTags = JSON.parse(this.encryption.decrypt(raw.affinity_tags_encrypted)); } catch { /* skip */ }
+      try {
+        affinityTags = JSON.parse(
+          this.encryption.decrypt(raw.affinity_tags_encrypted),
+        );
+      } catch {
+        /* skip */
+      }
     }
 
     return {
@@ -1611,11 +1645,17 @@ export class MentorshipRequestsService {
    * For each profile that has an accepted identity reveal with the current user,
    * replace the username with the decrypted real name.
    */
-  private async applyIdentityRevealToProfiles(currentUserId: string, profiles: any[]) {
+  private async applyIdentityRevealToProfiles(
+    currentUserId: string,
+    profiles: any[],
+  ) {
     if (profiles.length === 0) return;
 
     const profileIds = profiles.map((p) => p.id).filter(Boolean);
-    const revealedIds = await this.identityReveal.getRevealedUserIds(currentUserId, profileIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      currentUserId,
+      profileIds,
+    );
 
     profiles.forEach((profile) => {
       if (revealedIds.has(profile.id)) {
@@ -1665,7 +1705,10 @@ export class MentorshipRequestsService {
         this.logger.error('Error fetching sent mentor requests:', sentError);
       }
       if (receivedError) {
-        this.logger.error('Error fetching received mentee requests:', receivedError);
+        this.logger.error(
+          'Error fetching received mentee requests:',
+          receivedError,
+        );
       }
 
       // Get mentorship relationships where user is the mentee
@@ -1823,7 +1866,10 @@ export class MentorshipRequestsService {
         this.logger.error('Error fetching sent mentee requests:', sentError);
       }
       if (receivedError) {
-        this.logger.error('Error fetching received mentor requests:', receivedError);
+        this.logger.error(
+          'Error fetching received mentor requests:',
+          receivedError,
+        );
       }
 
       // Get mentorship relationships where user is the mentor

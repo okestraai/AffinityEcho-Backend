@@ -134,14 +134,18 @@ export class AuthController {
   @Get('google/callback')
   @ApiOperation({
     summary: 'Google OAuth callback',
-    description: 'Handles the redirect from Supabase after Google auth. Exchanges code for session and redirects to frontend with tokens.',
+    description:
+      'Handles the redirect from Supabase after Google auth. Exchanges code for session and redirects to frontend with tokens.',
   })
   async googleCallback(
     @Query('code') code: string,
     @Query('redirect_uri') redirectUri: string,
     @Res() res: Response,
   ) {
-    const { redirectUrl } = await this.authService.googleCallback(code, redirectUri);
+    const { redirectUrl } = await this.authService.googleCallback(
+      code,
+      redirectUri,
+    );
     return res.redirect(redirectUrl);
   }
 

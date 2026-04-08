@@ -77,7 +77,7 @@ export class UserProfileService {
       }
 
       // Hide soft-deleted or deactivated profiles
-      if ((profile as any).is_deleted || (profile as any).is_deactivated) {
+      if (profile.is_deleted || profile.is_deactivated) {
         throw new NotFoundException('User not found');
       }
 
@@ -103,16 +103,32 @@ export class UserProfileService {
       let followingCount = 0;
 
       const [followersResult, followingResult] = await Promise.all([
-        this.admin.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
-        this.admin.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+        this.admin
+          .from('user_follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('following_id', userId),
+        this.admin
+          .from('user_follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('follower_id', userId),
       ]);
       followersCount = followersResult.count || 0;
       followingCount = followingResult.count || 0;
 
       if (currentUserId && !isOwnProfile) {
         const [iFollowResult, theyFollowResult] = await Promise.all([
-          this.admin.from('user_follows').select('id').eq('follower_id', currentUserId).eq('following_id', userId).maybeSingle(),
-          this.admin.from('user_follows').select('id').eq('follower_id', userId).eq('following_id', currentUserId).maybeSingle(),
+          this.admin
+            .from('user_follows')
+            .select('id')
+            .eq('follower_id', currentUserId)
+            .eq('following_id', userId)
+            .maybeSingle(),
+          this.admin
+            .from('user_follows')
+            .select('id')
+            .eq('follower_id', userId)
+            .eq('following_id', currentUserId)
+            .maybeSingle(),
         ]);
         isFollowing = !!iFollowResult.data;
         isFollowedBy = !!theyFollowResult.data;
@@ -120,7 +136,7 @@ export class UserProfileService {
 
       // Enforce profile_visibility for non-own profiles
       if (!isOwnProfile) {
-        const visibility = (profile as any).profile_visibility || 'public';
+        const visibility = profile.profile_visibility || 'public';
 
         if (visibility === 'private') {
           throw new ForbiddenException('This profile is private');
@@ -146,19 +162,22 @@ export class UserProfileService {
       // Resolve display_name via identity reveal
       let displayName = profile.username;
       if (!isOwnProfile && currentUserId) {
-        const revealed = await this.identityReveal.isRevealed(currentUserId, userId);
+        const revealed = await this.identityReveal.isRevealed(
+          currentUserId,
+          userId,
+        );
         if (revealed) {
           const realName = this.identityReveal.decryptRealName(
-            (profile as any).first_name_encrypted,
-            (profile as any).last_name_encrypted,
+            profile.first_name_encrypted,
+            profile.last_name_encrypted,
           );
           if (realName) displayName = realName;
         }
       } else if (isOwnProfile) {
         // Own profile — show real name if available
         const realName = this.identityReveal.decryptRealName(
-          (profile as any).first_name_encrypted,
-          (profile as any).last_name_encrypted,
+          profile.first_name_encrypted,
+          profile.last_name_encrypted,
         );
         if (realName) displayName = realName;
       }
@@ -171,7 +190,7 @@ export class UserProfileService {
         avatar: profile.avatar,
         bio: profile.bio,
         job_title: profile.job_title,
-        years_experience: (profile as any).years_experience ?? null,
+        years_experience: profile.years_experience ?? null,
         skills: profile.skills,
         linkedinUrl: profile.linkedin_url,
         badges: profile.badges,
@@ -180,13 +199,13 @@ export class UserProfileService {
         isFollowedBy: isOwnProfile ? undefined : isFollowedBy,
         followersCount,
         followingCount,
-        is_company_verified: (profile as any).is_company_verified || false,
+        is_company_verified: profile.is_company_verified || false,
       };
 
       // Enforce field-level privacy for non-own profiles
-      const showLocation = isOwnProfile || (profile as any).show_location !== false;
-      const showCompany = isOwnProfile || (profile as any).show_company !== false;
-      const showActivity = isOwnProfile || (profile as any).show_activity !== false;
+      const showLocation = isOwnProfile || profile.show_location !== false;
+      const showCompany = isOwnProfile || profile.show_company !== false;
+      const showActivity = isOwnProfile || profile.show_activity !== false;
 
       if (showLocation) {
         response.location = profile.location;
@@ -206,7 +225,9 @@ export class UserProfileService {
       // Add decrypted demographics — own profile only (career/company are sensitive)
       if (isOwnProfile) {
         if (profile.career_level_encrypted) {
-          response.careerLevel = this.encryption.decrypt(profile.career_level_encrypted);
+          response.careerLevel = this.encryption.decrypt(
+            profile.career_level_encrypted,
+          );
         }
         if (profile.company_encrypted) {
           response.company = this.encryption.decrypt(profile.company_encrypted);
@@ -216,7 +237,9 @@ export class UserProfileService {
       // Affinity groups — visible to all users (community tags, not sensitive)
       if (profile.affinity_tags_encrypted) {
         try {
-          const decrypted = this.encryption.decrypt(profile.affinity_tags_encrypted);
+          const decrypted = this.encryption.decrypt(
+            profile.affinity_tags_encrypted,
+          );
           response.affinityTags = JSON.parse(decrypted);
         } catch {
           try {
@@ -242,7 +265,11 @@ export class UserProfileService {
         data: response,
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      )
+        throw error;
       logger.error('Failed to fetch user profile', { error });
       throw new BadRequestException('Failed to fetch user profile');
     }
@@ -257,7 +284,10 @@ export class UserProfileService {
     const isOwnProfile = currentUserId === targetUserId;
 
     // Base profile (handles privacy, blocks, and visibility checks)
-    const baseResult = await this.getUserProfileById(targetUserId, currentUserId);
+    const baseResult = await this.getUserProfileById(
+      targetUserId,
+      currentUserId,
+    );
     const now = new Date().toISOString();
 
     const [
@@ -271,7 +301,9 @@ export class UserProfileService {
     ] = await Promise.all([
       this.admin
         .from('feed_posts')
-        .select('id, content, tags, likes_count, comments_count, shares_count, views_count, created_at, is_anonymous')
+        .select(
+          'id, content, tags, likes_count, comments_count, shares_count, views_count, created_at, is_anonymous',
+        )
         .eq('user_id', targetUserId)
         .eq('is_archived', false)
         .order('created_at', { ascending: false })
@@ -279,14 +311,18 @@ export class UserProfileService {
 
       this.admin
         .from('forum_topics')
-        .select('id, title, content, tags, scope, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, is_anonymous, forum:forums(id, name)')
+        .select(
+          'id, title, content, tags, scope, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, is_anonymous, forum:forums(id, name)',
+        )
         .eq('user_id', targetUserId)
         .order('created_at', { ascending: false })
         .limit(5),
 
       this.admin
         .from('nooks')
-        .select('id, title, description, urgency, scope, temperature, hashtags, members_count, messages_count, expires_at, created_at')
+        .select(
+          'id, title, description, urgency, scope, temperature, hashtags, members_count, messages_count, expires_at, created_at',
+        )
         .eq('creator_id', targetUserId)
         .eq('is_active', true)
         .gt('expires_at', now)
@@ -295,7 +331,9 @@ export class UserProfileService {
 
       this.admin
         .from('feed_comments')
-        .select('id, content_type, content_id, content, is_anonymous, created_at')
+        .select(
+          'id, content_type, content_id, content, is_anonymous, created_at',
+        )
         .eq('user_id', targetUserId)
         .order('created_at', { ascending: false })
         .limit(5),
@@ -321,7 +359,12 @@ export class UserProfileService {
       content_type: 'post' as const,
       is_anonymous: p.is_anonymous,
       content: { text: p.content, tags: p.tags },
-      engagement: { likes: p.likes_count, comments: p.comments_count, shares: p.shares_count, views: p.views_count },
+      engagement: {
+        likes: p.likes_count,
+        comments: p.comments_count,
+        shares: p.shares_count,
+        views: p.views_count,
+      },
       reaction_counts: { heard: 0, validated: 0, inspired: 0 },
       user_liked: false,
       user_bookmarked: false,
@@ -331,14 +374,21 @@ export class UserProfileService {
 
     const formattedTopics = (recentTopics || []).map((t: any) => {
       const totalReactions =
-        (t.reaction_seen_count || 0) + (t.reaction_validated_count || 0) +
-        (t.reaction_inspired_count || 0) + (t.reaction_heard_count || 0);
+        (t.reaction_seen_count || 0) +
+        (t.reaction_validated_count || 0) +
+        (t.reaction_inspired_count || 0) +
+        (t.reaction_heard_count || 0);
       return {
         id: t.id,
         content_id: t.id,
         content_type: 'topic' as const,
         is_anonymous: t.is_anonymous,
-        content: { title: t.title, text: t.content, forum_name: t.forum?.name || null, tags: t.tags },
+        content: {
+          title: t.title,
+          text: t.content,
+          forum_name: t.forum?.name || null,
+          tags: t.tags,
+        },
         engagement: { likes: totalReactions, comments: t.comments_count },
         reaction_counts: {
           seen: t.reaction_seen_count || 0,
@@ -348,7 +398,12 @@ export class UserProfileService {
         },
         user_liked: false,
         user_bookmarked: false,
-        user_reactions: { seen: false, validated: false, inspired: false, heard: false },
+        user_reactions: {
+          seen: false,
+          validated: false,
+          inspired: false,
+          heard: false,
+        },
         created_at: t.created_at,
       };
     });
@@ -364,7 +419,10 @@ export class UserProfileService {
         temperature: n.temperature || 'cool',
         hashtags: n.hashtags || [],
       },
-      engagement: { members: n.members_count || 0, messages: n.messages_count || 0 },
+      engagement: {
+        members: n.members_count || 0,
+        messages: n.messages_count || 0,
+      },
       members_count: n.members_count || 0,
       messages_count: n.messages_count || 0,
       expires_at: n.expires_at,
@@ -383,7 +441,11 @@ export class UserProfileService {
 
     // Enrich posts and topics with viewer's per-item reaction/like/bookmark state
     if (!isOwnProfile) {
-      await this.enrichProfileActivityItems(currentUserId, formattedPosts, formattedTopics);
+      await this.enrichProfileActivityItems(
+        currentUserId,
+        formattedPosts,
+        formattedTopics,
+      );
     }
 
     // Inject real name when identity is revealed between viewer and viewee
@@ -413,7 +475,11 @@ export class UserProfileService {
     };
   }
 
-  private async enrichProfileActivityItems(viewerId: string, posts: any[], topics: any[]): Promise<void> {
+  private async enrichProfileActivityItems(
+    viewerId: string,
+    posts: any[],
+    topics: any[],
+  ): Promise<void> {
     const postIds = posts.map((p) => p.content_id);
     const topicIds = topics.map((t) => t.content_id);
     const allIds = [...postIds, ...topicIds];
@@ -426,38 +492,66 @@ export class UserProfileService {
       { data: feedAllReactions },
       { data: topicUserReactions },
     ] = await Promise.all([
-      this.admin.from('feed_likes').select('content_id').eq('user_id', viewerId).in('content_id', allIds),
-      this.admin.from('feed_bookmarks').select('content_id').eq('user_id', viewerId).in('content_id', allIds),
+      this.admin
+        .from('feed_likes')
+        .select('content_id')
+        .eq('user_id', viewerId)
+        .in('content_id', allIds),
+      this.admin
+        .from('feed_bookmarks')
+        .select('content_id')
+        .eq('user_id', viewerId)
+        .in('content_id', allIds),
       postIds.length > 0
-        ? this.admin.from('feed_reactions').select('content_id, reaction_type').eq('user_id', viewerId).in('content_id', postIds)
+        ? this.admin
+            .from('feed_reactions')
+            .select('content_id, reaction_type')
+            .eq('user_id', viewerId)
+            .in('content_id', postIds)
         : Promise.resolve({ data: [] }),
       postIds.length > 0
-        ? this.admin.from('feed_reactions').select('content_id, reaction_type').in('content_id', postIds)
+        ? this.admin
+            .from('feed_reactions')
+            .select('content_id, reaction_type')
+            .in('content_id', postIds)
         : Promise.resolve({ data: [] }),
       topicIds.length > 0
-        ? this.admin.from('topic_reactions').select('topic_id, reaction_type').eq('user_id', viewerId).in('topic_id', topicIds)
+        ? this.admin
+            .from('topic_reactions')
+            .select('topic_id, reaction_type')
+            .eq('user_id', viewerId)
+            .in('topic_id', topicIds)
         : Promise.resolve({ data: [] }),
     ]);
 
     const likeSet = new Set((likes || []).map((l: any) => l.content_id));
-    const bookmarkSet = new Set((bookmarks || []).map((b: any) => b.content_id));
+    const bookmarkSet = new Set(
+      (bookmarks || []).map((b: any) => b.content_id),
+    );
 
     const feedUserReactionMap = new Map<string, Set<string>>();
     (feedUserReactions || []).forEach((r: any) => {
-      if (!feedUserReactionMap.has(r.content_id)) feedUserReactionMap.set(r.content_id, new Set());
+      if (!feedUserReactionMap.has(r.content_id))
+        feedUserReactionMap.set(r.content_id, new Set());
       feedUserReactionMap.get(r.content_id)!.add(r.reaction_type);
     });
 
     const feedReactionCounts = new Map<string, Record<string, number>>();
     (feedAllReactions || []).forEach((r: any) => {
-      if (!feedReactionCounts.has(r.content_id)) feedReactionCounts.set(r.content_id, { heard: 0, validated: 0, inspired: 0 });
+      if (!feedReactionCounts.has(r.content_id))
+        feedReactionCounts.set(r.content_id, {
+          heard: 0,
+          validated: 0,
+          inspired: 0,
+        });
       const counts = feedReactionCounts.get(r.content_id)!;
       if (counts[r.reaction_type] !== undefined) counts[r.reaction_type]++;
     });
 
     const topicUserReactionMap = new Map<string, Set<string>>();
     (topicUserReactions || []).forEach((r: any) => {
-      if (!topicUserReactionMap.has(r.topic_id)) topicUserReactionMap.set(r.topic_id, new Set());
+      if (!topicUserReactionMap.has(r.topic_id))
+        topicUserReactionMap.set(r.topic_id, new Set());
       topicUserReactionMap.get(r.topic_id)!.add(r.reaction_type);
     });
 
@@ -471,7 +565,11 @@ export class UserProfileService {
         validated: reactions?.has('validated') || false,
         inspired: reactions?.has('inspired') || false,
       };
-      p.reaction_counts = feedReactionCounts.get(id) || { heard: 0, validated: 0, inspired: 0 };
+      p.reaction_counts = feedReactionCounts.get(id) || {
+        heard: 0,
+        validated: 0,
+        inspired: 0,
+      };
     });
 
     topics.forEach((t) => {
@@ -488,23 +586,48 @@ export class UserProfileService {
     });
   }
 
-  private async getViewerEngagementSummary(viewerId: string, targetUserId: string): Promise<any> {
+  private async getViewerEngagementSummary(
+    viewerId: string,
+    targetUserId: string,
+  ): Promise<any> {
     const [{ data: posts }, { data: topics }] = await Promise.all([
-      this.admin.from('feed_posts').select('id').eq('user_id', targetUserId).eq('is_archived', false).limit(100),
-      this.admin.from('forum_topics').select('id').eq('user_id', targetUserId).limit(100),
+      this.admin
+        .from('feed_posts')
+        .select('id')
+        .eq('user_id', targetUserId)
+        .eq('is_archived', false)
+        .limit(100),
+      this.admin
+        .from('forum_topics')
+        .select('id')
+        .eq('user_id', targetUserId)
+        .limit(100),
     ]);
 
     const postIds = (posts || []).map((p: any) => p.id);
     const topicIds = (topics || []).map((t: any) => t.id);
     const allIds = [...postIds, ...topicIds];
 
-    if (allIds.length === 0) return { liked_count: 0, commented_count: 0, reaction_count: 0 };
+    if (allIds.length === 0)
+      return { liked_count: 0, commented_count: 0, reaction_count: 0 };
 
     const [likesResult, commentsResult, reactionsResult] = await Promise.all([
-      this.admin.from('feed_likes').select('id', { count: 'exact', head: true }).eq('user_id', viewerId).in('content_id', allIds),
-      this.admin.from('feed_comments').select('id', { count: 'exact', head: true }).eq('user_id', viewerId).in('content_id', allIds),
+      this.admin
+        .from('feed_likes')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', viewerId)
+        .in('content_id', allIds),
+      this.admin
+        .from('feed_comments')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', viewerId)
+        .in('content_id', allIds),
       postIds.length > 0
-        ? this.admin.from('feed_reactions').select('id', { count: 'exact', head: true }).eq('user_id', viewerId).in('content_id', postIds)
+        ? this.admin
+            .from('feed_reactions')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', viewerId)
+            .in('content_id', postIds)
         : Promise.resolve({ count: 0 }),
     ]);
 
@@ -615,27 +738,72 @@ export class UserProfileService {
         followersResult,
       ] = await Promise.all([
         // Posts created
-        this.admin.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_archived', false),
-        this.admin.from('referral_posts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        this.admin
+          .from('feed_posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('is_archived', false),
+        this.admin
+          .from('referral_posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId),
         // Comments posted
-        this.admin.from('forum_comments').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-        this.admin.from('feed_comments').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-        this.admin.from('referral_comments').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        this.admin
+          .from('forum_comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId),
+        this.admin
+          .from('feed_comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId),
+        this.admin
+          .from('referral_comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId),
         // Topics and nooks
-        this.admin.from('forum_topics').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-        this.admin.from('nook_members').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        this.admin
+          .from('forum_topics')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId),
+        this.admin
+          .from('nook_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId),
         // Likes/reactions received — sum from user's own content rows
-        this.admin.from('feed_posts').select('likes_count').eq('user_id', userId).eq('is_archived', false),
-        this.admin.from('forum_topics').select('reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count').eq('user_id', userId),
-        this.admin.from('referral_posts').select('likes_count').eq('user_id', userId),
+        this.admin
+          .from('feed_posts')
+          .select('likes_count')
+          .eq('user_id', userId)
+          .eq('is_archived', false),
+        this.admin
+          .from('forum_topics')
+          .select(
+            'reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count',
+          )
+          .eq('user_id', userId),
+        this.admin
+          .from('referral_posts')
+          .select('likes_count')
+          .eq('user_id', userId),
         // Successful referrals (accepted connections where user is the requester or post owner)
-        this.admin.from('referral_connections').select('*', { count: 'exact', head: true }).eq('requester_id', userId).eq('status', 'accepted'),
+        this.admin
+          .from('referral_connections')
+          .select('*', { count: 'exact', head: true })
+          .eq('requester_id', userId)
+          .eq('status', 'accepted'),
         // Followers
-        this.admin.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+        this.admin
+          .from('user_follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('following_id', userId),
       ]);
 
-      const postsCreated = (feedPostsResult.count || 0) + (referralPostsResult.count || 0);
-      const commentsPosted = (forumCommentsResult.count || 0) + (feedCommentsResult.count || 0) + (referralCommentsResult.count || 0);
+      const postsCreated =
+        (feedPostsResult.count || 0) + (referralPostsResult.count || 0);
+      const commentsPosted =
+        (forumCommentsResult.count || 0) +
+        (feedCommentsResult.count || 0) +
+        (referralCommentsResult.count || 0);
       const topicsCreated = topicsResult.count || 0;
       const nooksJoined = nooksResult.count || 0;
       const mentorshipSessions = profile.mentorship_sessions_completed || 0;
@@ -644,27 +812,36 @@ export class UserProfileService {
 
       // Sum likes_count from user's feed posts
       const feedLikesTotal = (feedPostLikesResult.data || []).reduce(
-        (sum: number, p: any) => sum + (p.likes_count || 0), 0,
+        (sum: number, p: any) => sum + (p.likes_count || 0),
+        0,
       );
       // Sum all topic reaction types
       const topicReactionsTotal = (topicReactionsResult.data || []).reduce(
-        (sum: number, t: any) => sum + (t.reaction_seen_count || 0) + (t.reaction_validated_count || 0) + (t.reaction_inspired_count || 0) + (t.reaction_heard_count || 0), 0,
+        (sum: number, t: any) =>
+          sum +
+          (t.reaction_seen_count || 0) +
+          (t.reaction_validated_count || 0) +
+          (t.reaction_inspired_count || 0) +
+          (t.reaction_heard_count || 0),
+        0,
       );
       // Sum referral likes
       const referralLikesTotal = (referralLikesResult.data || []).reduce(
-        (sum: number, p: any) => sum + (p.likes_count || 0), 0,
+        (sum: number, p: any) => sum + (p.likes_count || 0),
+        0,
       );
-      const helpfulReactions = feedLikesTotal + topicReactionsTotal + referralLikesTotal;
+      const helpfulReactions =
+        feedLikesTotal + topicReactionsTotal + referralLikesTotal;
 
       // Reputation score = weighted combination of activity
       const reputationScore =
-        (postsCreated * 5) +
-        (commentsPosted * 2) +
-        (topicsCreated * 5) +
-        (helpfulReactions * 3) +
-        (mentorshipSessions * 10) +
-        (referralsMade * 15) +
-        (followersCount * 2);
+        postsCreated * 5 +
+        commentsPosted * 2 +
+        topicsCreated * 5 +
+        helpfulReactions * 3 +
+        mentorshipSessions * 10 +
+        referralsMade * 15 +
+        followersCount * 2;
 
       return {
         success: true,
@@ -691,8 +868,15 @@ export class UserProfileService {
     logger.info('Fetching user badges', { userId });
 
     try {
-      // Get live stats to determine earned badges
-      const statsResult = await this.getUserStats(userId);
+      // Get stats + current badges in PARALLEL
+      const [statsResult, { data: badgeProfile }] = await Promise.all([
+        this.getUserStats(userId),
+        this.admin
+          .from('user_profiles')
+          .select('badges')
+          .eq('id', userId)
+          .single(),
+      ]);
       const stats = statsResult.data;
 
       // Define all badges with their unlock conditions
@@ -799,14 +983,10 @@ export class UserProfileService {
 
       // Sync earned badges to user_profiles.badges column
       const newEarnedIds = allBadges.filter((b) => b.earned).map((b) => b.id);
-      const { data: currentProfile } = await this.admin
-        .from('user_profiles')
-        .select('badges')
-        .eq('id', userId)
-        .single();
-
-      const currentBadges = currentProfile?.badges || [];
-      const hasNewBadges = newEarnedIds.some((id) => !currentBadges.includes(id));
+      const currentBadges = badgeProfile?.badges || [];
+      const hasNewBadges = newEarnedIds.some(
+        (id) => !currentBadges.includes(id),
+      );
       if (hasNewBadges) {
         await this.admin
           .from('user_profiles')
@@ -846,70 +1026,92 @@ export class UserProfileService {
     try {
       const perSourceLimit = type === 'all' ? limit : limit;
       const perSourceOffset = type === 'all' ? 0 : offset;
+      const now = new Date().toISOString();
 
+      // Fire all content queries in PARALLEL
+      const [postsResult, topicsResult, nooksResult] = await Promise.all([
+        type === 'posts' || type === 'all'
+          ? this.admin
+              .from('feed_posts')
+              .select(
+                `id, user_id, content, is_anonymous, tags, visibility, likes_count, comments_count, shares_count, views_count, created_at, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`,
+                { count: 'exact' },
+              )
+              .eq('user_id', userId)
+              .eq('is_archived', false)
+              .order('created_at', { ascending: false })
+              .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
+          : Promise.resolve({ data: null, count: 0 }),
+        type === 'topics' || type === 'all'
+          ? this.admin
+              .from('forum_topics')
+              .select(
+                `id, user_id, title, content, is_anonymous, tags, scope, views_count, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted), forum:forums(id, name)`,
+                { count: 'exact' },
+              )
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
+          : Promise.resolve({ data: null, count: 0 }),
+        type === 'nooks' || type === 'all'
+          ? this.admin
+              .from('nooks')
+              .select(
+                `id, title, description, creator_id, urgency, scope, temperature, hashtags, members_count, messages_count, expires_at, created_at, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`,
+                { count: 'exact' },
+              )
+              .eq('creator_id', userId)
+              .gt('expires_at', now)
+              .order('created_at', { ascending: false })
+              .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
+          : Promise.resolve({ data: null, count: 0 }),
+      ]);
+
+      // Process posts
       if (type === 'posts' || type === 'all') {
-        const { data: posts, count } = await this.admin
-          .from('feed_posts')
-          .select(`
-            id, user_id, content, is_anonymous, tags, visibility,
-            likes_count, comments_count, shares_count, views_count, created_at,
-            user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
-          `, { count: 'exact' })
-          .eq('user_id', userId)
-          .eq('is_archived', false)
-          .order('created_at', { ascending: false })
-          .range(perSourceOffset, perSourceOffset + perSourceLimit - 1);
+        const { data: posts, count } = postsResult;
 
         if (type === 'posts') totalCount = count || 0;
 
         activities.push(
           ...(posts || []).map((p: any) => {
-            const userProfile = Array.isArray(p.user_profile) ? p.user_profile[0] : p.user_profile;
+            const userProfile = Array.isArray(p.user_profile)
+              ? p.user_profile[0]
+              : p.user_profile;
             return {
-            type: 'post',
-            content_type: 'post',
-            id: p.id,
-            content_id: p.id,
-            user_id: p.user_id,
-            is_anonymous: p.is_anonymous,
-            author: {
-              display_name: userProfile?.username || 'Unknown',
-              username: userProfile?.username || 'Unknown',
-              bio: userProfile?.bio || null,
-              avatar: userProfile?.avatar || 'User',
-              first_name_encrypted: userProfile?.first_name_encrypted,
-              last_name_encrypted: userProfile?.last_name_encrypted,
-            },
-            content: {
-              text: p.content,
-              tags: p.tags,
-            },
-            visibility: p.visibility,
-            engagement: {
-              likes: p.likes_count,
-              comments: p.comments_count,
-              shares: p.shares_count,
-              views: p.views_count,
-            },
-            created_at: p.created_at,
-          };
+              type: 'post',
+              content_type: 'post',
+              id: p.id,
+              content_id: p.id,
+              user_id: p.user_id,
+              is_anonymous: p.is_anonymous,
+              author: {
+                display_name: userProfile?.username || 'Unknown',
+                username: userProfile?.username || 'Unknown',
+                bio: userProfile?.bio || null,
+                avatar: userProfile?.avatar || 'User',
+                first_name_encrypted: userProfile?.first_name_encrypted,
+                last_name_encrypted: userProfile?.last_name_encrypted,
+              },
+              content: {
+                text: p.content,
+                tags: p.tags,
+              },
+              visibility: p.visibility,
+              engagement: {
+                likes: p.likes_count,
+                comments: p.comments_count,
+                shares: p.shares_count,
+                views: p.views_count,
+              },
+              created_at: p.created_at,
+            };
           }),
         );
       }
 
       if (type === 'topics' || type === 'all') {
-        const { data: topics, count } = await this.admin
-          .from('forum_topics')
-          .select(`
-            id, user_id, title, content, is_anonymous, tags, scope, views_count,
-            comments_count, reaction_seen_count, reaction_validated_count,
-            reaction_inspired_count, reaction_heard_count, created_at,
-            user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted),
-            forum:forums(id, name)
-          `, { count: 'exact' })
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .range(perSourceOffset, perSourceOffset + perSourceLimit - 1);
+        const { data: topics, count } = topicsResult;
 
         if (type === 'topics') totalCount = count || 0;
 
@@ -920,7 +1122,9 @@ export class UserProfileService {
               (t.reaction_validated_count || 0) +
               (t.reaction_inspired_count || 0) +
               (t.reaction_heard_count || 0);
-            const userProfile = Array.isArray(t.user_profile) ? t.user_profile[0] : t.user_profile;
+            const userProfile = Array.isArray(t.user_profile)
+              ? t.user_profile[0]
+              : t.user_profile;
 
             return {
               type: 'topic',
@@ -961,24 +1165,15 @@ export class UserProfileService {
       }
 
       if (type === 'nooks' || type === 'all') {
-        const now = new Date().toISOString();
-        const { data: nooks, count } = await this.admin
-          .from('nooks')
-          .select(`
-            id, title, description, creator_id, urgency, scope, temperature,
-            hashtags, members_count, messages_count, expires_at, created_at,
-            user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)
-          `, { count: 'exact' })
-          .eq('creator_id', userId)
-          .gt('expires_at', now)
-          .order('created_at', { ascending: false })
-          .range(perSourceOffset, perSourceOffset + perSourceLimit - 1);
+        const { data: nooks, count } = nooksResult;
 
         if (type === 'nooks') totalCount = count || 0;
 
         activities.push(
           ...(nooks || []).map((nook: any) => {
-            const userProfile = Array.isArray(nook.user_profile) ? nook.user_profile[0] : nook.user_profile;
+            const userProfile = Array.isArray(nook.user_profile)
+              ? nook.user_profile[0]
+              : nook.user_profile;
             const timeLeft = this.calculateTimeLeft(nook.expires_at);
 
             return {
@@ -1018,15 +1213,20 @@ export class UserProfileService {
       }
 
       // Sort all activities by date
-      activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      activities.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
 
       // For 'all' type, manually paginate the merged results
-      const paginatedActivities = type === 'all'
-        ? activities.slice(offset, offset + limit)
-        : activities;
+      const paginatedActivities =
+        type === 'all' ? activities.slice(offset, offset + limit) : activities;
 
       // Enrich with user engagement data (likes, bookmarks, reactions)
-      const enriched = await this.enrichActivityWithEngagement(viewerId, paginatedActivities);
+      const enriched = await this.enrichActivityWithEngagement(
+        viewerId,
+        paginatedActivities,
+      );
 
       // Apply identity reveals
       await this.applyActivityIdentityReveals(viewerId, enriched);
@@ -1041,9 +1241,10 @@ export class UserProfileService {
           page,
           limit,
           total,
-          hasMore: type === 'all'
-            ? activities.length > offset + limit
-            : totalCount > offset + limit,
+          hasMore:
+            type === 'all'
+              ? activities.length > offset + limit
+              : totalCount > offset + limit,
         },
       };
     } catch (error) {
@@ -1067,12 +1268,19 @@ export class UserProfileService {
     return `${hours}h ${minutes}m`;
   }
 
-  private async enrichActivityWithEngagement(userId: string, items: any[]): Promise<any[]> {
+  private async enrichActivityWithEngagement(
+    userId: string,
+    items: any[],
+  ): Promise<any[]> {
     if (items.length === 0) return items;
 
     const contentIds = items.map((i) => i.content_id);
-    const postIds = items.filter((i) => i.content_type === 'post').map((i) => i.content_id);
-    const topicIds = items.filter((i) => i.content_type === 'topic').map((i) => i.content_id);
+    const postIds = items
+      .filter((i) => i.content_type === 'post')
+      .map((i) => i.content_id);
+    const topicIds = items
+      .filter((i) => i.content_type === 'topic')
+      .map((i) => i.content_id);
 
     const [
       { data: likes },
@@ -1115,14 +1323,19 @@ export class UserProfileService {
         : Promise.resolve({ data: [] }),
     ]);
 
-    const likeSet = new Set((likes || []).map((l: any) => `${l.content_type}_${l.content_id}`));
-    const bookmarkSet = new Set((bookmarks || []).map((b: any) => `${b.content_type}_${b.content_id}`));
+    const likeSet = new Set(
+      (likes || []).map((l: any) => `${l.content_type}_${l.content_id}`),
+    );
+    const bookmarkSet = new Set(
+      (bookmarks || []).map((b: any) => `${b.content_type}_${b.content_id}`),
+    );
 
     // Post user reactions (from feed_reactions)
     const feedUserReactionMap = new Map<string, Set<string>>();
     (feedUserReactions || []).forEach((r: any) => {
       const key = `${r.content_type}_${r.content_id}`;
-      if (!feedUserReactionMap.has(key)) feedUserReactionMap.set(key, new Set());
+      if (!feedUserReactionMap.has(key))
+        feedUserReactionMap.set(key, new Set());
       feedUserReactionMap.get(key)!.add(r.reaction_type);
     });
 
@@ -1130,7 +1343,8 @@ export class UserProfileService {
     const feedReactionCounts = new Map<string, Record<string, number>>();
     (feedAllReactions || []).forEach((r: any) => {
       const key = `${r.content_type}_${r.content_id}`;
-      if (!feedReactionCounts.has(key)) feedReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
+      if (!feedReactionCounts.has(key))
+        feedReactionCounts.set(key, { heard: 0, validated: 0, inspired: 0 });
       const counts = feedReactionCounts.get(key)!;
       if (counts[r.reaction_type] !== undefined) counts[r.reaction_type]++;
     });
@@ -1138,7 +1352,8 @@ export class UserProfileService {
     // Topic user reactions (from topic_reactions)
     const topicUserReactionMap = new Map<string, Set<string>>();
     (topicUserReactions || []).forEach((r: any) => {
-      if (!topicUserReactionMap.has(r.topic_id)) topicUserReactionMap.set(r.topic_id, new Set());
+      if (!topicUserReactionMap.has(r.topic_id))
+        topicUserReactionMap.set(r.topic_id, new Set());
       topicUserReactionMap.get(r.topic_id)!.add(r.reaction_type);
     });
 
@@ -1172,21 +1387,33 @@ export class UserProfileService {
           validated: feedUserReactionMap.get(key)?.has('validated') || false,
           inspired: feedUserReactionMap.get(key)?.has('inspired') || false,
         },
-        reaction_counts: feedReactionCounts.get(key) || { heard: 0, validated: 0, inspired: 0 },
+        reaction_counts: feedReactionCounts.get(key) || {
+          heard: 0,
+          validated: 0,
+          inspired: 0,
+        },
       };
     });
   }
 
-  private async applyActivityIdentityReveals(userId: string, items: any[]): Promise<void> {
+  private async applyActivityIdentityReveals(
+    userId: string,
+    items: any[],
+  ): Promise<void> {
     if (items.length === 0) return;
 
-    const otherAuthorIds = [...new Set(
-      items
-        .filter((item) => item.user_id && item.user_id !== userId)
-        .map((item) => item.user_id),
-    )];
+    const otherAuthorIds = [
+      ...new Set(
+        items
+          .filter((item) => item.user_id && item.user_id !== userId)
+          .map((item) => item.user_id),
+      ),
+    ];
 
-    const revealedIds = await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds);
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      userId,
+      otherAuthorIds,
+    );
 
     items.forEach((item) => {
       if (!item.author) return;

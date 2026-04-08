@@ -115,8 +115,10 @@ export class ReferralConnectionsService {
         };
       };
 
-      const sent = sentResult.data.map((c) => transformConnection(c, true));
-      const received = receivedResult.data.map((c) =>
+      const sent = sentResult.data.map((c: any) =>
+        transformConnection(c, true),
+      );
+      const received = receivedResult.data.map((c: any) =>
         transformConnection(c, false),
       );
 
@@ -412,7 +414,10 @@ export class ReferralConnectionsService {
           action_url: `/referral/connections/${connectionId}`,
           reference_id: connectionId,
           reference_type: 'referral_connection',
-          metadata: { status: 'accepted', referral_post_id: connection.referral_post_id },
+          metadata: {
+            status: 'accepted',
+            referral_post_id: connection.referral_post_id,
+          },
           delivery_method: ['in_app'],
         });
 
