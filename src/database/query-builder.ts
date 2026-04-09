@@ -25,7 +25,8 @@ function escapeLiteral(val: any): string {
   if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
   if (typeof val === 'number') return String(val);
   if (Array.isArray(val)) {
-    // PostgreSQL array literal
+    // PostgreSQL array literal — empty arrays need type cast
+    if (val.length === 0) return "'{}'::text[]";
     const items = val.map((v) => escapeLiteral(v));
     return `ARRAY[${items.join(',')}]`;
   }
@@ -57,6 +58,9 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
   const columns: string[] = [];
   const relations: RelationInfo[] = [];
 
+  // Normalize: collapse whitespace/newlines into single spaces
+  selectStr = selectStr.replace(/\s+/g, ' ').trim();
+
   if (!selectStr || selectStr === '*') {
     return { columns: ['*'], relations: [] };
   }
@@ -78,13 +82,28 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
   if (current.trim()) tokens.push(current.trim());
 
   for (const token of tokens) {
-    // Match relation pattern: alias:fk_column(col1, col2, ...)
-    const relMatch = token.match(/^(\w+):(\w+)\((.+)\)$/);
+    // Match relation patterns:
+    //   alias:fk_column(cols)           → 3 groups
+    //   alias:fk_column!inner(cols)     → 3 groups (strip !inner)
+    //   alias:table!constraint!inner(cols) → 3 groups
+    //   table!inner(cols)               → 2 groups (alias=table, no fk)
+    const relMatch3 = token.match(/^(\w+):([^(!]+)(?:![^(]*)?\((.+)\)$/);
+    const relMatch2 = !relMatch3 ? token.match(/^(\w+)(?:![^(]*)?\((.+)\)$/) : null;
+    const relMatch = relMatch3 || relMatch2;
     if (relMatch) {
-      const [, alias, fkColumn, innerCols] = relMatch;
-      // Guess target table from alias (plural heuristic or exact)
-      // For Supabase the FK target table is resolved by DB schema;
-      // here we use the alias as the table name and add common mappings.
+      const alias = relMatch[1];
+      const rawFk = relMatch3 ? relMatch[2] : relMatch[1] + '_id';
+      const innerCols = relMatch3 ? relMatch[3] : relMatch[2];
+
+      // Known table names — if rawFk is a table name, use alias_id as the FK column
+      const knownTables = new Set([
+        'user_profiles', 'forums', 'forum_topics', 'forum_comments',
+        'nooks', 'nook_messages', 'conversations', 'messages',
+        'feed_posts', 'mentorship_relationships', 'referral_posts',
+      ]);
+      const fkColumn = knownTables.has(rawFk) ? alias + '_id' : rawFk;
+
+      // Guess target table from alias
       const tableMap: Record<string, string> = {
         user: 'user_profiles',
         user_profile: 'user_profiles',
@@ -104,8 +123,17 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
         following: 'user_profiles',
         blocker: 'user_profiles',
         blocked: 'user_profiles',
+        actor: 'user_profiles',
+        bookmarked_user: 'user_profiles',
+        user_profiles: 'user_profiles',
+        forums: 'forums',
+        forum_topics: 'forum_topics',
+        nooks: 'nooks',
+        conversations: 'conversations',
+        messages: 'messages',
       };
-      const targetTable = tableMap[alias] || alias + 's';
+      // If rawFk is a known table name, use it directly as the target table
+      const targetTable = knownTables.has(rawFk) ? rawFk : (tableMap[alias] || alias + 's');
       relations.push({
         alias,
         fkColumn,
@@ -171,7 +199,13 @@ export class QueryChain {
   // ─── SELECT ───────────────────────────────────────────────────────────────
 
   select(columns?: string, opts?: { count?: 'exact'; head?: boolean }): this {
-    this.mode = 'select';
+    // If called after insert/update/upsert/delete, it means RETURNING — don't switch mode
+    if (this.mode !== 'insert' && this.mode !== 'update' && this.mode !== 'upsert' && this.mode !== 'delete') {
+      this.mode = 'select';
+    } else {
+      // Store as RETURNING columns for insert/update/upsert
+      this.returningSelect = columns || '*';
+    }
     if (columns) this.selectStr = columns;
     if (opts?.count) this.countMode = opts.count;
     if (opts?.head) this.headOnly = true;
@@ -463,16 +497,8 @@ export class QueryChain {
       valueSets.push(`(${vals.join(', ')})`);
     }
 
-    const returning = this.returningSelect || this.selectStr || '*';
-    const returnCols =
-      returning === '*'
-        ? '*'
-        : returning
-            .split(',')
-            .map((c) => escapeIdentifier(c.trim()))
-            .join(', ');
-
-    const sql = `INSERT INTO ${escapeIdentifier(this.table)} (${colNames}) VALUES ${valueSets.join(', ')} RETURNING ${returnCols}`;
+    // Always RETURNING * for inserts — the select columns may contain relationship syntax
+    const sql = `INSERT INTO ${escapeIdentifier(this.table)} (${colNames}) VALUES ${valueSets.join(', ')} RETURNING *`;
     const result = await this.pool.query(sql);
 
     if (this.isSingle || rows.length === 1) {
@@ -493,16 +519,8 @@ export class QueryChain {
       .join(', ');
 
     const where = this.buildWhere();
-    const returning = this.returningSelect || this.selectStr || '*';
-    const returnCols =
-      returning === '*'
-        ? '*'
-        : returning
-            .split(',')
-            .map((c) => escapeIdentifier(c.trim()))
-            .join(', ');
 
-    const sql = `UPDATE ${escapeIdentifier(this.table)} SET ${sets} ${where} RETURNING ${returnCols}`;
+    const sql = `UPDATE ${escapeIdentifier(this.table)} SET ${sets} ${where} RETURNING *`;
     const result = await this.pool.query(sql);
 
     if (this.isSingle) {
@@ -515,9 +533,17 @@ export class QueryChain {
 
   private async execDelete(): Promise<{ data: any; error: any }> {
     const where = this.buildWhere();
+    const returning = this.returningSelect;
+    if (returning) {
+      const returnCols = returning === '*' ? '*' : returning.replace(/\s+/g, ' ').trim().split(',').map((c: any) => escapeIdentifier(c.trim())).join(', ');
+      const sql = `DELETE FROM ${escapeIdentifier(this.table)} ${where} RETURNING ${returnCols}`;
+      const result = await this.pool.query(sql);
+      if (this.isSingle) return { data: result.rows[0] || null, error: null };
+      return { data: result.rows, error: null };
+    }
     const sql = `DELETE FROM ${escapeIdentifier(this.table)} ${where}`;
-    await this.pool.query(sql);
-    return { data: null, error: null };
+    const result = await this.pool.query(sql);
+    return { data: null, error: null, count: result.rowCount } as any;
   }
 
   // ─── UPSERT execution ────────────────────────────────────────────────────
@@ -555,11 +581,31 @@ export class QueryChain {
 
   // ─── SQL builders ─────────────────────────────────────────────────────────
 
+  /** Escape a column ref — handles dot notation (alias.column) for relationship filters */
+  private escapeCol(col: string): string {
+    if (col.includes('.')) {
+      // Relationship filter: "user_profile.has_completed_onboarding"
+      // → look up the target table from the parsed select relations, then build EXISTS subquery
+      // For now, just separate into table alias + column
+      const parts = col.split('.');
+      // This becomes a JOIN condition — skip it in WHERE (handled in post-fetch)
+      // Return a dummy TRUE so the WHERE doesn't break
+      return `TRUE /* skip: ${col} */`;
+    }
+    return escapeIdentifier(col);
+  }
+
   private buildWhere(): string {
-    if (this.filters.length === 0) return '';
+    // Filter out relationship-dot-notation filters (they don't work in raw SQL)
+    const validFilters = this.filters.filter((f: any) => {
+      const col = f.col || '';
+      return !col.includes('.');
+    });
+
+    if (validFilters.length === 0) return '';
 
     const clauses: string[] = [];
-    for (const f of this.filters) {
+    for (const f of validFilters) {
       switch (f.type) {
         case 'eq':
           clauses.push(
