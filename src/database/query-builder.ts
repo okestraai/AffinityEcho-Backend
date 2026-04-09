@@ -88,7 +88,9 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
     //   alias:table!constraint!inner(cols) → 3 groups
     //   table!inner(cols)               → 2 groups (alias=table, no fk)
     const relMatch3 = token.match(/^(\w+):([^(!]+)(?:![^(]*)?\((.+)\)$/);
-    const relMatch2 = !relMatch3 ? token.match(/^(\w+)(?:![^(]*)?\((.+)\)$/) : null;
+    const relMatch2 = !relMatch3
+      ? token.match(/^(\w+)(?:![^(]*)?\((.+)\)$/)
+      : null;
     const relMatch = relMatch3 || relMatch2;
     if (relMatch) {
       const alias = relMatch[1];
@@ -97,9 +99,17 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
 
       // Known table names — if rawFk is a table name, use alias_id as the FK column
       const knownTables = new Set([
-        'user_profiles', 'forums', 'forum_topics', 'forum_comments',
-        'nooks', 'nook_messages', 'conversations', 'messages',
-        'feed_posts', 'mentorship_relationships', 'referral_posts',
+        'user_profiles',
+        'forums',
+        'forum_topics',
+        'forum_comments',
+        'nooks',
+        'nook_messages',
+        'conversations',
+        'messages',
+        'feed_posts',
+        'mentorship_relationships',
+        'referral_posts',
       ]);
       const fkColumn = knownTables.has(rawFk) ? alias + '_id' : rawFk;
 
@@ -133,7 +143,9 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
         messages: 'messages',
       };
       // If rawFk is a known table name, use it directly as the target table
-      const targetTable = knownTables.has(rawFk) ? rawFk : (tableMap[alias] || alias + 's');
+      const targetTable = knownTables.has(rawFk)
+        ? rawFk
+        : tableMap[alias] || alias + 's';
       relations.push({
         alias,
         fkColumn,
@@ -200,7 +212,12 @@ export class QueryChain {
 
   select(columns?: string, opts?: { count?: 'exact'; head?: boolean }): this {
     // If called after insert/update/upsert/delete, it means RETURNING — don't switch mode
-    if (this.mode !== 'insert' && this.mode !== 'update' && this.mode !== 'upsert' && this.mode !== 'delete') {
+    if (
+      this.mode !== 'insert' &&
+      this.mode !== 'update' &&
+      this.mode !== 'upsert' &&
+      this.mode !== 'delete'
+    ) {
       this.mode = 'select';
     } else {
       // Store as RETURNING columns for insert/update/upsert
@@ -535,7 +552,15 @@ export class QueryChain {
     const where = this.buildWhere();
     const returning = this.returningSelect;
     if (returning) {
-      const returnCols = returning === '*' ? '*' : returning.replace(/\s+/g, ' ').trim().split(',').map((c: any) => escapeIdentifier(c.trim())).join(', ');
+      const returnCols =
+        returning === '*'
+          ? '*'
+          : returning
+              .replace(/\s+/g, ' ')
+              .trim()
+              .split(',')
+              .map((c: any) => escapeIdentifier(c.trim()))
+              .join(', ');
       const sql = `DELETE FROM ${escapeIdentifier(this.table)} ${where} RETURNING ${returnCols}`;
       const result = await this.pool.query(sql);
       if (this.isSingle) return { data: result.rows[0] || null, error: null };
