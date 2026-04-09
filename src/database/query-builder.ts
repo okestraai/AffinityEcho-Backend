@@ -417,8 +417,15 @@ export class QueryChain {
     const parsed = parseSelectString(this.selectStr, this.table);
     const where = this.buildWhere();
 
-    // Build column list for main query
-    const colList = parsed.columns
+    // Build column list for main query — include FK columns needed for relationships
+    const fkCols = parsed.relations.map((r) => r.fkColumn);
+    const allCols = [...parsed.columns];
+    for (const fk of fkCols) {
+      if (!allCols.includes(fk) && !allCols.includes('*')) {
+        allCols.push(fk);
+      }
+    }
+    const colList = allCols
       .map((c) =>
         c === '*'
           ? `${escapeIdentifier(this.table)}.*`
