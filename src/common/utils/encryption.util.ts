@@ -62,4 +62,16 @@ export class EncryptionUtil {
     decipher.setAuthTag(tag);
     return decipher.update(text, undefined, 'utf8') + decipher.final('utf8');
   }
+
+  /**
+   * Deterministic HMAC-SHA256 of a value using the encryption key.
+   * Used for duplicate detection without exposing plaintext.
+   * Always normalises to lowercase + trimmed before hashing.
+   */
+  hmac(value: string): string {
+    return crypto
+      .createHmac('sha256', this.key)
+      .update(value.toLowerCase().trim())
+      .digest('hex');
+  }
 }

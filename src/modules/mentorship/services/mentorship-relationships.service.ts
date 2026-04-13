@@ -30,7 +30,8 @@ export class MentorshipRelationshipsService {
             company_type,
             mentor_bio,
             mentor_expertise,
-            affinity_tags_encrypted
+            affinity_tags_encrypted,
+            is_company_verified
           ),
           mentee:user_profiles!mentee_relationships(
             id,
@@ -40,7 +41,8 @@ export class MentorshipRelationshipsService {
             company_type,
             mentee_goals,
             mentee_interests,
-            affinity_tags_encrypted
+            affinity_tags_encrypted,
+            is_company_verified
           )
         `;
 
@@ -128,7 +130,8 @@ export class MentorshipRelationshipsService {
             mentor_response_time,
             mentor_style,
             mentor_languages,
-            affinity_tags_encrypted
+            affinity_tags_encrypted,
+            is_company_verified
           ),
           mentee:user_profiles!mentee_relationships(
             id,
@@ -140,7 +143,8 @@ export class MentorshipRelationshipsService {
             mentee_interests,
             years_experience,
             skills,
-            affinity_tags_encrypted
+            affinity_tags_encrypted,
+            is_company_verified
           ),
           sessions:mentorship_sessions(
             id,

@@ -10,3 +10,13 @@ export class VerifyCompanyEmailDto {
   @IsNotEmpty()
   email!: string;
 }
+
+export class UpdateVerificationEmailDto {
+  @ApiProperty({
+    description: 'New company email address to use for pending verification',
+    example: 'newuser@google.com',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+}

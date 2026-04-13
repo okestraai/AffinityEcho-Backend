@@ -741,7 +741,8 @@ export class TopicService {
           username,
           avatar,
           first_name_encrypted,
-          last_name_encrypted
+          last_name_encrypted,
+          is_company_verified
         ),
         forum:forum_id(
           id,

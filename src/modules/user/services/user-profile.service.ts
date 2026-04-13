@@ -240,10 +240,22 @@ export class UserProfileService {
           const decrypted = this.encryption.decrypt(
             profile.affinity_tags_encrypted,
           );
-          response.affinityTags = JSON.parse(decrypted);
+          const parsed = JSON.parse(decrypted);
+          response.affinityTags =
+            typeof parsed === 'string'
+              ? JSON.parse(parsed)
+              : Array.isArray(parsed)
+                ? parsed
+                : [];
         } catch {
           try {
-            response.affinityTags = JSON.parse(profile.affinity_tags_encrypted);
+            const parsed = JSON.parse(profile.affinity_tags_encrypted);
+            response.affinityTags =
+              typeof parsed === 'string'
+                ? JSON.parse(parsed)
+                : Array.isArray(parsed)
+                  ? parsed
+                  : [];
           } catch {
             response.affinityTags = [];
           }
@@ -1034,7 +1046,7 @@ export class UserProfileService {
           ? this.admin
               .from('feed_posts')
               .select(
-                `id, user_id, content, is_anonymous, tags, visibility, likes_count, comments_count, shares_count, views_count, created_at, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted)`,
+                `id, user_id, content, is_anonymous, tags, visibility, likes_count, comments_count, shares_count, views_count, created_at, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
                 { count: 'exact' },
               )
               .eq('user_id', userId)
@@ -1046,7 +1058,7 @@ export class UserProfileService {
           ? this.admin
               .from('forum_topics')
               .select(
-                `id, user_id, title, content, is_anonymous, tags, scope, views_count, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted), forum:forums(id, name)`,
+                `id, user_id, title, content, is_anonymous, tags, scope, views_count, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified), forum:forums(id, name)`,
                 { count: 'exact' },
               )
               .eq('user_id', userId)
@@ -1061,6 +1073,7 @@ export class UserProfileService {
                 { count: 'exact' },
               )
               .eq('creator_id', userId)
+              .eq('is_active', true)
               .gt('expires_at', now)
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)

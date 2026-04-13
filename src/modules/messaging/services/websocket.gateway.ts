@@ -350,19 +350,18 @@ export class ChatGateway
   @SubscribeMessage('mark_as_read')
   async markRead(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
     try {
-      await this.messagingService.markAsRead(
-        client.data.user.userId,
-        data.messageId,
-        data.conversationId,
-      );
+      const userId = client.data.user.userId;
+      const conversationId = data.conversationId || data.conversation_id;
+      const messageId = data.messageId || data.message_id;
+
+      await this.messagingService.markAsRead(userId, messageId, conversationId);
 
       // Notify conversation participants
-      this.server
-        .to(`conversation:${data.conversationId}`)
-        .emit('message_read', {
-          messageId: data.messageId,
-          userId: client.data.user.userId,
-        });
+      this.server.to(`conversation:${conversationId}`).emit('messages_read', {
+        conversationId,
+        readBy: userId,
+        messageId,
+      });
     } catch (error: any) {
       this.logger.error('❌ Error marking as read:', error?.message || error);
     }

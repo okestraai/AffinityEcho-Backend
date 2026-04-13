@@ -23,12 +23,12 @@ export class MentorshipProfileService {
     this.admin = supabaseAdmin(config);
   }
 
-  private decryptField(value: string | null | undefined): string {
-    if (!value) return '';
+  private decryptField(value: string | null | undefined): string | null {
+    if (!value) return null;
     try {
       return this.encryption.decrypt(value);
     } catch {
-      return '';
+      return null;
     }
   }
 
@@ -36,10 +36,14 @@ export class MentorshipProfileService {
     if (!value) return [];
     try {
       const decrypted = this.encryption.decrypt(value);
-      return JSON.parse(decrypted);
+      const parsed = JSON.parse(decrypted);
+      if (typeof parsed === 'string') return JSON.parse(parsed);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       try {
-        return JSON.parse(value);
+        const parsed = JSON.parse(value);
+        if (typeof parsed === 'string') return JSON.parse(parsed);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
       }
@@ -426,7 +430,8 @@ export class MentorshipProfileService {
         updated_at,
         last_active_at,
         is_deleted,
-        is_deactivated
+        is_deactivated,
+        is_company_verified
       `,
         )
         .eq('id', userId)

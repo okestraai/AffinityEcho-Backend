@@ -1,36 +1,56 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../database/supabase.client';
-
-interface ExpoPushMessage {
-  to: string;
-  title: string;
-  body: string;
-  data?: Record<string, any>;
-  sound?: 'default' | null;
-  badge?: number;
-  channelId?: string;
-}
+import * as admin from 'firebase-admin';
 
 @Injectable()
 export class PushNotificationService {
   private readonly logger = new Logger(PushNotificationService.name);
   private admin;
+  private firebaseApp: admin.app.App | null = null;
 
   constructor(private config: ConfigService) {
     this.admin = supabaseAdmin(config);
+    this.initFirebase();
   }
 
-  /**
-   * Register a push token for a user
-   */
+  // ─── Firebase Init ────────────────────────────────────────────────────────
+
+  private initFirebase() {
+    try {
+      const raw = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT');
+      if (!raw) {
+        this.logger.warn(
+          'FIREBASE_SERVICE_ACCOUNT not set — push notifications disabled',
+        );
+        return;
+      }
+
+      const serviceAccount = JSON.parse(raw);
+
+      // Avoid re-initialising if app already exists (e.g. hot reload)
+      if (admin.apps.length > 0) {
+        this.firebaseApp = admin.apps[0]!;
+      } else {
+        this.firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+      }
+
+      this.logger.log('Firebase Admin SDK initialised');
+    } catch (error) {
+      this.logger.error('Failed to initialise Firebase Admin SDK', { error });
+    }
+  }
+
+  // ─── Token Management ─────────────────────────────────────────────────────
+
   async registerToken(
     userId: string,
     token: string,
     platform: 'android' | 'ios',
     deviceName?: string,
   ) {
-    // Upsert: if this token already exists, update the user/device info
     const { data, error } = await this.admin
       .from('push_tokens')
       .upsert(
@@ -55,9 +75,6 @@ export class PushNotificationService {
     return { success: true, message: 'Push token registered', data };
   }
 
-  /**
-   * Remove a push token (e.g. on logout)
-   */
   async removeToken(userId: string, token: string) {
     const { error } = await this.admin
       .from('push_tokens')
@@ -74,9 +91,8 @@ export class PushNotificationService {
     return { success: true, message: 'Push token removed' };
   }
 
-  /**
-   * Send push notification to a user's devices
-   */
+  // ─── Send to User ─────────────────────────────────────────────────────────
+
   async sendToUser(
     userId: string,
     title: string,
@@ -84,7 +100,6 @@ export class PushNotificationService {
     data?: Record<string, any>,
     options?: { badge?: number; channelId?: string },
   ) {
-    // Get all active tokens for this user
     const { data: tokens, error } = await this.admin
       .from('push_tokens')
       .select('token, platform')
@@ -100,22 +115,26 @@ export class PushNotificationService {
       return;
     }
 
-    const messages: ExpoPushMessage[] = tokens.map((t: any) => ({
-      to: t.token,
-      title,
-      body,
-      data,
-      sound: 'default' as const,
-      badge: options?.badge,
-      channelId: options?.channelId || this.getChannelId(data?.type),
-    }));
+    const fcmTokens = tokens
+      .map((t: any) => t.token)
+      .filter((t: string) => this.isFcmToken(t));
 
-    await this.sendExpoPush(messages);
+    if (fcmTokens.length === 0) {
+      this.logger.debug(
+        `No FCM tokens for user ${userId} (may still be Expo tokens)`,
+      );
+      return;
+    }
+
+    const channelId =
+      options?.channelId || this.getChannelId(data?.type as string);
+
+    await this.sendFcm(fcmTokens, title, body, data, {
+      badge: options?.badge,
+      channelId,
+    });
   }
 
-  /**
-   * Send push notifications to multiple users
-   */
   async sendToUsers(
     userIds: string[],
     title: string,
@@ -132,84 +151,121 @@ export class PushNotificationService {
 
     if (error || !tokens || tokens.length === 0) return;
 
-    const messages: ExpoPushMessage[] = tokens.map((t: any) => ({
-      to: t.token,
-      title,
-      body,
-      data,
-      sound: 'default' as const,
-      badge: options?.badge,
-      channelId: options?.channelId || this.getChannelId(data?.type),
-    }));
+    const fcmTokens = tokens
+      .map((t: any) => t.token)
+      .filter((t: string) => this.isFcmToken(t));
 
-    await this.sendExpoPush(messages);
+    if (fcmTokens.length === 0) return;
+
+    const channelId =
+      options?.channelId || this.getChannelId(data?.type as string);
+
+    await this.sendFcm(fcmTokens, title, body, data, {
+      badge: options?.badge,
+      channelId,
+    });
   }
 
-  /**
-   * Send messages to Expo Push API (batched in chunks of 100)
-   */
-  private async sendExpoPush(messages: ExpoPushMessage[]) {
-    const EXPO_PUSH_URL =
-      this.config.get<string>('EXPO_PUSH_URL') ||
-      'https://exp.host/--/api/v2/push/send';
-    const EXPO_ACCESS_TOKEN = this.config.get<string>('EXPO_ACCESS_TOKEN');
-    const BATCH_SIZE = 100;
+  // ─── FCM Send ─────────────────────────────────────────────────────────────
 
-    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-      const batch = messages.slice(i, i + BATCH_SIZE);
+  private async sendFcm(
+    tokens: string[],
+    title: string,
+    body: string,
+    data?: Record<string, any>,
+    options?: { badge?: number; channelId?: string },
+  ) {
+    if (!this.firebaseApp) {
+      this.logger.warn('Firebase not initialised — skipping push');
+      return;
+    }
+
+    // FCM data payload values must all be strings
+    const stringData: Record<string, string> = {};
+    if (data) {
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== null && v !== undefined) {
+          stringData[k] = String(v);
+        }
+      }
+    }
+
+    const channelId = options?.channelId || 'default';
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const batch = tokens.slice(i, i + BATCH_SIZE);
 
       try {
-        const headers: Record<string, string> = {
-          Accept: 'application/json',
-          'Accept-Encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
+        const message: admin.messaging.MulticastMessage = {
+          tokens: batch,
+          notification: { title, body },
+          data: stringData,
+          android: {
+            priority: 'high',
+            notification: {
+              channelId,
+              sound: 'default',
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: 'default',
+                badge: options?.badge ?? 1,
+              },
+            },
+          },
         };
 
-        // Add Expo access token if configured (recommended for production)
-        if (EXPO_ACCESS_TOKEN) {
-          headers['Authorization'] = `Bearer ${EXPO_ACCESS_TOKEN}`;
-        }
+        const response = await admin
+          .messaging(this.firebaseApp)
+          .sendEachForMulticast(message);
 
-        const response = await fetch(EXPO_PUSH_URL, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(batch),
+        this.logger.debug(
+          `FCM batch sent: ${response.successCount} ok, ${response.failureCount} failed`,
+        );
+
+        // Clean up dead tokens
+        const deadTokens: string[] = [];
+        response.responses.forEach((res, idx) => {
+          if (!res.success) {
+            const code = res.error?.code;
+            this.logger.warn(
+              `FCM send failed for a token: ${res.error?.message}`,
+              {
+                code,
+              },
+            );
+            if (
+              code === 'messaging/registration-token-not-registered' ||
+              code === 'messaging/invalid-registration-token'
+            ) {
+              deadTokens.push(batch[idx]);
+            }
+          }
         });
 
-        const result = await response.json();
-
-        if (result.data) {
-          // Check for individual ticket errors (invalid tokens)
-          const invalidTokens: string[] = [];
-          result.data.forEach((ticket: any, index: number) => {
-            if (ticket.status === 'error') {
-              this.logger.warn(`Push failed for token: ${ticket.message}`, {
-                token: batch[index].to,
-                details: ticket.details,
-              });
-              // Remove invalid tokens (DeviceNotRegistered = uninstalled app)
-              if (ticket.details?.error === 'DeviceNotRegistered') {
-                invalidTokens.push(batch[index].to);
-              }
-            }
-          });
-
-          // Clean up invalid tokens
-          if (invalidTokens.length > 0) {
-            await this.removeInvalidTokens(invalidTokens);
-          }
+        if (deadTokens.length > 0) {
+          await this.removeInvalidTokens(deadTokens);
         }
-
-        this.logger.debug(`Sent ${batch.length} push notifications`);
       } catch (error) {
-        this.logger.error('Expo Push API request failed', { error });
+        this.logger.error('FCM batch send failed', { error });
       }
     }
   }
 
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
   /**
-   * Remove tokens that Expo reports as invalid
+   * Expo tokens look like ExponentPushToken[xxxxx].
+   * FCM tokens are long alphanumeric strings (100–200 chars).
+   * During the migration period we skip Expo tokens so they don't error.
    */
+  private isFcmToken(token: string): boolean {
+    return !token.startsWith('ExponentPushToken');
+  }
+
   private async removeInvalidTokens(tokens: string[]) {
     const { error } = await this.admin
       .from('push_tokens')
@@ -224,7 +280,8 @@ export class PushNotificationService {
   }
 
   /**
-   * Map notification type to Android notification channel
+   * Map notification type to Android notification channel.
+   * These must match the channels registered in the mobile app.
    */
   private getChannelId(type?: string): string {
     if (!type) return 'default';

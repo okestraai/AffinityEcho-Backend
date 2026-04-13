@@ -38,7 +38,7 @@ export class UserDiscoveryService {
 
       const query = this.admin
         .from('user_profiles')
-        .select('id, username, avatar')
+        .select('id, username, avatar, is_company_verified')
         .neq('id', userId)
         .eq('is_deleted', false)
         .eq('is_deactivated', false)
@@ -112,6 +112,7 @@ export class UserDiscoveryService {
           mentoring_as,
           is_active_mentor,
           is_active_mentee,
+          is_company_verified,
           privacy_level,
           created_at,
           last_active_at

@@ -26,20 +26,27 @@ export class IdentityRevealUtil {
 
     const uniqueIds = [...new Set(otherUserIds)];
 
-    const { data: reveals } = await this.admin
-      .from('identity_reveals')
-      .select('requester_id, responder_id')
-      .eq('status', 'accepted')
-      .or(
-        `and(requester_id.eq.${currentUserId},responder_id.in.(${uniqueIds.join(',')})),and(responder_id.eq.${currentUserId},requester_id.in.(${uniqueIds.join(',')}))`,
-      );
+    // Use two separate queries to avoid the PostgREST bug where
+    // in.() inside nested and() inside or() passes "(uuid)" with
+    // parentheses to PostgreSQL, causing a UUID parse error.
+    const [q1, q2] = await Promise.all([
+      this.admin
+        .from('identity_reveals')
+        .select('responder_id')
+        .eq('status', 'accepted')
+        .eq('requester_id', currentUserId)
+        .in('responder_id', uniqueIds),
+      this.admin
+        .from('identity_reveals')
+        .select('requester_id')
+        .eq('status', 'accepted')
+        .eq('responder_id', currentUserId)
+        .in('requester_id', uniqueIds),
+    ]);
 
     const revealedIds = new Set<string>();
-    (reveals || []).forEach((r: any) => {
-      const otherId =
-        r.requester_id === currentUserId ? r.responder_id : r.requester_id;
-      revealedIds.add(otherId);
-    });
+    (q1.data || []).forEach((r: any) => revealedIds.add(r.responder_id));
+    (q2.data || []).forEach((r: any) => revealedIds.add(r.requester_id));
 
     return revealedIds;
   }

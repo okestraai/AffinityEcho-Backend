@@ -107,6 +107,7 @@ export class MentorshipBookmarksService {
             mentor_industries,
             mentoring_as,
             reputation_score,
+            is_company_verified,
             has_completed_onboarding,
             is_deleted,
             is_deactivated

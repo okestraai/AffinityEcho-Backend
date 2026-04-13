@@ -138,12 +138,14 @@ export class MentorshipSessionsService {
             mentor:user_profiles!mentor_relationships(
               id,
               username,
-              avatar
+              avatar,
+              is_company_verified
             ),
             mentee:user_profiles!mentee_relationships(
               id,
               username,
-              avatar
+              avatar,
+              is_company_verified
             )
           )
         `,

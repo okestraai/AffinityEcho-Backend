@@ -49,8 +49,11 @@ export class EmailService {
     const config = {
       host,
       port: Number(port),
-      secure: false,
-      requireTLS: true,
+      secure: Number(port) === 465,
+      requireTLS: Number(port) !== 465,
+      connectionTimeout: 10000,
+      socketTimeout: 10000,
+      greetingTimeout: 10000,
       auth: {
         user: user.trim(),
         pass: pass.trim(),

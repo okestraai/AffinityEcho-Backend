@@ -92,7 +92,9 @@ export class ConversationsService {
       // Check if conversation already exists between these users with same type
       let existingQuery = this.admin
         .from('conversations')
-        .select('id, context_type, context_id')
+        .select(
+          'id, context_type, context_id, user1_id, user2_id, user1_deleted_at, user2_deleted_at, user1_cleared_at, user2_cleared_at',
+        )
         .or(
           `and(user1_id.eq.${userId},user2_id.eq.${dto.other_user_id}),and(user1_id.eq.${dto.other_user_id},user2_id.eq.${userId})`,
         )
@@ -108,6 +110,25 @@ export class ConversationsService {
       const { data: existingConv } = await existingQuery.maybeSingle();
 
       if (existingConv) {
+        // If current user had previously deleted or cleared this conversation, restore it
+        const isUser1 = existingConv.user1_id === userId;
+        const deleteField = isUser1 ? 'user1_deleted_at' : 'user2_deleted_at';
+        const clearField = isUser1 ? 'user1_cleared_at' : 'user2_cleared_at';
+        const wasHidden =
+          (isUser1
+            ? existingConv.user1_deleted_at
+            : existingConv.user2_deleted_at) ||
+          (isUser1
+            ? existingConv.user1_cleared_at
+            : existingConv.user2_cleared_at);
+
+        if (wasHidden) {
+          await this.admin
+            .from('conversations')
+            .update({ [deleteField]: null, [clearField]: null })
+            .eq('id', existingConv.id);
+        }
+
         return {
           success: true,
           message: 'Conversation already exists',
@@ -255,19 +276,31 @@ export class ConversationsService {
         `Found ${conversations?.length || 0} conversations for user ${userId}`,
       );
 
-      // Filter out conversations soft-deleted by this user (unless new messages arrived after deletion)
+      // Filter out conversations hidden by this user (deleted or cleared),
+      // unless new messages arrived after the hide timestamp
       const visibleConversations = (conversations || []).filter((conv: any) => {
-        const deletedAt =
-          conv.user1_id === userId
-            ? conv.user1_deleted_at
-            : conv.user2_deleted_at;
+        const isUser1 = conv.user1_id === userId;
+        const deletedAt = isUser1
+          ? conv.user1_deleted_at
+          : conv.user2_deleted_at;
+        const clearedAt = isUser1
+          ? conv.user1_cleared_at
+          : conv.user2_cleared_at;
 
-        if (!deletedAt) return true; // Not deleted by this user
+        // Use whichever hide timestamp is more recent
+        const hideAt =
+          deletedAt && clearedAt
+            ? new Date(deletedAt) > new Date(clearedAt)
+              ? deletedAt
+              : clearedAt
+            : deletedAt || clearedAt;
 
-        // If there are new messages after the deletion timestamp, show the conversation
+        if (!hideAt) return true; // Not hidden by this user
+
+        // Show only if a new message arrived after the hide timestamp
         return (
           conv.last_message_at &&
-          new Date(conv.last_message_at) > new Date(deletedAt)
+          new Date(conv.last_message_at) > new Date(hideAt)
         );
       });
 

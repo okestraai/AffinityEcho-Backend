@@ -39,13 +39,16 @@ describe('IdentityRevealUtil', () => {
     });
 
     it('should return revealed user IDs', async () => {
-      const reveals = [
-        { requester_id: 'current-user', responder_id: 'user-2' },
-        { requester_id: 'user-3', responder_id: 'current-user' },
-      ];
-
-      const chain = createMockQueryChain({ data: reveals, error: null });
-      mockClient.from.mockReturnValueOnce(chain);
+      // Two parallel queries: current-user as requester, then as responder
+      const chain1 = createMockQueryChain({
+        data: [{ responder_id: 'user-2' }],
+        error: null,
+      });
+      const chain2 = createMockQueryChain({
+        data: [{ requester_id: 'user-3' }],
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain1).mockReturnValueOnce(chain2);
 
       const result = await util.getRevealedUserIds('current-user', [
         'user-2',
@@ -55,20 +58,22 @@ describe('IdentityRevealUtil', () => {
 
       expect(result).toEqual(new Set(['user-2', 'user-3']));
       expect(mockClient.from).toHaveBeenCalledWith('identity_reveals');
-      expect(chain.eq).toHaveBeenCalledWith('status', 'accepted');
+      expect(chain1.eq).toHaveBeenCalledWith('status', 'accepted');
     });
 
     it('should handle null reveals data', async () => {
-      const chain = createMockQueryChain({ data: null, error: null });
-      mockClient.from.mockReturnValueOnce(chain);
+      const chain1 = createMockQueryChain({ data: null, error: null });
+      const chain2 = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain1).mockReturnValueOnce(chain2);
 
       const result = await util.getRevealedUserIds('current-user', ['user-2']);
       expect(result).toEqual(new Set());
     });
 
     it('should deduplicate input user IDs', async () => {
-      const chain = createMockQueryChain({ data: [], error: null });
-      mockClient.from.mockReturnValueOnce(chain);
+      const chain1 = createMockQueryChain({ data: [], error: null });
+      const chain2 = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(chain1).mockReturnValueOnce(chain2);
 
       await util.getRevealedUserIds('current-user', [
         'user-2',
@@ -76,8 +81,9 @@ describe('IdentityRevealUtil', () => {
         'user-3',
       ]);
 
-      // The or filter should use deduplicated IDs
-      expect(chain.or).toHaveBeenCalled();
+      // Two separate .in() queries replace the old nested or(and()) approach
+      expect(chain1.in).toHaveBeenCalled();
+      expect(chain2.in).toHaveBeenCalled();
     });
   });
 

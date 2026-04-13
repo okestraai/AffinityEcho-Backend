@@ -105,7 +105,7 @@ export class MessagingService {
       // Get sender info for notification
       const { data: senderProfile } = await this.admin
         .from('user_profiles')
-        .select('username, avatar')
+        .select('username, avatar, is_company_verified')
         .eq('id', userId)
         .single();
 
@@ -178,18 +178,6 @@ export class MessagingService {
 
   async markAsRead(userId: string, messageId: string, conversationId: string) {
     try {
-      // Verify user has access to message
-      const { data: message } = await this.admin
-        .from('messages')
-        .select('id, conversation_id, sender_id')
-        .eq('id', messageId)
-        .eq('conversation_id', conversationId)
-        .single();
-
-      if (!message) {
-        throw new NotFoundException('Message not found');
-      }
-
       // Verify conversation access
       const { data: conversation } = await this.admin
         .from('conversations')
@@ -204,19 +192,27 @@ export class MessagingService {
         throw new ForbiddenException('Not authorized');
       }
 
-      // Don't mark own messages as read
-      if (message.sender_id === userId) {
-        return { success: true, data: { already_read: true } };
+      // Get the timestamp of the anchor message to mark up to
+      const { data: anchorMessage } = await this.admin
+        .from('messages')
+        .select('created_at')
+        .eq('id', messageId)
+        .eq('conversation_id', conversationId)
+        .single();
+
+      if (!anchorMessage) {
+        throw new NotFoundException('Message not found');
       }
 
-      // Mark as read
+      // Mark all unread messages sent by the other user up to (and including) this message as read
+      const now = new Date().toISOString();
       const { error } = await this.admin
         .from('messages')
-        .update({
-          is_read: true,
-          read_at: new Date().toISOString(),
-        })
-        .eq('id', messageId);
+        .update({ is_read: true, read_at: now })
+        .eq('conversation_id', conversationId)
+        .eq('is_read', false)
+        .neq('sender_id', userId)
+        .lte('created_at', anchorMessage.created_at);
 
       if (error) throw error;
 
@@ -224,7 +220,8 @@ export class MessagingService {
         success: true,
         data: {
           message_id: messageId,
-          read_at: new Date().toISOString(),
+          conversation_id: conversationId,
+          read_at: now,
         },
       };
     } catch (error) {
@@ -543,7 +540,7 @@ export class MessagingService {
       // Get user info for typing notification
       const { data: userProfile } = await this.admin
         .from('user_profiles')
-        .select('id, username, avatar')
+        .select('id, username, avatar, is_company_verified')
         .eq('id', userId)
         .single();
 

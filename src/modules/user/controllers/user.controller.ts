@@ -22,7 +22,10 @@ import { HarassmentReportService } from '../services/harassment-report.service';
 import { FeedEngagementService } from '../../feeds/services/feed-engagement.service';
 import { CompanyVerificationService } from '../services/company-verification.service';
 import { UnifiedProfileService } from '../services/unified-profile.service';
-import { VerifyCompanyEmailDto } from '../dto/company-verification.dto';
+import {
+  VerifyCompanyEmailDto,
+  UpdateVerificationEmailDto,
+} from '../dto/company-verification.dto';
 import { UnifiedProfileEditDto } from '../dto/unified-profile-edit.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -385,6 +388,21 @@ export class UserController {
     @Body() dto: VerifyCompanyEmailDto,
   ) {
     return this.companyVerificationService.requestVerification(
+      req.user.sub,
+      dto.email,
+    );
+  }
+
+  @Put('company-verification-email')
+  @ApiOperation({
+    summary:
+      'Update verification email for a pending request (before verification is confirmed)',
+  })
+  async updateVerificationEmail(
+    @Req() req: any,
+    @Body() dto: UpdateVerificationEmailDto,
+  ) {
+    return this.companyVerificationService.updateVerificationEmail(
       req.user.sub,
       dto.email,
     );

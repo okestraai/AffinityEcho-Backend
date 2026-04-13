@@ -60,7 +60,7 @@ export class MentorshipRequestsService {
         this.admin
           .from('user_profiles')
           .select(
-            'id, username, avatar, is_willing_to_mentor, mentoring_as, is_deleted, is_deactivated',
+            'id, username, avatar, is_willing_to_mentor, mentoring_as, is_deleted, is_deactivated, is_company_verified',
           )
           .eq('id', targetUserId)
           .single(),
@@ -116,7 +116,8 @@ export class MentorshipRequestsService {
             job_title,
             company_encrypted,
             location,
-            years_experience
+            years_experience,
+            is_company_verified
           ),
           target_user:target_user_id(
             id,
@@ -125,7 +126,8 @@ export class MentorshipRequestsService {
             job_title,
             company_encrypted,
             location,
-            years_experience
+            years_experience,
+            is_company_verified
           )
         `,
         )
@@ -316,7 +318,8 @@ export class MentorshipRequestsService {
             years_experience,
             mentor_expertise,
             mentor_industries,
-            mentor_bio
+            mentor_bio,
+            is_company_verified
           )
           `,
           { count: 'exact' },
@@ -401,7 +404,8 @@ export class MentorshipRequestsService {
             years_experience,
             mentor_expertise,
             mentor_industries,
-            mentor_bio
+            mentor_bio,
+            is_company_verified
           )
           `,
           { count: 'exact' },
@@ -492,7 +496,8 @@ export class MentorshipRequestsService {
             mentor_industries,
             mentor_bio,
             mentoring_as,
-            is_willing_to_mentor
+            is_willing_to_mentor,
+            is_company_verified
           ),
           target_user:target_user_id(
             id,
@@ -506,7 +511,8 @@ export class MentorshipRequestsService {
             mentor_industries,
             mentor_bio,
             mentoring_as,
-            is_willing_to_mentor
+            is_willing_to_mentor,
+            is_company_verified
           )
           `,
           { count: 'exact' },
@@ -631,14 +637,16 @@ export class MentorshipRequestsService {
             username,
             avatar,
             job_title,
-            company_encrypted
+            company_encrypted,
+            is_company_verified
           ),
           target_user:target_user_id(
             id,
             username,
             avatar,
             job_title,
-            company_encrypted
+            company_encrypted,
+            is_company_verified
           )
           `,
         )
@@ -779,7 +787,8 @@ export class MentorshipRequestsService {
           years_experience,
           mentor_expertise,
           mentor_industries,
-          mentor_bio
+          mentor_bio,
+          is_company_verified
         ),
         target_user:target_user_id(
           id,
@@ -791,7 +800,8 @@ export class MentorshipRequestsService {
           years_experience,
           mentor_expertise,
           mentor_industries,
-          mentor_bio
+          mentor_bio,
+          is_company_verified
         )
       `,
         )
@@ -857,7 +867,8 @@ export class MentorshipRequestsService {
           years_experience,
           mentor_expertise,
           mentor_industries,
-          mentor_bio
+          mentor_bio,
+          is_company_verified
         ),
         target_user:target_user_id(
           id,
@@ -869,7 +880,8 @@ export class MentorshipRequestsService {
           years_experience,
           mentor_expertise,
           mentor_industries,
-          mentor_bio
+          mentor_bio,
+          is_company_verified
         )
       `,
         )
@@ -1556,7 +1568,8 @@ export class MentorshipRequestsService {
     helpful_votes_received,
     reputation_score,
     mentorship_sessions_completed,
-    badges
+    badges,
+    is_company_verified
   `;
 
   private buildFullProfile(raw: any) {
@@ -1580,9 +1593,14 @@ export class MentorshipRequestsService {
     }
     if (raw.affinity_tags_encrypted) {
       try {
-        affinityTags = JSON.parse(
-          this.encryption.decrypt(raw.affinity_tags_encrypted),
-        );
+        const decrypted = this.encryption.decrypt(raw.affinity_tags_encrypted);
+        const parsed = JSON.parse(decrypted);
+        affinityTags =
+          typeof parsed === 'string'
+            ? JSON.parse(parsed)
+            : Array.isArray(parsed)
+              ? parsed
+              : [];
       } catch {
         /* skip */
       }
@@ -1637,6 +1655,7 @@ export class MentorshipRequestsService {
         mentorshipSessionsCompleted: raw.mentorship_sessions_completed || 0,
       },
       badges: raw.badges || [],
+      is_company_verified: raw.is_company_verified || false,
     };
   }
 

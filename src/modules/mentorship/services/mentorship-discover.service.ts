@@ -107,7 +107,8 @@ export class MentorshipDiscoverService {
       reputation_score,
       mentorship_sessions_completed,
       first_name_encrypted,
-      last_name_encrypted
+      last_name_encrypted,
+      is_company_verified
     `,
           { count: 'exact' },
         )
@@ -131,12 +132,9 @@ export class MentorshipDiscoverService {
 
       // Exclude existing mentor-mentee pairs
       if (excludeIds.size > 0) {
-        const excludeArray = [...excludeIds];
-        supabaseQuery = supabaseQuery.not(
-          'id',
-          'in',
-          `(${excludeArray.join(',')})`,
-        );
+        for (const id of excludeIds) {
+          supabaseQuery = supabaseQuery.neq('id', id);
+        }
       }
 
       // Search filter
@@ -434,7 +432,8 @@ export class MentorshipDiscoverService {
           career_level_encrypted,
           affinity_tags_encrypted,
           reputation_score,
-          is_willing_to_mentor
+          is_willing_to_mentor,
+          is_company_verified
         `,
         )
         .neq('id', currentUserId)

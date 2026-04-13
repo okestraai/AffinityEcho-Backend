@@ -36,10 +36,17 @@ export class UnifiedProfileService {
     if (!value) return [];
     try {
       const decrypted = this.encryption.decrypt(value);
-      return JSON.parse(decrypted);
+      const parsed = JSON.parse(decrypted);
+      // Handle double-stringified case: stored as encrypt(JSON.stringify(JSON.stringify(array)))
+      if (typeof parsed === 'string') {
+        return JSON.parse(parsed);
+      }
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       try {
-        return JSON.parse(value);
+        const parsed = JSON.parse(value);
+        if (typeof parsed === 'string') return JSON.parse(parsed);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
       }
