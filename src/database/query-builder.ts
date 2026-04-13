@@ -94,7 +94,7 @@ function parseSelectString(selectStr: string, tableName: string): ParsedSelect {
     const relMatch = relMatch3 || relMatch2;
     if (relMatch) {
       const alias = relMatch[1];
-      const rawFk = relMatch3 ? relMatch[2] : relMatch[1] + '_id';
+      const rawFk = (relMatch3 ? relMatch[2] : relMatch[1] + '_id').trim();
       const innerCols = relMatch3 ? relMatch[3] : relMatch[2];
 
       // Known table names — if rawFk is a table name, use alias_id as the FK column
@@ -473,9 +473,12 @@ export class QueryChain {
           return;
         }
 
-        const relCols = rel.columns.map((c) => escapeIdentifier(c)).join(', ');
+        const relColNames = rel.columns.includes('id')
+          ? rel.columns
+          : ['id', ...rel.columns];
+        const relCols = relColNames.map((c) => escapeIdentifier(c)).join(', ');
         const placeholders = fkValues.map((_, i) => `$${i + 1}`).join(', ');
-        const relSql = `SELECT id, ${relCols} FROM ${escapeIdentifier(rel.targetTable)} WHERE id IN (${placeholders})`;
+        const relSql = `SELECT ${relCols} FROM ${escapeIdentifier(rel.targetTable)} WHERE id IN (${placeholders})`;
         const relResult = await this.pool.query(relSql, fkValues);
         const relMap = new Map<string, any>();
         for (const rr of relResult.rows) relMap.set(rr.id, rr);

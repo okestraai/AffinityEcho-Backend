@@ -1,50 +1,52 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../database/supabase.client';
+import { getPool } from '../database/pg-client';
 import logger from '../common/utils/logger.util';
 
 @Injectable()
-export class NookCronJobs {
+export class NookCronJobs implements OnModuleInit {
   private admin;
 
   constructor(private config: ConfigService) {
     this.admin = supabaseAdmin(config);
   }
 
+  async onModuleInit() {
+    // Clean up expired nooks immediately on startup (catches any that expired while server was down)
+    await this.deleteExpiredNooks();
+  }
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async deleteExpiredNooks() {
-    const now = new Date().toISOString();
+    logger.info('Running expired nooks cleanup', { module: 'NookCron' });
 
-    const { data: expiredNooks, error } = await this.admin
-      .from('nooks')
-      .select('id')
-      .lt('expires_at', now);
+    try {
+      // Use raw SQL with the DB's own NOW() to avoid any JS/DB clock skew.
+      const pool = getPool();
+      const result = await pool.query<{ id: string; title: string }>(`
+        DELETE FROM nooks
+        WHERE expires_at < NOW()
+        RETURNING id, title
+      `);
 
-    if (error) {
-      logger.error('Error fetching expired nooks', {
-        module: 'NookCron',
-        error: error.message,
-      });
-      return;
-    }
-
-    if (expiredNooks && expiredNooks.length > 0) {
-      const { error: deleteError } = await this.admin
-        .from('nooks')
-        .delete()
-        .lt('expires_at', now);
-
-      if (deleteError) {
-        logger.error('Error deleting expired nooks', {
-          module: 'NookCron',
-          error: deleteError.message,
-        });
+      const deleted = result.rows;
+      if (deleted.length === 0) {
+        logger.info('No expired nooks to delete', { module: 'NookCron' });
       } else {
-        logger.info(`Deleted ${expiredNooks.length} expired nooks`, {
+        logger.info(`Deleted ${deleted.length} expired nooks`, {
           module: 'NookCron',
+          count: deleted.length,
+          ids: deleted.map((n) => n.id),
+          titles: deleted.map((n) => n.title),
         });
       }
+    } catch (err: any) {
+      logger.error('Error deleting expired nooks', {
+        module: 'NookCron',
+        error: err.message,
+      });
     }
   }
 

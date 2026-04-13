@@ -191,6 +191,8 @@ export class FeedEngagementService {
             id,
             username,
             avatar,
+            first_name_encrypted,
+            last_name_encrypted,
             is_company_verified
           )
         `,

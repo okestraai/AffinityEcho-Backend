@@ -71,6 +71,8 @@ export class FeedPostsService {
             username,
             avatar,
             bio,
+            first_name_encrypted,
+            last_name_encrypted,
             is_company_verified
           )
         `,
@@ -371,6 +373,8 @@ export class FeedPostsService {
             username,
             avatar,
             bio,
+            first_name_encrypted,
+            last_name_encrypted,
             is_company_verified
           )
         `,
