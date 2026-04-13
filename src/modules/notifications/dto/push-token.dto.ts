@@ -1,12 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn, Matches } from 'class-validator';
+import { IsString, IsOptional, IsIn, MinLength } from 'class-validator';
 
 export class RegisterPushTokenDto {
-  @ApiProperty({ example: 'ExponentPushToken[xxxxx]' })
+  @ApiProperty({ example: 'ExponentPushToken[xxxxx] or FCM token' })
   @IsString()
-  @Matches(/^ExponentPushToken\[.+\]$/, {
-    message: 'token must be a valid Expo push token (ExponentPushToken[...])',
-  })
+  @MinLength(20, { message: 'token must be a valid push token' })
   token!: string;
 
   @ApiProperty({ example: 'android', enum: ['android', 'ios'] })
@@ -21,10 +19,8 @@ export class RegisterPushTokenDto {
 }
 
 export class RemovePushTokenDto {
-  @ApiProperty({ example: 'ExponentPushToken[xxxxx]' })
+  @ApiProperty({ example: 'ExponentPushToken[xxxxx] or FCM token' })
   @IsString()
-  @Matches(/^ExponentPushToken\[.+\]$/, {
-    message: 'token must be a valid Expo push token (ExponentPushToken[...])',
-  })
+  @MinLength(20, { message: 'token must be a valid push token' })
   token!: string;
 }

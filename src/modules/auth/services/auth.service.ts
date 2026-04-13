@@ -967,14 +967,11 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Mark email as confirmed + send welcome email
-    await Promise.all([
-      this.admin
-        .from('user_profiles')
-        .update({ email_confirmed_at: new Date().toISOString() })
-        .eq('id', profile.id),
-      this.emailService.sendWelcomeEmail(email, profile.username || 'User'),
-    ]);
+    // Mark email as confirmed
+    await this.admin
+      .from('user_profiles')
+      .update({ email_confirmed_at: new Date().toISOString() })
+      .eq('id', profile.id);
 
     return this.generateTokens(profile.id, email);
   }
