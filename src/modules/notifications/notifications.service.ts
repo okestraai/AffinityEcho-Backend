@@ -528,6 +528,26 @@ export class NotificationsService {
   }
 
   /**
+   * Mark action_taken = true on notifications matching a reference_id for a given user.
+   * Used when the user acts on an actionable notification (e.g. accepts/rejects identity reveal).
+   */
+  async markActionTakenByReference(userId: string, referenceId: string) {
+    try {
+      await this.admin
+        .from('notifications')
+        .update({ action_taken: true })
+        .eq('user_id', userId)
+        .eq('reference_id', referenceId);
+    } catch (error: any) {
+      this.logger.warn('Failed to mark action_taken on notification', {
+        userId,
+        referenceId,
+        error: error?.message,
+      });
+    }
+  }
+
+  /**
    * Update notification
    */
   async updateNotification(

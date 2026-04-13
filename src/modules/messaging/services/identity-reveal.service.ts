@@ -230,6 +230,12 @@ export class IdentityRevealService {
 
       if (updateError) throw updateError;
 
+      // Mark the original identity_reveal_request notification as action_taken
+      await this.notificationsService.markActionTakenByReference(
+        userId,
+        dto.reveal_id,
+      );
+
       // If accepted, update ALL conversations between the two users
       if (dto.action === 'accept') {
         // First find all conversations between the two users

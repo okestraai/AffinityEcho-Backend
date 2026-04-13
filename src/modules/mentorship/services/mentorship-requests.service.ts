@@ -978,7 +978,15 @@ export class MentorshipRequestsService {
         throw new BadRequestException('Failed to update request');
       }
 
-      // 5. Send notification to the other party
+      // 5. Mark the original mentorship_request notification as action_taken for the receiver
+      if (isReceiver) {
+        await this.notificationsService.markActionTakenByReference(
+          userId,
+          requestId,
+        );
+      }
+
+      // 6. Send notification to the other party
       const notificationUserId = isReceiver
         ? request.requester_id
         : request.target_user_id;
