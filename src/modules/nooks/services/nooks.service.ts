@@ -113,8 +113,7 @@ export class NooksService {
   }
 
   async create(createNookDto: CreateNookDto, userId: string) {
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const insertData: any = {
       ...createNookDto,
