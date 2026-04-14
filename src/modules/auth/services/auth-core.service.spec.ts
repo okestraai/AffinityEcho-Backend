@@ -425,10 +425,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
           },
         }),
       );
-      expect(mockEmail.sendWelcomeEmail).toHaveBeenCalledWith(
-        email,
-        'testuser',
-      );
+      expect(mockEmail.sendWelcomeEmail).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException for invalid OTP', async () => {
