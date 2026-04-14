@@ -418,10 +418,9 @@ export class AuthService {
         throw new InternalServerErrorException('Google OAuth not configured');
       }
 
-      let callbackUrl = `${backendUrl}/api/v1/auth/google/callback`;
-      if (redirectUri) {
-        callbackUrl += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      }
+      // Keep redirect_uri clean — Google must match it exactly against the registered URI.
+      // Carry the mobile deep link via the `state` param instead.
+      const callbackUrl = `${backendUrl}/api/v1/auth/google/callback`;
 
       // Build Google OAuth URL directly
       const googleAuthUrl = new URL(
@@ -433,6 +432,12 @@ export class AuthService {
       googleAuthUrl.searchParams.set('scope', 'openid email profile');
       googleAuthUrl.searchParams.set('access_type', 'offline');
       googleAuthUrl.searchParams.set('prompt', 'consent');
+      if (redirectUri) {
+        googleAuthUrl.searchParams.set(
+          'state',
+          encodeURIComponent(redirectUri),
+        );
+      }
 
       const url = googleAuthUrl.toString();
       logger.info('Social login URL generated', { provider, url });
@@ -454,13 +459,21 @@ export class AuthService {
   // GOOGLE OAUTH CALLBACK
   async googleCallback(
     code: string,
-    redirectUri?: string,
+    state?: string,
   ): Promise<{ redirectUrl: string }> {
     const frontendUrl = this.config.get('FRONTEND_URL');
 
-    // Validate redirect_uri if provided (only allow our deep link scheme)
-    if (redirectUri && !redirectUri.startsWith('affinityecho://')) {
-      redirectUri = undefined;
+    // Decode the mobile deep link from state param (set during socialLogin)
+    let redirectUri: string | undefined;
+    if (state) {
+      try {
+        const decoded = decodeURIComponent(state);
+        if (decoded.startsWith('affinityecho://')) {
+          redirectUri = decoded;
+        }
+      } catch {
+        // invalid state — ignore
+      }
     }
 
     if (!code) {

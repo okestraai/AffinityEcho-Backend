@@ -139,13 +139,10 @@ export class AuthController {
   })
   async googleCallback(
     @Query('code') code: string,
-    @Query('redirect_uri') redirectUri: string,
+    @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const { redirectUrl } = await this.authService.googleCallback(
-      code,
-      redirectUri,
-    );
+    const { redirectUrl } = await this.authService.googleCallback(code, state);
     return res.redirect(redirectUrl);
   }
 
