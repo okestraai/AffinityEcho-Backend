@@ -25,6 +25,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { getBullConfig } from './config/bull.config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NookCronJobs } from './jobs/nook-cron.jobs';
+import { DigestCronJobs } from './jobs/digest-cron.jobs';
+import { EmailService } from './common/utils/email/email.service';
 import { OkestraModule } from './modules/okestra/okestra.module';
 
 @Module({
@@ -69,6 +71,8 @@ import { OkestraModule } from './modules/okestra/okestra.module';
     AppService,
     EncryptionUtil,
     NookCronJobs,
+    DigestCronJobs,
+    EmailService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

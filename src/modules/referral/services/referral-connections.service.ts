@@ -287,7 +287,7 @@ export class ReferralConnectionsService {
         const [{ data: receiver }, { data: sender }] = await Promise.all([
           this.admin
             .from('user_profiles')
-            .select('email, username')
+            .select('email, username, email_notifications')
             .eq('id', post.user_id)
             .single(),
           this.admin
@@ -311,8 +311,8 @@ export class ReferralConnectionsService {
           delivery_method: ['in_app'],
         });
 
-        // Send email notification
-        if (receiver?.email) {
+        // Send email notification (respects emailNotifications setting)
+        if (receiver?.email && receiver.email_notifications !== false) {
           await this.emailService.sendConnectionRequestEmail(
             receiver.email,
             receiver.username,
@@ -394,7 +394,7 @@ export class ReferralConnectionsService {
         const [{ data: sender }, { data: receiver }] = await Promise.all([
           this.admin
             .from('user_profiles')
-            .select('email, username')
+            .select('email, username, email_notifications')
             .eq('id', connection.sender_id)
             .single(),
           this.admin
@@ -421,8 +421,8 @@ export class ReferralConnectionsService {
           delivery_method: ['in_app'],
         });
 
-        // Send email notification
-        if (sender?.email) {
+        // Send email notification (respects emailNotifications setting)
+        if (sender?.email && sender.email_notifications !== false) {
           await this.emailService.sendConnectionAcceptedEmail(
             sender.email,
             sender.username,

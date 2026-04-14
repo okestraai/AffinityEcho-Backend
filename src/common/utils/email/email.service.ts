@@ -312,4 +312,23 @@ export class EmailService {
       },
     );
   }
+
+  async sendDigestEmail(
+    email: string,
+    username: string,
+    period: 'Daily' | 'Weekly',
+    notifications: Array<{ title: string; message: string }>,
+  ) {
+    const subject =
+      period === 'Daily'
+        ? 'Your Daily AffinityEcho Digest'
+        : 'Your Weekly AffinityEcho Digest';
+
+    return this.sendEmail(email, subject, 'digest', {
+      username,
+      period,
+      notifications,
+      appUrl: this.config.get('FRONTEND_URL') || 'https://affinityecho.com',
+    });
+  }
 }

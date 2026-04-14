@@ -1,0 +1,61 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your AffinityEcho Digest</title>
+</head>
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #4b5563; margin: 0; padding: 0; background-color: #f3f4f6;" bgcolor="#f3f4f6">
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f3f4f6;" bgcolor="#f3f4f6">
+  <tr><td align="center" style="padding: 20px 0;">
+  <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.07);" bgcolor="#ffffff">
+
+    <!-- Header -->
+    <tr><td>
+      <div style="background: linear-gradient(135deg, #9333ea 0%, #4f46e5 50%, #3b82f6 100%); background-color: #9333ea; padding: 36px 40px; text-align: center; color: white;">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; color: white;">Your <%= period %> Digest</h1>
+        <p style="margin: 8px 0 0; opacity: 0.9; font-size: 15px; color: white;">Here's what happened while you were away, <%= username %></p>
+      </div>
+    </td></tr>
+
+    <!-- Body -->
+    <tr><td style="padding: 36px 40px;">
+
+      <% if (notifications.length === 0) { %>
+        <p style="color: #6b7280; font-size: 15px;">No new activity in the past <%= period === 'Daily' ? '24 hours' : '7 days' %>. Check back soon!</p>
+      <% } else { %>
+
+        <p style="color: #4b5563; font-size: 15px; margin: 0 0 24px;">You have <strong style="color: #9333ea;"><%= notifications.length %> update<%= notifications.length !== 1 ? 's' : '' %></strong> from the past <%= period === 'Daily' ? '24 hours' : '7 days' %>:</p>
+
+        <% notifications.forEach(function(n) { %>
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom: 12px;">
+        <tr><td style="background-color: #f9fafb; padding: 14px 16px; border-radius: 8px; border-left: 3px solid #9333ea;" bgcolor="#f9fafb">
+          <p style="margin: 0; font-size: 14px; color: #111827;"><strong><%= n.title %></strong></p>
+          <p style="margin: 4px 0 0; font-size: 13px; color: #6b7280;"><%= n.message %></p>
+        </td></tr>
+        </table>
+        <% }); %>
+
+      <% } %>
+
+      <!-- CTA -->
+      <table cellpadding="0" cellspacing="0" border="0" style="margin: 28px auto 0;">
+      <tr><td align="center" bgcolor="#9333ea" style="background-color: #9333ea; border-radius: 8px; padding: 13px 32px;">
+        <a href="<%= appUrl %>" style="color: white; text-decoration: none; font-weight: 600; font-size: 15px; display: inline-block;">Open AffinityEcho</a>
+      </td></tr>
+      </table>
+
+    </td></tr>
+
+    <!-- Footer -->
+    <tr><td style="background-color: #f9fafb; padding: 20px 40px; text-align: center; border-top: 1px solid #e5e7eb;" bgcolor="#f9fafb">
+      <p style="margin: 0 0 6px; color: #9ca3af; font-size: 13px;">You're receiving this because you have <%= period === 'Daily' ? 'daily' : 'weekly' %> digests enabled.</p>
+      <p style="margin: 0; font-size: 12px; color: #9ca3af;">To change your preferences, visit your notification settings in the app.</p>
+      <p style="margin: 10px 0 0; font-size: 12px; color: #9ca3af;">&copy; <%= new Date().getFullYear() %> AffinityEcho. Building stronger professionals together.</p>
+    </td></tr>
+
+  </table>
+  </td></tr>
+  </table>
+</body>
+</html>

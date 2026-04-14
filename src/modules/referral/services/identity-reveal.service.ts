@@ -163,7 +163,7 @@ export class IdentityRevealService {
         const [{ data: responder }, { data: requester }] = await Promise.all([
           this.admin
             .from('user_profiles')
-            .select('email, username')
+            .select('email, username, email_notifications')
             .eq('id', responderId)
             .single(),
           this.admin
@@ -187,8 +187,8 @@ export class IdentityRevealService {
           delivery_method: ['in_app'],
         });
 
-        // Send email notification
-        if (responder?.email) {
+        // Send email notification (respects emailNotifications setting)
+        if (responder?.email && responder.email_notifications !== false) {
           await this.emailService.sendIdentityRevealRequestEmail(
             responder.email,
             responder.username,
@@ -263,7 +263,7 @@ export class IdentityRevealService {
         const [{ data: requester }, { data: responder }] = await Promise.all([
           this.admin
             .from('user_profiles')
-            .select('email, username')
+            .select('email, username, email_notifications')
             .eq('id', reveal.requester_id)
             .single(),
           this.admin
@@ -287,8 +287,8 @@ export class IdentityRevealService {
           delivery_method: ['in_app'],
         });
 
-        // Send email notification
-        if (requester?.email) {
+        // Send email notification (respects emailNotifications setting)
+        if (requester?.email && requester.email_notifications !== false) {
           await this.emailService.sendIdentityRevealAcceptedEmail(
             requester.email,
             requester.username,
