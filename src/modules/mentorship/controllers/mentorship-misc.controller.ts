@@ -6,12 +6,14 @@ import {
   Body,
   Query,
   Param,
+  Request,
   UseGuards,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+interface AuthenticatedRequest { user?: { id?: string; sub?: string } }
 import {
   ApiTags,
   ApiOperation,
@@ -291,7 +293,8 @@ export class MentorshipMiscController {
   @ApiParam({ name: 'userId', description: 'User ID' })
   @ApiOkResponse({ description: 'Profile retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  async getProfileById(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.profileService.getProfile(userId);
+  async getProfileById(@Param('userId', ParseUUIDPipe) userId: string, @Request() req: AuthenticatedRequest) {
+    const currentUserId = req.user?.id || req.user?.sub;
+    return this.profileService.getProfile(userId, currentUserId);
   }
 }

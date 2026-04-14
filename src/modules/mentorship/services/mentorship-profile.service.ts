@@ -378,7 +378,8 @@ export class MentorshipProfileService {
 
   // ========== PROFILE MANAGEMENT ==========
 
-  async getProfile(userId: string) {
+  async getProfile(userId: string, currentUserId?: string) {
+    const isOwnProfile = !!currentUserId && currentUserId === userId;
     try {
       const { data: profile, error } = await this.admin
         .from('user_profiles')
@@ -387,6 +388,8 @@ export class MentorshipProfileService {
         id,
         username,
         email,
+        show_email,
+        show_connections,
         avatar,
         bio,
         job_title,
@@ -464,7 +467,7 @@ export class MentorshipProfileService {
           // Basic info
           id: profile.id,
           username: profile.username,
-          email: profile.email,
+          email: isOwnProfile || profile.show_email ? profile.email : undefined,
           avatar: profile.avatar,
 
           // Shared profile
@@ -562,8 +565,8 @@ export class MentorshipProfileService {
               totalPosts,
               totalComments,
               totalTopics,
-              followersCount,
-              followingCount,
+              followersCount: isOwnProfile || profile.show_connections ? followersCount : undefined,
+              followingCount: isOwnProfile || profile.show_connections ? followingCount : undefined,
             };
           })(),
 

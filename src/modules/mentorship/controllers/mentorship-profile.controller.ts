@@ -255,7 +255,7 @@ export class MentorshipProfileController {
     if (!userId) {
       throw new NotFoundException('User not authenticated');
     }
-    return this.mentorshipProfileService.getProfile(userId);
+    return this.mentorshipProfileService.getProfile(userId, userId);
   }
 
   @Get('check-exists')
@@ -413,8 +413,9 @@ export class MentorshipProfileController {
     },
   })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  async getProfileById(@Param('userId') userId: string) {
-    return this.mentorshipProfileService.getProfile(userId);
+  async getProfileById(@Param('userId') userId: string, @Request() req: AuthenticatedRequest) {
+    const currentUserId = req.user?.id || req.user?.sub;
+    return this.mentorshipProfileService.getProfile(userId, currentUserId);
   }
 
   @Get(':userId/is-active')
