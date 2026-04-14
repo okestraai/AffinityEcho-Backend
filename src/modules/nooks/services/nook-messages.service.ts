@@ -204,7 +204,7 @@ export class NookMessagesService {
     const {
       content,
       parent_message_id,
-      is_anonymous = true,
+      is_anonymous = false,
     } = createMessageDto;
 
     // Check nook exists and is active (select only needed fields)
