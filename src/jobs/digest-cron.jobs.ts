@@ -16,28 +16,54 @@ export class DigestCronJobs {
     this.admin = supabaseAdmin(config);
   }
 
-  // Daily digest — runs every day at 8:00 AM UTC
+  // Runs every day at 8:00 AM UTC — checks admin-configured frequency to decide what to send
   @Cron('0 0 8 * * *')
   async sendDailyDigests() {
-    await this.sendDigests('daily', 1);
+    await this.sendDigests();
   }
 
-  // Weekly digest — runs every Monday at 8:00 AM UTC
-  @Cron('0 0 8 * * 1')
-  async sendWeeklyDigests() {
-    await this.sendDigests('weekly', 7);
+  private async getAdminDigestFrequency(): Promise<
+    'daily' | 'weekly' | 'never'
+  > {
+    try {
+      const { data } = await this.admin
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'notifications')
+        .single();
+      return data?.value?.digest_frequency ?? 'daily';
+    } catch {
+      return 'daily';
+    }
   }
 
-  private async sendDigests(frequency: 'daily' | 'weekly', days: number) {
+  private async sendDigests() {
+    const frequency = await this.getAdminDigestFrequency();
+
+    if (frequency === 'never') {
+      logger.info('Digest disabled by admin — skipping', {
+        module: 'DigestCron',
+      });
+      return;
+    }
+
+    const today = new Date();
+    const isMonday = today.getUTCDay() === 1;
+
+    // Weekly frequency: only send on Mondays
+    if (frequency === 'weekly' && !isMonday) {
+      return;
+    }
+
+    const days = frequency === 'weekly' ? 7 : 1;
     logger.info(`Starting ${frequency} digest run`, { module: 'DigestCron' });
 
     try {
-      // Fetch users who have email_notifications on and the matching digest_frequency
+      // All users with email_notifications on — digest frequency is platform-wide
       const { data: users, error } = await this.admin
         .from('user_profiles')
         .select('id, email, username')
         .eq('email_notifications', true)
-        .eq('digest_frequency', frequency)
         .eq('is_deleted', false)
         .eq('is_deactivated', false);
 
@@ -50,7 +76,9 @@ export class DigestCronJobs {
       }
 
       if (!users || users.length === 0) {
-        logger.info(`No users for ${frequency} digest`, { module: 'DigestCron' });
+        logger.info(`No users for ${frequency} digest`, {
+          module: 'DigestCron',
+        });
         return;
       }
 
@@ -78,7 +106,8 @@ export class DigestCronJobs {
             continue;
           }
 
-          const period = frequency === 'daily' ? 'Daily' : 'Weekly';
+          const period: 'Daily' | 'Weekly' =
+            frequency === 'weekly' ? 'Weekly' : 'Daily';
           await this.emailService.sendDigestEmail(
             user.email,
             user.username || 'Friend',
@@ -90,7 +119,9 @@ export class DigestCronJobs {
           );
 
           // Mark those notifications as delivered so they don't appear in next digest
-          const notificationIds = notifications.map((n: any) => n.id).filter(Boolean);
+          const notificationIds = notifications
+            .map((n: any) => n.id)
+            .filter(Boolean);
           if (notificationIds.length > 0) {
             await this.admin
               .from('notifications')
