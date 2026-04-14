@@ -162,10 +162,10 @@ export class NookMessagesService {
         updated_at: message.updated_at,
         user: {
           id: showIdentity ? authorId : null,
-          avatar: showIdentity ? (user?.avatar || '👤') : '👤',
-          username: showIdentity ? (user?.username || 'Unknown') : 'Anonymous',
+          avatar: user?.avatar || '👤',
+          username: user?.username || 'Unknown',
           display_name: displayName,
-          is_company_verified: showIdentity ? (user?.is_company_verified || false) : false,
+          is_company_verified: user?.is_company_verified || false,
         },
         replies: (message.replies || []).map(processMessage),
       };
@@ -481,9 +481,7 @@ export class NookMessagesService {
       if (realName) return realName;
     }
 
-    // Anonymous message from someone else → hide all identity
-    if (isAnonymous && !isOwnMessage && !isRevealed) return 'Anonymous';
-
+    // Anonymous hides the real name, not the username
     return user.username || 'Unknown';
   }
 
