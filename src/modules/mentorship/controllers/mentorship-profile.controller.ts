@@ -413,7 +413,10 @@ export class MentorshipProfileController {
     },
   })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  async getProfileById(@Param('userId') userId: string, @Request() req: AuthenticatedRequest) {
+  async getProfileById(
+    @Param('userId') userId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     const currentUserId = req.user?.id || req.user?.sub;
     return this.mentorshipProfileService.getProfile(userId, currentUserId);
   }

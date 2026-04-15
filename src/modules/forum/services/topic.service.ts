@@ -466,17 +466,33 @@ export class TopicService {
     const reactionField = `reaction_${reactionType}_count` as const;
 
     try {
-      const { data: existing } = await this.admin
-        .from('topic_reactions')
-        .select('id')
-        .eq('topic_id', topicId)
-        .eq('user_id', userId)
-        .eq('reaction_type', reactionType)
-        .maybeSingle();
+      // Check if topic exists and get creator info
+      const { data: topic, error: topicError } = await this.admin
+        .from('forum_topics')
+        .select('id, user_id, title')
+        .eq('id', topicId)
+        .single();
 
-      if (existing) {
-        // Remove reaction
-        await this.admin.from('topic_reactions').delete().eq('id', existing.id);
+      if (topicError || !topic) throw new NotFoundException('Topic not found');
+
+      // Upsert with ON CONFLICT DO NOTHING — race-condition-safe toggle:
+      // null returned → row already existed → toggle-remove
+      // row returned  → newly inserted    → increment
+      const { data: inserted } = await this.admin
+        .from('topic_reactions')
+        .upsert(
+          { topic_id: topicId, user_id: userId, reaction_type: reactionType },
+          { ignoreDuplicates: true },
+        );
+
+      if (!inserted) {
+        // Already existed — toggle-remove
+        await this.admin
+          .from('topic_reactions')
+          .delete()
+          .eq('topic_id', topicId)
+          .eq('user_id', userId)
+          .eq('reaction_type', reactionType);
 
         // Get current count - FIXED: Proper type casting
         const { data: currentTopic } = await this.admin
@@ -508,22 +524,6 @@ export class TopicService {
 
         return { action: 'removed' as const, reactionType };
       }
-
-      // Check if topic exists and get creator info
-      const { data: topic, error: topicError } = await this.admin
-        .from('forum_topics')
-        .select('id, user_id, title')
-        .eq('id', topicId)
-        .single();
-
-      if (topicError || !topic) throw new NotFoundException('Topic not found');
-
-      // Add reaction
-      await this.admin.from('topic_reactions').insert({
-        topic_id: topicId,
-        user_id: userId,
-        reaction_type: reactionType,
-      });
 
       // Create notification for topic creator (only if not reacting to own topic)
       if (topic.user_id !== userId) {

@@ -320,7 +320,11 @@ export class IdentityRevealService {
         });
 
         // Send email notification for acceptance (respects emailNotifications setting)
-        if (isAccepted && requester?.email && requester.email_notifications !== false) {
+        if (
+          isAccepted &&
+          requester?.email &&
+          requester.email_notifications !== false
+        ) {
           await this.emailService.sendIdentityRevealAcceptedEmail(
             requester.email,
             requester.username,

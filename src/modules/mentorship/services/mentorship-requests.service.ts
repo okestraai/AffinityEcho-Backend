@@ -1046,16 +1046,12 @@ export class MentorshipRequestsService {
         updated_at: new Date().toISOString(),
       };
 
-      const { data: relationship, error: relError } = await this.admin
+      // Upsert with ON CONFLICT DO NOTHING — safe if relationship already exists
+      const { data: relationship } = await this.admin
         .from('mentorship_relationships')
-        .insert(relationshipData)
-        .select()
-        .single();
+        .upsert(relationshipData, { ignoreDuplicates: true });
 
-      if (relError) {
-        this.logger.error('Failed to create relationship:', relError);
-        // Don't throw - the request is still accepted
-      } else {
+      if (relationship) {
         this.logger.log(`Mentorship relationship created: ${relationship.id}`);
       }
 

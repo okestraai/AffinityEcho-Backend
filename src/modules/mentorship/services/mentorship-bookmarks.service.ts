@@ -44,31 +44,22 @@ export class MentorshipBookmarksService {
         throw new NotFoundException('User to bookmark not found');
       }
 
-      // Check if bookmark already exists
-      const { data: existingBookmark } = await this.admin
+      // Upsert with ON CONFLICT DO NOTHING — race-condition-safe:
+      // null returned → row already existed → already bookmarked
+      // row returned  → newly created
+      const { data: bookmark } = await this.admin
         .from('mentorship_bookmarks')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('bookmarked_user_id', dto.bookmarkedUserId)
-        .single();
+        .upsert(
+          {
+            user_id: userId,
+            bookmarked_user_id: dto.bookmarkedUserId,
+            notes: dto.notes,
+          },
+          { ignoreDuplicates: true },
+        );
 
-      if (existingBookmark) {
+      if (!bookmark) {
         throw new BadRequestException('User is already bookmarked');
-      }
-
-      // Create bookmark
-      const { data: bookmark, error } = await this.admin
-        .from('mentorship_bookmarks')
-        .insert({
-          user_id: userId,
-          bookmarked_user_id: dto.bookmarkedUserId,
-          notes: dto.notes,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        throw new BadRequestException('Failed to create bookmark');
       }
 
       return {

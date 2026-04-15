@@ -197,8 +197,14 @@ export class UserProfileService {
         joinedDate: profile.created_at,
         isFollowing,
         isFollowedBy: isOwnProfile ? undefined : isFollowedBy,
-        followersCount: isOwnProfile || profile.show_connections !== false ? followersCount : undefined,
-        followingCount: isOwnProfile || profile.show_connections !== false ? followingCount : undefined,
+        followersCount:
+          isOwnProfile || profile.show_connections !== false
+            ? followersCount
+            : undefined,
+        followingCount:
+          isOwnProfile || profile.show_connections !== false
+            ? followingCount
+            : undefined,
         is_company_verified: profile.is_company_verified || false,
       };
 

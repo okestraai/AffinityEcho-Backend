@@ -565,8 +565,14 @@ export class MentorshipProfileService {
               totalPosts,
               totalComments,
               totalTopics,
-              followersCount: isOwnProfile || profile.show_connections ? followersCount : undefined,
-              followingCount: isOwnProfile || profile.show_connections ? followingCount : undefined,
+              followersCount:
+                isOwnProfile || profile.show_connections
+                  ? followersCount
+                  : undefined,
+              followingCount:
+                isOwnProfile || profile.show_connections
+                  ? followingCount
+                  : undefined,
             };
           })(),
 

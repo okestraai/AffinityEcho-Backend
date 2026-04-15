@@ -74,41 +74,22 @@ export class FollowService {
         throw new BadRequestException('Cannot follow yourself');
       }
 
-      // Check if already following - use maybeSingle to avoid throwing error if not found
-      const { data: existingFollow } = await this.admin
+      // Upsert with ON CONFLICT DO NOTHING — race-condition-safe:
+      // null returned → row already existed → already following
+      // row returned  → newly created
+      const { data: follow } = await this.admin
         .from('user_follows')
-        .select('id')
-        .eq('follower_id', followerId)
-        .eq('following_id', followingId)
-        .maybeSingle();
-
-      if (existingFollow) {
-        throw new BadRequestException('Already following this user');
-      }
-
-      // Create follow relationship - Generate UUID for id
-      const { v4: uuidv4 } = require('uuid');
-      const followId = uuidv4();
-
-      const { data: follow, error: followError } = await this.admin
-        .from('user_follows')
-        .insert({
-          id: followId,
-          follower_id: followerId,
-          following_id: followingId,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (followError) {
-        logger.error('Follow creation failed', {
-          module: 'FollowService',
-          error: followError,
-        });
-        throw new BadRequestException(
-          `Failed to follow user: ${followError.message}`,
+        .upsert(
+          {
+            follower_id: followerId,
+            following_id: followingId,
+            created_at: new Date().toISOString(),
+          },
+          { ignoreDuplicates: true },
         );
+
+      if (!follow) {
+        throw new BadRequestException('Already following this user');
       }
 
       // Create notification for the followed user
