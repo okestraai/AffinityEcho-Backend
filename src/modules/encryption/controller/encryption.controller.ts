@@ -24,6 +24,7 @@ import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 // Use simple interfaces instead of classes for DTOs
 interface SessionData {
@@ -162,17 +163,17 @@ export class EncryptionController {
 
       if (!body.data || !body.sessionId) {
         throw new BadRequestException(
-          'Missing required fields: data and sessionId are required',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
       // Validate data types
       if (typeof body.data !== 'string') {
-        throw new BadRequestException('Field "data" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       if (typeof body.sessionId !== 'string') {
-        throw new BadRequestException('Field "sessionId" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       this.validateSessionInternal(body.sessionId, userId);
@@ -243,11 +244,11 @@ export class EncryptionController {
       }
 
       if (!body.data) {
-        throw new BadRequestException('Missing required field: data');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       if (typeof body.data !== 'string') {
-        throw new BadRequestException('Field "data" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       const encrypted = await this.encryptWithMasterKeyInternal(body.data);
@@ -315,16 +316,16 @@ export class EncryptionController {
 
       if (!body.data || !body.sessionId) {
         throw new BadRequestException(
-          'Missing required fields: data and sessionId are required',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
       if (typeof body.data !== 'string') {
-        throw new BadRequestException('Field "data" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       if (typeof body.sessionId !== 'string') {
-        throw new BadRequestException('Field "sessionId" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       this.validateSessionInternal(body.sessionId, userId);
@@ -431,17 +432,17 @@ export class EncryptionController {
 
       if (!body.encryptedData || !body.sessionId) {
         throw new BadRequestException(
-          'Missing required fields: encryptedData and sessionId are required',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
       // Validate data types
       if (typeof body.encryptedData !== 'string') {
-        throw new BadRequestException('Field "encryptedData" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       if (typeof body.sessionId !== 'string') {
-        throw new BadRequestException('Field "sessionId" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       this.validateSessionInternal(body.sessionId, userId);
@@ -518,11 +519,11 @@ export class EncryptionController {
       }
 
       if (!body.encryptedData) {
-        throw new BadRequestException('Missing required field: encryptedData');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       if (typeof body.encryptedData !== 'string') {
-        throw new BadRequestException('Field "encryptedData" must be a string');
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       const decrypted = await this.decryptWithMasterKeyInternal(
@@ -585,7 +586,7 @@ export class EncryptionController {
       // Validate request body
       if (!body || !body.encryptedData) {
         throw new BadRequestException(
-          'Missing required field: encryptedData is required',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
@@ -649,7 +650,7 @@ export class EncryptionController {
       // Validate request body
       if (!body || !body.sessionId) {
         throw new BadRequestException(
-          'Missing required field: sessionId is required',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
@@ -718,7 +719,7 @@ export class EncryptionController {
       // Validate request body
       if (!body || !body.sessionId) {
         throw new BadRequestException(
-          'Missing required field: sessionId is required',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
@@ -810,7 +811,7 @@ export class EncryptionController {
     try {
       if (!body?.sessionEncryptedData || !body?.sessionId) {
         throw new BadRequestException(
-          'Missing required fields: sessionEncryptedData and sessionId',
+          MSG.ENCRYPTION.INVALID_DATA,
         );
       }
 
@@ -865,17 +866,17 @@ export class EncryptionController {
     const session = this.sessionKeys.get(sessionId);
 
     if (!session) {
-      throw new UnauthorizedException('Invalid session');
+      throw new UnauthorizedException(MSG.ENCRYPTION.INVALID_SESSION);
     }
 
     if (session.userId !== userId) {
-      throw new UnauthorizedException('Session user mismatch');
+      throw new UnauthorizedException(MSG.ENCRYPTION.SESSION_MISMATCH);
     }
 
     if (new Date() > session.expiresAt) {
       // Remove expired session
       this.sessionKeys.delete(sessionId);
-      throw new UnauthorizedException('Session expired');
+      throw new UnauthorizedException(MSG.ENCRYPTION.SESSION_EXPIRED);
     }
   }
 

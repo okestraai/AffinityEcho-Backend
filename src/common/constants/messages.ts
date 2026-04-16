@@ -90,6 +90,7 @@ export const MSG = {
     ACCOUNT_DEACTIVATED: 'Your account has been deactivated',
     ACCOUNT_REACTIVATED: 'Welcome back! Your account has been reactivated',
     ACCOUNT_DELETED: "Your account has been deleted. We're sorry to see you go",
+    PROFILE_UPDATED: 'Your profile has been updated',
     PASSWORD_CHANGED: 'Your password has been updated',
     UNBLOCKED: 'This user has been unblocked',
     PRIVACY_UPDATED: 'Your privacy settings have been updated',

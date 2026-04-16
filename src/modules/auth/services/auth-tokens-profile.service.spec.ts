@@ -373,7 +373,8 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
 
       const result = await service.updateProfile('user-123', updateData);
 
-      expect(result).toEqual(
+      expect(result.message).toBe('Your profile has been updated');
+      expect(result.profile).toEqual(
         expect.objectContaining({
           id: 'user-123',
           bio: 'Updated bio',
@@ -452,7 +453,8 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
       mockAdminSupabase.client.from.mockReturnValueOnce(updateChain);
 
       const result = await service.updateProfile('user-123', updateData);
-      expect(result.bio).toBe('Updated bio');
+      expect(result.message).toBe('Your profile has been updated');
+      expect(result.profile.bio).toBe('Updated bio');
     });
   });
 

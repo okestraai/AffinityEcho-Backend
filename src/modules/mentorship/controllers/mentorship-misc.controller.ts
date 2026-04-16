@@ -13,6 +13,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { MSG } from '../../../common/constants/messages';
 interface AuthenticatedRequest {
   user?: { id?: string; sub?: string };
 }
@@ -177,7 +178,7 @@ export class MentorshipMiscController {
     @CurrentUser() user: any,
     @Param('notificationId', ParseUUIDPipe) notificationId: string,
   ) {
-    return { message: 'Notification marked as read' };
+    return { message: MSG.MENTORSHIP.NOTIFICATION_READ };
   }
 
   @Post('feedback')
@@ -283,7 +284,7 @@ export class MentorshipMiscController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async addGoal(@CurrentUser() user: any, @Body() goalData: any) {
     return {
-      message: 'Goal added successfully',
+      message: MSG.MENTORSHIP.GOAL_ADDED,
       goalId: 'goal_' + Date.now(),
       goal: goalData.goal,
       userId: user.userId,

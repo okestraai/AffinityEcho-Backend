@@ -1126,7 +1126,7 @@ export class AuthService {
       }
 
       logger.info('Profile updated successfully', { userId });
-      return this.cleanUserData(data);
+      return { message: MSG.USER.PROFILE_UPDATED, profile: this.cleanUserData(data) };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       logger.error('Unexpected error during profile update', { userId, error });
