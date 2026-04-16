@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../database/supabase.client';
 import { PERMISSION_KEY } from '../decorators/require-permission.decorator';
+import { MSG } from '../constants/messages';
 
 // All valid permission keys — must match frontend exactly
 export const VALID_PERMISSIONS = [
@@ -83,7 +84,7 @@ export class PermissionGuard implements CanActivate {
 
     // Must be admin role to access permission-gated endpoints
     if (user.role !== 'admin') {
-      throw new ForbiddenException('Admin access required');
+      throw new ForbiddenException(MSG.ADMIN.ACCESS_REQUIRED);
     }
 
     // Load the admin's permission row from DB

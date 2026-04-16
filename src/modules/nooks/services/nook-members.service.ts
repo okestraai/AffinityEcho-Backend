@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JoinNookDto } from '../dto/join-nook.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class NookMembersService {
@@ -26,14 +27,14 @@ export class NookMembersService {
       .eq('id', nookId)
       .single();
 
-    if (nookError || !nook) throw new NotFoundException('Nook not found');
+    if (nookError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     if (!nook.is_active || nook.is_locked) {
-      throw new BadRequestException('Nook is not active or is locked');
+      throw new BadRequestException(MSG.NOOK.INACTIVE);
     }
 
     if (new Date(nook.expires_at) < new Date()) {
-      throw new BadRequestException('Nook has expired');
+      throw new BadRequestException(MSG.NOOK.EXPIRED);
     }
 
     // Check if already a member
@@ -45,7 +46,7 @@ export class NookMembersService {
       .maybeSingle();
 
     if (existingMembership) {
-      throw new BadRequestException('You are already a member of this nook');
+      throw new BadRequestException(MSG.NOOK.ALREADY_MEMBER);
     }
 
     // Create membership
@@ -82,7 +83,7 @@ export class NookMembersService {
     return {
       success: true,
       data: { membership },
-      message: 'Successfully joined the nook',
+      message: MSG.NOOK.JOINED,
     };
   }
 
@@ -93,7 +94,7 @@ export class NookMembersService {
       .eq('id', nookId)
       .single();
 
-    if (nookError || !nook) throw new NotFoundException('Nook not found');
+    if (nookError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     // Check if user is creator (creators cannot leave)
     if (nook.creator_id === userId) {
@@ -130,7 +131,7 @@ export class NookMembersService {
 
     return {
       success: true,
-      message: 'Successfully left the nook',
+      message: MSG.NOOK.LEFT,
     };
   }
 
@@ -141,7 +142,7 @@ export class NookMembersService {
       .eq('id', nookId)
       .single();
 
-    if (nookError || !nook) throw new NotFoundException('Nook not found');
+    if (nookError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     const { data: members, error: membersError } = await this.admin
       .from('nook_members')

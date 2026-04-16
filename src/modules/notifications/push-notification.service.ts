@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../database/supabase.client';
 import * as admin from 'firebase-admin';
+import { MSG } from '../../common/constants/messages';
 
 @Injectable()
 export class PushNotificationService {
@@ -72,7 +73,7 @@ export class PushNotificationService {
     }
 
     this.logger.log(`Push token registered for user ${userId} (${platform})`);
-    return { success: true, message: 'Push token registered', data };
+    return { success: true, message: MSG.NOTIFICATION.TOKEN_REGISTERED, data };
   }
 
   async removeToken(userId: string, token: string) {
@@ -88,7 +89,7 @@ export class PushNotificationService {
     }
 
     this.logger.log(`Push token removed for user ${userId}`);
-    return { success: true, message: 'Push token removed' };
+    return { success: true, message: MSG.NOTIFICATION.TOKEN_REMOVED };
   }
 
   // ─── Send to User ─────────────────────────────────────────────────────────

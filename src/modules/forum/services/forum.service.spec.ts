@@ -213,7 +213,7 @@ describe('ForumService', () => {
 
       expect(result).toEqual({
         success: true,
-        message: 'Successfully joined forum',
+        message: 'You have joined the forum',
       });
       expect(mockClient.from).toHaveBeenCalledWith('forum_members');
     });
@@ -253,7 +253,7 @@ describe('ForumService', () => {
 
       expect(result).toEqual({
         success: true,
-        message: 'Successfully left forum',
+        message: 'You have left the forum',
       });
       expect(mockClient.from).toHaveBeenCalledWith('forum_members');
     });

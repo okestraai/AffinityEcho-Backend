@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
+import { MSG } from '../constants/messages';
 
 @Injectable()
 export class ModeratorGuard implements CanActivate {
@@ -12,6 +13,6 @@ export class ModeratorGuard implements CanActivate {
     const role = user?.role;
     if (role === 'moderator' || role === 'admin' || role === 'super_admin')
       return true;
-    throw new ForbiddenException('Moderator access required');
+    throw new ForbiddenException(MSG.ADMIN.MODERATOR_REQUIRED);
   }
 }

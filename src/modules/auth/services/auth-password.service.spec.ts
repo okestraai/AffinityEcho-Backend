@@ -226,7 +226,7 @@ describe('AuthService – password', () => {
 
       expect(result).toEqual(
         expect.objectContaining({
-          message: 'Logged out successfully',
+          message: 'You have been logged out',
           timestamp: expect.any(String),
         }),
       );
@@ -234,7 +234,7 @@ describe('AuthService – password', () => {
 
     it('should still return success even without userId', async () => {
       const result = await service.logout(undefined);
-      expect(result.message).toBe('Logged out successfully');
+      expect(result.message).toBe('You have been logged out');
     });
   });
 

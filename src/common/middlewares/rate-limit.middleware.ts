@@ -2,6 +2,7 @@ import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import logger from '../utils/logger.util';
+import { MSG } from '../constants/messages';
 
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
@@ -79,7 +80,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     },
 
     // Security message
-    message: 'Rate limit exceeded. Please try again later.',
+    message: MSG.GENERIC.RATE_LIMITED,
   });
 
   use(req: Request, res: Response, next: NextFunction) {

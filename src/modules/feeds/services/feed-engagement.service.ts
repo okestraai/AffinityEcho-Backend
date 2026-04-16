@@ -12,6 +12,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { RedisService } from '../../../common/services/redis.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { MSG } from '../../../common/constants/messages';
 
 type ContentType = 'post' | 'topic' | 'nook_message';
 
@@ -57,7 +58,7 @@ export class FeedEngagementService {
         return {
           success: true,
           data: { liked: false },
-          message: 'Unliked successfully',
+          message: MSG.FEED.UNLIKED,
         };
       } else {
         // Like
@@ -77,12 +78,12 @@ export class FeedEngagementService {
         return {
           success: true,
           data: { liked: true },
-          message: 'Liked successfully',
+          message: MSG.FEED.LIKED,
         };
       }
     } catch (error) {
-      logger.error('Failed to toggle like', { error });
-      throw new BadRequestException('Failed to toggle like');
+      logger.error(MSG.FEED.LIKE_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.LIKE_FAILED);
     }
   }
 
@@ -127,7 +128,7 @@ export class FeedEngagementService {
         return {
           success: true,
           data: { reacted: false, reactionType, counts },
-          message: 'Reaction removed',
+          message: MSG.FEED.REACTION_REMOVED,
         };
       } else {
         // Add reaction
@@ -151,13 +152,13 @@ export class FeedEngagementService {
         return {
           success: true,
           data: { reacted: true, reactionType, counts },
-          message: 'Reaction added',
+          message: MSG.FEED.REACTION_ADDED,
         };
       }
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to toggle reaction', { error });
-      throw new BadRequestException('Failed to toggle reaction');
+      logger.error(MSG.FEED.REACTION_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.REACTION_FAILED);
     }
   }
 
@@ -200,7 +201,7 @@ export class FeedEngagementService {
         .single();
 
       if (error) {
-        throw new BadRequestException('Failed to add comment');
+        throw new BadRequestException(MSG.FEED.COMMENT_FAILED);
       }
 
       // Increment comment count
@@ -219,7 +220,7 @@ export class FeedEngagementService {
       return {
         success: true,
         data: this.formatComment(comment),
-        message: 'Comment added successfully',
+        message: MSG.FEED.COMMENT_ADDED,
       };
     } catch (error) {
       if (
@@ -228,8 +229,8 @@ export class FeedEngagementService {
       ) {
         throw error;
       }
-      logger.error('Failed to add comment', { error });
-      throw new BadRequestException('Failed to add comment');
+      logger.error(MSG.FEED.COMMENT_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.COMMENT_FAILED);
     }
   }
 
@@ -264,7 +265,7 @@ export class FeedEngagementService {
         .range(offset, offset + limit - 1);
 
       if (topLevelError) {
-        throw new BadRequestException('Failed to fetch comments');
+        throw new BadRequestException(MSG.FEED.COMMENTS_FAILED);
       }
 
       const topLevelIds = (topLevelComments || []).map((c: any) => c.id);
@@ -303,7 +304,7 @@ export class FeedEngagementService {
         .order('created_at', { ascending: true });
 
       if (error) {
-        throw new BadRequestException('Failed to fetch comments');
+        throw new BadRequestException(MSG.FEED.COMMENTS_FAILED);
       }
 
       const comments = allComments || [];
@@ -384,8 +385,8 @@ export class FeedEngagementService {
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to fetch comments', { error });
-      throw new BadRequestException('Failed to fetch comments');
+      logger.error(MSG.FEED.COMMENTS_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.COMMENTS_FAILED);
     }
   }
 
@@ -409,7 +410,7 @@ export class FeedEngagementService {
         .maybeSingle();
 
       if (existing) {
-        throw new BadRequestException('Already shared this item');
+        throw new BadRequestException(MSG.FEED.SHARE_EXISTS);
       }
 
       await this.admin.from('feed_shares').insert({
@@ -425,12 +426,12 @@ export class FeedEngagementService {
 
       return {
         success: true,
-        message: 'Item shared successfully',
+        message: MSG.FEED.SHARED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to share item', { error });
-      throw new BadRequestException('Failed to share item');
+      logger.error(MSG.FEED.SHARE_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.SHARE_FAILED);
     }
   }
 
@@ -450,7 +451,7 @@ export class FeedEngagementService {
         .eq('content_id', contentId);
 
       if (error) {
-        throw new BadRequestException('Failed to unshare item');
+        throw new BadRequestException(MSG.FEED.UNSHARE_FAILED);
       }
 
       await this.decrementShareCount(contentType, contentId);
@@ -459,12 +460,12 @@ export class FeedEngagementService {
 
       return {
         success: true,
-        message: 'Item unshared successfully',
+        message: MSG.FEED.UNSHARED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to unshare item', { error });
-      throw new BadRequestException('Failed to unshare item');
+      logger.error(MSG.FEED.UNSHARE_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.UNSHARE_FAILED);
     }
   }
 
@@ -494,7 +495,7 @@ export class FeedEngagementService {
         return {
           success: true,
           data: { bookmarked: false },
-          message: 'Bookmark removed',
+          message: MSG.FEED.BOOKMARK_REMOVED,
         };
       } else {
         // Add bookmark
@@ -509,12 +510,12 @@ export class FeedEngagementService {
         return {
           success: true,
           data: { bookmarked: true },
-          message: 'Bookmarked successfully',
+          message: MSG.FEED.BOOKMARKED,
         };
       }
     } catch (error) {
-      logger.error('Failed to toggle bookmark', { error });
-      throw new BadRequestException('Failed to toggle bookmark');
+      logger.error(MSG.FEED.BOOKMARK_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.BOOKMARK_FAILED);
     }
   }
 
@@ -536,7 +537,7 @@ export class FeedEngagementService {
         .range(offset, offset + limit - 1);
 
       if (error) {
-        throw new BadRequestException('Failed to fetch bookmarks');
+        throw new BadRequestException(MSG.FEED.BOOKMARKS_FAILED);
       }
 
       if (!bookmarks || bookmarks.length === 0) {
@@ -874,8 +875,8 @@ export class FeedEngagementService {
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to fetch bookmarks', { error });
-      throw new BadRequestException('Failed to fetch bookmarks');
+      logger.error(MSG.FEED.BOOKMARKS_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.BOOKMARKS_FAILED);
     }
   }
 
@@ -897,7 +898,7 @@ export class FeedEngagementService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('Content not found');
+      throw new NotFoundException(MSG.FEED.CONTENT_NOT_FOUND);
     }
   }
 

@@ -161,7 +161,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
 
       await expect(service.refresh(dto)).rejects.toThrow(UnauthorizedException);
       await expect(service.refresh(dto)).rejects.toThrow(
-        'Invalid refresh token',
+        'Your session has expired, please sign in again',
       );
     });
 
@@ -174,12 +174,12 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
       // User lookup — not found
       const userChain = createMockQueryChain({
         data: null,
-        error: { message: 'User not found' },
+        error: { message: 'We couldn\'t find this account, please check and try again' },
       });
       mockAdminSupabase.client.from.mockReturnValueOnce(userChain);
 
       await expect(service.refresh(dto)).rejects.toThrow(
-        'User account no longer exists',
+        'This account no longer exists, please create a new one',
       );
     });
 
@@ -189,7 +189,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         BadRequestException,
       );
       await expect(service.refresh(badDto)).rejects.toThrow(
-        'Refresh token is required',
+        'Please provide a refresh token to continue',
       );
     });
 
@@ -200,7 +200,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
 
       await expect(service.refresh(dto)).rejects.toThrow(UnauthorizedException);
       await expect(service.refresh(dto)).rejects.toThrow(
-        'Invalid refresh token',
+        'Your session has expired, please sign in again',
       );
     });
   });
@@ -266,7 +266,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
 
       expect(result).toEqual(
         expect.objectContaining({
-          message: 'A new code has been sent to your email.',
+          message: 'A new verification code has been sent to your email',
           attemptsRemaining: expect.any(Number),
         }),
       );
@@ -387,7 +387,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         BadRequestException,
       );
       await expect(service.updateProfile('user-123', {})).rejects.toThrow(
-        'No valid fields provided to update',
+        'No changes detected, please update at least one field',
       );
     });
 
@@ -485,7 +485,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
         'NewPassword1!',
       );
 
-      expect(result).toEqual({ message: 'Password changed successfully' });
+      expect(result).toEqual({ message: 'Your password has been updated successfully' });
       expect(bcrypt.compare).toHaveBeenCalledWith(
         'OldPassword1!',
         'old-hashed-password',
@@ -518,7 +518,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
 
       await expect(
         service.changePassword('user-123', 'WrongPass1!', 'NewPassword1!'),
-      ).rejects.toThrow('Current password is incorrect');
+      ).rejects.toThrow('The current password you entered is incorrect');
     });
 
     it('should throw BadRequestException when user is not found', async () => {
@@ -534,7 +534,7 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
       ).rejects.toThrow(BadRequestException);
       await expect(
         service.changePassword('user-123', 'OldPass1!', 'NewPassword1!'),
-      ).rejects.toThrow('User not found');
+      ).rejects.toThrow('We couldn\'t find this account, please check and try again');
     });
 
     it('should throw BadRequestException when password update fails in DB', async () => {

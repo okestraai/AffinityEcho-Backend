@@ -35,7 +35,7 @@
 //         .single();
 
 //       if (topicError || !topic) {
-//         throw new NotFoundException('Topic not found');
+//         throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
 //       }
 
 //       // Check if parent comment exists (only if parentCommentId is provided)
@@ -47,7 +47,7 @@
 //           .single();
 
 //         if (parentError || !parentComment) {
-//           throw new NotFoundException('Parent comment not found');
+//           throw new NotFoundException(MSG.FORUM.PARENT_NOT_FOUND);
 //         }
 //       }
 
@@ -80,7 +80,7 @@
 //           error: error.message,
 //           data: createCommentDto,
 //         });
-//         throw new BadRequestException('Failed to create comment');
+//         throw new BadRequestException(MSG.FORUM.CREATE_COMMENT_FAILED);
 //       }
 
 //       // OPTIMIZED: Use RPC for atomic comment count increment
@@ -126,7 +126,7 @@
 //       logger.error('Unexpected error creating comment', {
 //         error: error instanceof Error ? error.message : String(error),
 //       });
-//       throw new InternalServerErrorException('Failed to create comment');
+//       throw new InternalServerErrorException(MSG.FORUM.CREATE_COMMENT_FAILED);
 //     }
 //   }
 
@@ -142,7 +142,7 @@
 //         .single();
 
 //       if (topicError || !topic) {
-//         throw new NotFoundException('Topic not found');
+//         throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
 //       }
 
 //       // OPTIMIZED: Single query to get all comments (parents and replies)
@@ -172,11 +172,11 @@
 //         .order('created_at', { ascending: true });
 
 //       if (error) {
-//         logger.error('Failed to fetch comments', {
+//         logger.error(MSG.FORUM.FETCH_COMMENTS_FAILED, {
 //           topicId,
 //           error: error.message,
 //         });
-//         throw new BadRequestException('Failed to fetch comments');
+//         throw new BadRequestException(MSG.FORUM.FETCH_COMMENTS_FAILED);
 //       }
 
 //       // OPTIMIZED: Get user reactions in a single query if userId provided
@@ -253,7 +253,7 @@
 //         topicId,
 //         error: error instanceof Error ? error.message : String(error),
 //       });
-//       throw new InternalServerErrorException('Failed to fetch comments');
+//       throw new InternalServerErrorException(MSG.FORUM.FETCH_COMMENTS_FAILED);
 //     }
 //   }
 
@@ -345,7 +345,7 @@
 //           .single();
 
 //         if (commentError || !comment) {
-//           throw new NotFoundException('Comment not found');
+//           throw new NotFoundException(MSG.FORUM.COMMENT_NOT_FOUND);
 //         }
 
 //         // Add reaction
@@ -438,7 +438,7 @@
 //         .single();
 
 //       if (commentError || !comment) {
-//         throw new NotFoundException('Comment not found');
+//         throw new NotFoundException(MSG.FORUM.COMMENT_NOT_FOUND);
 //       }
 
 //       if (comment.user_id !== userId) {
@@ -517,6 +517,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MentionService } from '../../mentions/mention.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
+import { MSG } from '../../../common/constants/messages';
 
 interface UserReactionMap {
   [commentId: string]: { helpful: boolean; supportive: boolean };
@@ -554,7 +555,7 @@ export class CommentService {
         .single();
 
       if (topicError || !topic) {
-        throw new NotFoundException('Topic not found');
+        throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
       }
 
       // Validate parent comment if provided
@@ -566,7 +567,7 @@ export class CommentService {
           .single();
 
         if (parentError || !parentComment) {
-          throw new NotFoundException('Parent comment not found');
+          throw new NotFoundException(MSG.FORUM.PARENT_NOT_FOUND);
         }
       }
       const currentTimestamp = new Date().toISOString();
@@ -601,7 +602,7 @@ export class CommentService {
 
       if (error || !comment) {
         logger.error('Comment creation failed', { error });
-        throw new BadRequestException('Failed to create comment');
+        throw new BadRequestException(MSG.FORUM.CREATE_COMMENT_FAILED);
       }
 
       // Atomic increment via RPC
@@ -737,7 +738,7 @@ export class CommentService {
         throw error;
       }
       logger.error('Unexpected error creating comment', { error });
-      throw new InternalServerErrorException('Failed to create comment');
+      throw new InternalServerErrorException(MSG.FORUM.CREATE_COMMENT_FAILED);
     }
   }
 
@@ -750,7 +751,7 @@ export class CommentService {
       .eq('id', topicId)
       .single();
 
-    if (!topic) throw new NotFoundException('Topic not found');
+    if (!topic) throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
 
     const { data: allComments, error } = await this.admin
       .from('forum_comments')
@@ -774,7 +775,7 @@ export class CommentService {
       .order('created_at', { ascending: true });
 
     if (error || !allComments) {
-      throw new BadRequestException('Failed to fetch comments');
+      throw new BadRequestException(MSG.FORUM.FETCH_COMMENTS_FAILED);
     }
 
     // User reactions (single query)
@@ -894,7 +895,7 @@ export class CommentService {
       .eq('id', commentId)
       .single();
 
-    if (!commentCheck) throw new NotFoundException('Comment not found');
+    if (!commentCheck) throw new NotFoundException(MSG.FORUM.COMMENT_NOT_FOUND);
 
     await this.admin.from('comment_reactions').insert({
       comment_id: commentId,
@@ -960,9 +961,9 @@ export class CommentService {
       .eq('id', commentId)
       .single();
 
-    if (!comment) throw new NotFoundException('Comment not found');
+    if (!comment) throw new NotFoundException(MSG.FORUM.COMMENT_NOT_FOUND);
     if (comment.user_id !== userId)
-      throw new ForbiddenException('Not your comment');
+      throw new ForbiddenException(MSG.FORUM.NOT_YOUR_COMMENT);
 
     await this.admin.from('forum_comments').delete().eq('id', commentId);
 
@@ -982,7 +983,7 @@ export class CommentService {
       .invalidateCache('topic', comment.topic_id)
       .catch(() => {});
 
-    return { success: true, message: 'Comment deleted' };
+    return { success: true, message: MSG.FORUM.COMMENT_DELETED };
   }
 
   private async applyIdentityReveals(

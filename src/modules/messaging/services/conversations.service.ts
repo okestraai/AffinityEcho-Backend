@@ -14,6 +14,7 @@ import {
   ClearConversationDto,
 } from '../dto/conversations.dto';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ConversationsService {
@@ -51,7 +52,7 @@ export class ConversationsService {
         .single();
 
       if (userError || !otherUser) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.MESSAGING.USER_NOT_FOUND);
       }
 
       // Block check — prevent conversations between blocked users
@@ -64,7 +65,7 @@ export class ConversationsService {
         .maybeSingle();
 
       if (block) {
-        throw new ForbiddenException('Cannot message this user');
+        throw new ForbiddenException(MSG.MESSAGING.CANNOT_MESSAGE);
       }
 
       // Enforce allow_messages_from preference
@@ -131,7 +132,7 @@ export class ConversationsService {
 
         return {
           success: true,
-          message: 'Conversation already exists',
+          message: MSG.MESSAGING.CONV_EXISTS,
           data: {
             conversation_id: existingConv.id,
             already_exists: true,
@@ -203,18 +204,18 @@ export class ConversationsService {
       }
 
       if (error instanceof Error) {
-        logger.error('Failed to create conversation', {
+        logger.error(MSG.MESSAGING.CREATE_FAILED, {
           error: error.message,
           stack: error.stack,
           userId,
         });
       } else {
-        logger.error('Failed to create conversation', {
+        logger.error(MSG.MESSAGING.CREATE_FAILED, {
           error: String(error),
           userId,
         });
       }
-      throw new BadRequestException('Failed to create conversation');
+      throw new BadRequestException(MSG.MESSAGING.CREATE_FAILED);
     }
   }
 
@@ -636,7 +637,7 @@ export class ConversationsService {
     } catch (error) {
       // More detailed error logging
       if (error instanceof Error) {
-        logger.error('Failed to get conversations', {
+        logger.error(MSG.MESSAGING.FETCH_FAILED, {
           error: error.message,
           stack: error.stack,
           name: error.name,
@@ -662,7 +663,7 @@ export class ConversationsService {
           });
         }
       }
-      throw new BadRequestException('Failed to get conversations');
+      throw new BadRequestException(MSG.MESSAGING.FETCH_FAILED);
     }
   }
 
@@ -695,12 +696,12 @@ export class ConversationsService {
           conversationId,
           userId,
         });
-        throw new NotFoundException('Conversation not found');
+        throw new NotFoundException(MSG.MESSAGING.CONV_NOT_FOUND);
       }
 
       if (!conversation) {
-        logger.warn('Conversation not found', { conversationId, userId });
-        throw new NotFoundException('Conversation not found');
+        logger.warn(MSG.MESSAGING.CONV_NOT_FOUND, { conversationId, userId });
+        throw new NotFoundException(MSG.MESSAGING.CONV_NOT_FOUND);
       }
 
       if (
@@ -950,14 +951,14 @@ export class ConversationsService {
         .single();
 
       if (convError || !conversation) {
-        throw new NotFoundException('Conversation not found');
+        throw new NotFoundException(MSG.MESSAGING.CONV_NOT_FOUND);
       }
 
       if (
         conversation.user1_id !== userId &&
         conversation.user2_id !== userId
       ) {
-        throw new ForbiddenException('Not authorized');
+        throw new ForbiddenException(MSG.MESSAGING.NOT_AUTHORIZED);
       }
 
       // Set deleted_at for this user
@@ -995,20 +996,20 @@ export class ConversationsService {
       }
 
       if (error instanceof Error) {
-        logger.error('Failed to delete conversation', {
+        logger.error(MSG.MESSAGING.DELETE_FAILED, {
           error: error.message,
           stack: error.stack,
           userId,
           conversationId,
         });
       } else {
-        logger.error('Failed to delete conversation', {
+        logger.error(MSG.MESSAGING.DELETE_FAILED, {
           error: String(error),
           userId,
           conversationId,
         });
       }
-      throw new BadRequestException('Failed to delete conversation');
+      throw new BadRequestException(MSG.MESSAGING.DELETE_FAILED);
     }
   }
 
@@ -1031,7 +1032,7 @@ export class ConversationsService {
           conversationId: dto.conversation_id,
           userId,
         });
-        throw new NotFoundException('Conversation not found');
+        throw new NotFoundException(MSG.MESSAGING.CONV_NOT_FOUND);
       }
 
       if (!conversation) {
@@ -1039,7 +1040,7 @@ export class ConversationsService {
           conversationId: dto.conversation_id,
           userId,
         });
-        throw new NotFoundException('Conversation not found');
+        throw new NotFoundException(MSG.MESSAGING.CONV_NOT_FOUND);
       }
 
       if (
@@ -1052,7 +1053,7 @@ export class ConversationsService {
           conversationUser1: conversation.user1_id,
           conversationUser2: conversation.user2_id,
         });
-        throw new ForbiddenException('Not authorized');
+        throw new ForbiddenException(MSG.MESSAGING.NOT_AUTHORIZED);
       }
 
       // Mark as cleared for this user
@@ -1098,7 +1099,7 @@ export class ConversationsService {
       }
 
       if (error instanceof Error) {
-        logger.error('Failed to clear conversation', {
+        logger.error(MSG.MESSAGING.CLEAR_FAILED, {
           error: error.message,
           stack: error.stack,
           name: error.name,
@@ -1129,7 +1130,7 @@ export class ConversationsService {
           );
         }
       }
-      throw new BadRequestException('Failed to clear conversation');
+      throw new BadRequestException(MSG.MESSAGING.CLEAR_FAILED);
     }
   }
 }

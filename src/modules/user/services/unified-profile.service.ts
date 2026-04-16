@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { UnifiedProfileEditDto } from '../dto/unified-profile-edit.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class UnifiedProfileService {
@@ -84,7 +85,7 @@ export class UnifiedProfileService {
           `Profile not found for user ${userId}`,
           error?.message,
         );
-        throw new NotFoundException('Profile not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       return {
@@ -143,8 +144,8 @@ export class UnifiedProfileService {
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      this.logger.error('Failed to fetch editable profile', error);
-      throw new BadRequestException('Failed to fetch editable profile');
+      this.logger.error(MSG.USER.PROFILE_FAILED, error);
+      throw new BadRequestException(MSG.USER.PROFILE_FAILED);
     }
   }
 
@@ -177,7 +178,7 @@ export class UnifiedProfileService {
             .neq('id', userId)
             .single();
           if (existing) {
-            throw new BadRequestException('Username already taken');
+            throw new BadRequestException(MSG.USER.USERNAME_TAKEN);
           }
           updateData.username = dto.basic.username;
         }
@@ -330,8 +331,8 @@ export class UnifiedProfileService {
         .eq('id', userId);
 
       if (error) {
-        this.logger.error('Failed to update profile', error.message);
-        throw new BadRequestException('Failed to update profile');
+        this.logger.error(MSG.AUTH.PROFILE_UPDATE_FAILED, error.message);
+        throw new BadRequestException(MSG.AUTH.PROFILE_UPDATE_FAILED);
       }
 
       return this.getEditableProfile(userId);
@@ -342,8 +343,8 @@ export class UnifiedProfileService {
       ) {
         throw error;
       }
-      this.logger.error('Failed to update profile', error);
-      throw new BadRequestException('Failed to update profile');
+      this.logger.error(MSG.AUTH.PROFILE_UPDATE_FAILED, error);
+      throw new BadRequestException(MSG.AUTH.PROFILE_UPDATE_FAILED);
     }
   }
 }

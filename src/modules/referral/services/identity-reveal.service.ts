@@ -11,6 +11,7 @@ import { EmailService } from '../../../common/utils/email/email.service';
 import logger from '../../../common/utils/logger.util';
 import { RequestIdentityRevealDto } from '../dto/identity-reveal.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class IdentityRevealService {
@@ -202,7 +203,7 @@ export class IdentityRevealService {
       return {
         success: true,
         data: { id: data.id, status: data.status },
-        message: 'Identity reveal request sent',
+        message: MSG.MESSAGING.REVEAL_SENT,
       };
     } catch (error) {
       if (
@@ -306,7 +307,7 @@ export class IdentityRevealService {
           status: 'accepted',
           connection: { identityRevealed: true },
         },
-        message: 'Identity revealed successfully',
+        message: MSG.MESSAGING.REVEAL_ACCEPTED,
       };
     } catch (error) {
       if (
@@ -355,7 +356,7 @@ export class IdentityRevealService {
       return {
         success: true,
         data: { id: data.id, status: data.status },
-        message: 'Identity reveal request rejected',
+        message: MSG.MESSAGING.REVEAL_REJECTED,
       };
     } catch (error) {
       if (

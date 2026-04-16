@@ -12,6 +12,7 @@ import { RedisService } from '../../../common/services/redis.service';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class NooksService {
@@ -176,7 +177,7 @@ export class NooksService {
     return {
       success: true,
       data: { nook },
-      message: 'Nook created successfully',
+      message: MSG.NOOK.CREATED,
     };
   }
 
@@ -188,10 +189,10 @@ export class NooksService {
       .eq('id', id)
       .single();
 
-    if (error || !nook) throw new NotFoundException('Nook not found');
+    if (error || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     if (!nook.is_active || new Date(nook.expires_at) < new Date()) {
-      throw new BadRequestException('Nook is expired or inactive');
+      throw new BadRequestException(MSG.NOOK.EXPIRED);
     }
 
     // Increment views count
@@ -237,7 +238,7 @@ export class NooksService {
       .eq('id', id)
       .single();
 
-    if (fetchError || !nook) throw new NotFoundException('Nook not found');
+    if (fetchError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     // Delete nook
     const { error } = await this.admin.from('nooks').delete().eq('id', id);
@@ -248,7 +249,7 @@ export class NooksService {
 
     return {
       success: true,
-      message: 'Nook deleted successfully',
+      message: MSG.NOOK.DELETED,
     };
   }
 
@@ -270,7 +271,7 @@ export class NooksService {
 
     return {
       success: true,
-      message: 'Nook locked successfully',
+      message: MSG.NOOK.LOCKED,
     };
   }
 
@@ -383,7 +384,7 @@ export class NooksService {
       .single();
 
     if (fetchError || !message)
-      throw new NotFoundException('Message not found');
+      throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
 
     const { error } = await this.admin
       .from('nook_messages')
@@ -398,7 +399,7 @@ export class NooksService {
     // TODO: Create moderation record
     return {
       success: true,
-      message: 'Message flagged for moderation',
+      message: MSG.NOOK.FLAGGED,
     };
   }
 
@@ -422,7 +423,7 @@ export class NooksService {
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    if (error) throw new BadRequestException('Failed to fetch your nooks');
+    if (error) throw new BadRequestException(MSG.NOOK.YOUR_NOOKS_FAILED);
 
     const formattedNooks = (nooks || []).map((nook: any) => ({
       ...nook,
@@ -462,8 +463,7 @@ export class NooksService {
       .eq('content_type', 'nook_message')
       .order('created_at', { ascending: false });
 
-    if (bmError)
-      throw new BadRequestException('Failed to fetch bookmarked nooks');
+    if (bmError) throw new BadRequestException(MSG.NOOK.BOOKMARKS_FAILED);
 
     const nookIds = (bookmarks || []).map((b: any) => b.content_id);
     if (nookIds.length === 0) {
@@ -491,8 +491,7 @@ export class NooksService {
       .gt('expires_at', new Date().toISOString())
       .range(from, to);
 
-    if (error)
-      throw new BadRequestException('Failed to fetch bookmarked nooks');
+    if (error) throw new BadRequestException(MSG.NOOK.BOOKMARKS_FAILED);
 
     const formattedNooks = (nooks || []).map((nook: any) => ({
       ...nook,
@@ -524,7 +523,7 @@ export class NooksService {
       .eq('id', nookId)
       .single();
 
-    if (nookErr || !nook) throw new NotFoundException('Nook not found');
+    if (nookErr || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     // Check if already bookmarked
     const { data: existing } = await this.admin
@@ -540,7 +539,7 @@ export class NooksService {
       return {
         success: true,
         data: { bookmarked: false },
-        message: 'Bookmark removed',
+        message: MSG.NOOK.BOOKMARK_REMOVED,
       };
     } else {
       await this.admin.from('feed_bookmarks').insert({
@@ -551,7 +550,7 @@ export class NooksService {
       return {
         success: true,
         data: { bookmarked: true },
-        message: 'Nook bookmarked',
+        message: MSG.NOOK.BOOKMARKED,
       };
     }
   }

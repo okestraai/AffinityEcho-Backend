@@ -93,7 +93,7 @@ describe('ReferralService', () => {
       expect(result.data.id).toBe('ref-001');
       expect(result.data.type).toBe('request');
       expect(result.data.status).toBe('open');
-      expect(result.message).toBe('Referral post created successfully');
+      expect(result.message).toBe('Your referral has been posted');
 
       // Verify encryption was called for the correct fields
       expect(mockEncryption.encrypt).toHaveBeenCalledWith(dto.title);
@@ -291,7 +291,7 @@ describe('ReferralService', () => {
       const result = await service.deleteReferral(userId, referralId);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Referral deleted successfully');
+      expect(result.message).toBe('Your referral has been deleted');
       expect(result.metadata).toBeDefined();
       expect(result.metadata.correlationId).toBeDefined();
 

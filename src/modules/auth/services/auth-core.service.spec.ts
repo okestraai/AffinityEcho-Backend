@@ -170,7 +170,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     it('should throw BadRequestException for invalid email format', async () => {
       const dto = { ...validDto, email: 'not-an-email' };
       await expect(service.signup(dto)).rejects.toThrow(BadRequestException);
-      await expect(service.signup(dto)).rejects.toThrow('Invalid email format');
+      await expect(service.signup(dto)).rejects.toThrow('Please enter a valid email address to continue');
     });
 
     it('should throw BadRequestException for short password', async () => {
@@ -337,13 +337,13 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
 
     it('should throw BadRequestException for invalid email format', async () => {
       const dto = { email: 'bad-email', password: 'password123' };
-      await expect(service.login(dto)).rejects.toThrow('Invalid email format');
+      await expect(service.login(dto)).rejects.toThrow('Please enter a valid email address to continue');
     });
 
     it('should throw BadRequestException for short password', async () => {
       const dto = { email: 'user@example.com', password: 'short' };
       await expect(service.login(dto)).rejects.toThrow(
-        'Invalid password format',
+        'Please enter a valid password to continue',
       );
     });
 
@@ -441,7 +441,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
         UnauthorizedException,
       );
       await expect(service.verifyOtp(email, '000000')).rejects.toThrow(
-        'Invalid or expired code',
+        'The code you entered is incorrect or expired, please request a new one',
       );
     });
 
@@ -464,7 +464,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
         BadRequestException,
       );
       await expect(service.verifyOtp('bad-email', token)).rejects.toThrow(
-        'Invalid email format',
+        'Please enter a valid email address to continue',
       );
     });
 
@@ -473,7 +473,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
         BadRequestException,
       );
       await expect(service.verifyOtp(email, 'abc')).rejects.toThrow(
-        'Invalid OTP code',
+        'The code you entered is incorrect or expired, please request a new one',
       );
     });
 

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralOwnerGuard implements CanActivate {
@@ -21,7 +22,7 @@ export class ReferralOwnerGuard implements CanActivate {
     const referralId = request.params.id;
 
     if (!userId || !referralId) {
-      throw new ForbiddenException('Invalid request');
+      throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
     }
 
     const { data } = await this.admin
@@ -31,7 +32,7 @@ export class ReferralOwnerGuard implements CanActivate {
       .single();
 
     if (!data || data.user_id !== userId) {
-      throw new ForbiddenException('Not authorized to modify this referral');
+      throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
     }
 
     return true;

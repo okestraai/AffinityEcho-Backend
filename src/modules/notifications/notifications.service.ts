@@ -18,6 +18,7 @@ import {
 } from '../../common/constants/select-fields';
 import { ChatGateway } from '../messaging/services/websocket.gateway';
 import { PushNotificationService } from './push-notification.service';
+import { MSG } from '../../common/constants/messages';
 
 const ACTION_VERBS: Record<string, string> = {
   forum_like: 'reacted to your topic',
@@ -107,7 +108,7 @@ export class NotificationsService {
         );
         return {
           success: true,
-          message: 'Notification skipped by user preference',
+          message: MSG.NOTIFICATION.SKIPPED,
           data: null,
         };
       }
@@ -169,7 +170,7 @@ export class NotificationsService {
 
       return {
         success: true,
-        message: 'Notification created successfully',
+        message: MSG.NOTIFICATION.CREATED,
         data,
       };
     } catch (error: any) {
@@ -380,7 +381,7 @@ export class NotificationsService {
         const aggregated = this.aggregateNotifications(notifications, limit);
         return {
           success: true,
-          message: 'Notifications retrieved successfully',
+          message: MSG.NOTIFICATION.RETRIEVED,
           data: aggregated,
           pagination: {
             total: count || 0,
@@ -393,7 +394,7 @@ export class NotificationsService {
 
       return {
         success: true,
-        message: 'Notifications retrieved successfully',
+        message: MSG.NOTIFICATION.RETRIEVED,
         data: notifications,
         pagination: {
           total: count || 0,
@@ -452,7 +453,7 @@ export class NotificationsService {
         .single();
 
       if (error || !data) {
-        throw new NotFoundException('Notification not found');
+        throw new NotFoundException(MSG.NOTIFICATION.NOT_FOUND);
       }
 
       return {
@@ -482,12 +483,12 @@ export class NotificationsService {
         .single();
 
       if (error) {
-        throw new NotFoundException('Notification not found');
+        throw new NotFoundException(MSG.NOTIFICATION.NOT_FOUND);
       }
 
       return {
         success: true,
-        message: 'Notification marked as read',
+        message: MSG.NOTIFICATION.READ,
         data,
       };
     } catch (error: any) {
@@ -585,12 +586,12 @@ export class NotificationsService {
         .single();
 
       if (error) {
-        throw new NotFoundException('Notification not found');
+        throw new NotFoundException(MSG.NOTIFICATION.NOT_FOUND);
       }
 
       return {
         success: true,
-        message: 'Notification updated successfully',
+        message: MSG.NOTIFICATION.UPDATED,
         data,
       };
     } catch (error: any) {
@@ -612,12 +613,12 @@ export class NotificationsService {
 
       if (error) {
         this.logger.error('Failed to delete notification:', error);
-        throw new NotFoundException('Notification not found');
+        throw new NotFoundException(MSG.NOTIFICATION.NOT_FOUND);
       }
 
       return {
         success: true,
-        message: 'Notification deleted successfully',
+        message: MSG.NOTIFICATION.DELETED,
       };
     } catch (error: any) {
       this.logger.error('Error deleting notification:', error);
@@ -639,12 +640,12 @@ export class NotificationsService {
         error,
         userId,
       });
-      throw new BadRequestException('Failed to clear all notifications');
+      throw new BadRequestException(MSG.NOTIFICATION.CLEAR_FAILED);
     }
 
     return {
       success: true,
-      message: 'All notifications cleared',
+      message: MSG.NOTIFICATION.CLEARED,
       data: { deleted_count: count || 0 },
     };
   }

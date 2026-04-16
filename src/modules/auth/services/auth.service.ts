@@ -23,6 +23,7 @@ import { OnboardingDataDto } from '../dto/onboarding.dto';
 import logger from '../../../common/utils/logger.util';
 import { UserProfileResponse } from '../interfaces/user-profile.interface';
 import { OnboardingService } from './onboarding.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class AuthService {
@@ -67,7 +68,7 @@ export class AuthService {
     if (!password || password.length < 8) {
       return {
         isValid: false,
-        message: 'Password must be at least 8 characters long',
+        message: MSG.AUTH.PASSWORD_TOO_SHORT,
       };
     }
     return { isValid: true };
@@ -81,19 +82,19 @@ export class AuthService {
     if (!username || username.length < 3) {
       return {
         isValid: false,
-        message: 'Username must be at least 3 characters long',
+        message: MSG.AUTH.USERNAME_TOO_SHORT,
       };
     }
     if (username.length > 50) {
       return {
         isValid: false,
-        message: 'Username must be less than 50 characters',
+        message: MSG.AUTH.USERNAME_TOO_LONG,
       };
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       return {
         isValid: false,
-        message: 'Username can only contain letters, numbers, and underscores',
+        message: MSG.AUTH.USERNAME_INVALID,
       };
     }
     return { isValid: true };
@@ -143,7 +144,7 @@ export class AuthService {
     if (!this.validateEmail(dto.email)) {
       logger.warn('Signup failed: Invalid email format', {});
       throw new BadRequestException(
-        'Invalid email format. Please use a valid email address (e.g., user@example.com).',
+        MSG.AUTH.INVALID_EMAIL,
       );
     }
 
@@ -281,13 +282,13 @@ export class AuthService {
     // Validate email format
     if (!this.validateEmail(dto.email)) {
       throw new BadRequestException(
-        'Invalid email format. Please use a valid email address.',
+        MSG.AUTH.INVALID_EMAIL,
       );
     }
 
     const passwordValidation = this.validatePassword(dto.password);
     if (!passwordValidation.isValid) {
-      throw new BadRequestException('Invalid password format');
+      throw new BadRequestException(MSG.AUTH.INVALID_PASSWORD);
     }
 
     try {
@@ -401,12 +402,12 @@ export class AuthService {
     logger.info('Social login initiated', { provider });
 
     if (!['google', 'facebook'].includes(provider)) {
-      throw new BadRequestException('Unsupported social login provider');
+      throw new BadRequestException(MSG.AUTH.UNSUPPORTED_PROVIDER);
     }
 
     // Validate redirect_uri if provided (only allow our deep link scheme)
     if (redirectUri && !redirectUri.startsWith('affinityecho://')) {
-      throw new BadRequestException('Invalid redirect_uri');
+      throw new BadRequestException(MSG.AUTH.INVALID_REDIRECT);
     }
 
     try {
@@ -415,7 +416,7 @@ export class AuthService {
         `http://localhost:${this.config.get('PORT') || 3000}`;
       const clientId = this.config.get('GOOGLE_CLIENT_ID');
       if (!clientId) {
-        throw new InternalServerErrorException('Google OAuth not configured');
+        throw new InternalServerErrorException(MSG.AUTH.GOOGLE_NOT_CONFIGURED);
       }
 
       // Keep redirect_uri clean — Google must match it exactly against the registered URI.
@@ -599,7 +600,7 @@ export class AuthService {
     logger.info('Password reset requested', {});
 
     if (!this.validateEmail(dto.email)) {
-      throw new BadRequestException('Invalid email format');
+      throw new BadRequestException(MSG.AUTH.INVALID_EMAIL);
     }
 
     try {
@@ -675,7 +676,7 @@ export class AuthService {
     }
 
     if (!dto.otp) {
-      throw new BadRequestException('OTP code is required');
+      throw new BadRequestException(MSG.AUTH.OTP_REQUIRED);
     }
 
     try {
@@ -687,7 +688,7 @@ export class AuthService {
         stored.otp !== dto.otp ||
         stored.type !== 'password_reset'
       ) {
-        throw new BadRequestException('Invalid or expired OTP code');
+        throw new BadRequestException(MSG.AUTH.INVALID_OTP);
       }
 
       // OPTIMIZATION: Get user by email from user_profiles (indexed query)
@@ -698,7 +699,7 @@ export class AuthService {
         .single();
 
       if (!profile) {
-        throw new BadRequestException('User not found');
+        throw new BadRequestException(MSG.AUTH.USER_NOT_FOUND);
       }
 
       // Update password hash directly
@@ -769,7 +770,7 @@ export class AuthService {
     logger.info('Token refresh attempt');
 
     if (!dto.refreshToken) {
-      throw new BadRequestException('Refresh token is required');
+      throw new BadRequestException(MSG.AUTH.REFRESH_REQUIRED);
     }
 
     try {
@@ -788,7 +789,7 @@ export class AuthService {
         logger.warn('User not found during token refresh', {
           error: userError?.message,
         });
-        throw new UnauthorizedException('User account no longer exists');
+        throw new UnauthorizedException(MSG.AUTH.ACCOUNT_NOT_EXISTS);
       }
 
       const tokens = this.generateTokens(user.id, user.email);
@@ -808,7 +809,7 @@ export class AuthService {
         message.includes('jwt malformed') ||
         message.includes('invalid signature')
       ) {
-        throw new UnauthorizedException('Invalid refresh token.');
+        throw new UnauthorizedException(MSG.AUTH.INVALID_REFRESH);
       } else {
         throw new UnauthorizedException(
           'Token refresh failed. Please log in again.',
@@ -821,7 +822,7 @@ export class AuthService {
   async logout(userId?: string) {
     logger.info('Logout successful', { userId });
     return {
-      message: 'Logged out successfully',
+      message: MSG.AUTH.LOGGED_OUT,
       timestamp: new Date().toISOString(),
     };
   }
@@ -833,7 +834,7 @@ export class AuthService {
     // Validate email format
     if (!this.validateEmail(dto.email)) {
       throw new BadRequestException(
-        'Invalid email format. Please use a valid email address.',
+        MSG.AUTH.INVALID_EMAIL,
       );
     }
 
@@ -879,7 +880,7 @@ export class AuthService {
     logger.info('Resend OTP request', {});
 
     if (!this.validateEmail(dto.email)) {
-      throw new BadRequestException('Invalid email format.');
+      throw new BadRequestException(MSG.AUTH.INVALID_EMAIL);
     }
 
     const email = dto.email.toLowerCase();
@@ -898,7 +899,7 @@ export class AuthService {
         existing.attempts = 0;
       }
       if (now - existing.lastSent < 30_000) {
-        throw new BadRequestException('Please wait 30 seconds.');
+        throw new BadRequestException(MSG.AUTH.WAIT_RATE_LIMIT);
       }
     }
 
@@ -942,7 +943,7 @@ export class AuthService {
     await this.emailService.sendOtpEmail(dto.email, otp, username);
 
     return {
-      message: 'A new code has been sent to your email.',
+      message: MSG.AUTH.OTP_SENT,
       attemptsRemaining:
         this.MAX_OTP_ATTEMPTS - ((existing?.attempts || 0) + 1),
     };
@@ -955,16 +956,16 @@ export class AuthService {
     logger.info('OTP verification attempt', {});
 
     if (!this.validateEmail(email))
-      throw new BadRequestException('Invalid email format');
+      throw new BadRequestException(MSG.AUTH.INVALID_EMAIL);
     if (!token || token.length !== 6 || !/^\d+$/.test(token)) {
-      throw new BadRequestException('Invalid OTP code');
+      throw new BadRequestException(MSG.AUTH.INVALID_OTP);
     }
 
     const emailLower = email.toLowerCase();
 
     const isValid = await this.verifyStoredOtp(emailLower, token);
     if (!isValid) {
-      throw new UnauthorizedException('Invalid or expired code');
+      throw new UnauthorizedException(MSG.AUTH.INVALID_OTP);
     }
 
     // Try to find profile by email
@@ -977,7 +978,7 @@ export class AuthService {
     // If profile not found by email, user doesn't exist
     if (!profile) {
       logger.warn('Profile not found by email during OTP verify', {});
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException(MSG.AUTH.USER_NOT_FOUND);
     }
 
     // Mark email as confirmed
@@ -1067,7 +1068,7 @@ export class AuthService {
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       logger.error('Failed to fetch user profile', { userId, error });
-      throw new InternalServerErrorException('Unable to fetch user profile');
+      throw new InternalServerErrorException(MSG.AUTH.PROFILE_UPDATE_FAILED);
     }
   }
 
@@ -1101,7 +1102,7 @@ export class AuthService {
     );
 
     if (Object.keys(cleanedUpdate).length === 0) {
-      throw new BadRequestException('No valid fields provided to update');
+      throw new BadRequestException(MSG.AUTH.NO_FIELDS_TO_UPDATE);
     }
 
     try {
@@ -1121,7 +1122,7 @@ export class AuthService {
           userId,
           error: error.message,
         });
-        throw new BadRequestException('Failed to update profile');
+        throw new BadRequestException(MSG.AUTH.PROFILE_UPDATE_FAILED);
       }
 
       logger.info('Profile updated successfully', { userId });
@@ -1129,7 +1130,7 @@ export class AuthService {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       logger.error('Unexpected error during profile update', { userId, error });
-      throw new InternalServerErrorException('Profile update failed');
+      throw new InternalServerErrorException(MSG.AUTH.PROFILE_UPDATE_FAILED);
     }
   }
 
@@ -1155,7 +1156,7 @@ export class AuthService {
         .single();
 
       if (userError || !user) {
-        throw new BadRequestException('User not found');
+        throw new BadRequestException(MSG.AUTH.USER_NOT_FOUND);
       }
 
       if (!user.password_hash) {
@@ -1168,7 +1169,7 @@ export class AuthService {
       const isValid = await bcrypt.compare(currentPassword, user.password_hash);
       if (!isValid) {
         logger.warn('Current password verification failed', { userId });
-        throw new BadRequestException('Current password is incorrect');
+        throw new BadRequestException(MSG.AUTH.PASSWORD_INCORRECT);
       }
 
       // Hash and update new password
@@ -1189,7 +1190,7 @@ export class AuthService {
       }
 
       logger.info('Password changed successfully', { userId });
-      return { message: 'Password changed successfully' };
+      return { message: MSG.AUTH.PASSWORD_CHANGED };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;

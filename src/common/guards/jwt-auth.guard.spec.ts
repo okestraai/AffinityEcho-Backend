@@ -70,7 +70,7 @@ describe('JwtAuthGuard', () => {
     const context = createMockContext({
       authorization: 'Bearer invalid-token',
     });
-    await expect(guard.canActivate(context)).rejects.toThrow('Invalid token');
+    await expect(guard.canActivate(context)).rejects.toThrow('Your session is no longer valid, please sign in again');
   });
 
   it('should throw UnauthorizedException for expired token', async () => {
@@ -87,7 +87,7 @@ describe('JwtAuthGuard', () => {
       authorization: `Bearer ${expiredToken}`,
     });
     await expect(guard.canActivate(context)).rejects.toThrow(
-      'Token has expired',
+      'Your session has expired, please sign in again',
     );
   });
 
@@ -109,7 +109,7 @@ describe('JwtAuthGuard', () => {
     const token = generateTestToken({ email: 'test@example.com' }); // no sub
     const context = createMockContext({ authorization: `Bearer ${token}` });
     await expect(guard.canActivate(context)).rejects.toThrow(
-      'Invalid token payload',
+      'Your session is no longer valid, please sign in again',
     );
   });
 });

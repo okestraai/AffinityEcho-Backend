@@ -12,6 +12,7 @@ import { UpdateForumDto } from '../dto/update-forum.dto';
 import { ForumFiltersDto } from '../dto/forum-filters.dto';
 import logger from '../../../common/utils/logger.util';
 import { FORUM_FIELDS } from '../../../common/constants/select-fields';
+import { MSG } from '../../../common/constants/messages';
 
 interface Forum {
   id: string;
@@ -66,7 +67,7 @@ export class ForumService {
         logger.warn('Forum creation failed: Name already exists', {
           name: createForumDto.name,
         });
-        throw new ConflictException('Forum with this name already exists');
+        throw new ConflictException(MSG.FORUM.NAME_TAKEN);
       }
 
       const { data: forum, error } = await this.admin
@@ -88,11 +89,11 @@ export class ForumService {
         .single();
 
       if (error) {
-        logger.error('Forum creation failed', {
+        logger.error(MSG.FORUM.CREATE_FORUM_FAILED, {
           error: error.message,
           data: createForumDto,
         });
-        throw new BadRequestException('Failed to create forum');
+        throw new BadRequestException(MSG.FORUM.CREATE_FORUM_FAILED);
       }
 
       logger.info('Forum created successfully', { forumId: forum.id });
@@ -105,7 +106,7 @@ export class ForumService {
         throw error;
       }
       logger.error('Unexpected error during forum creation', { error });
-      throw new InternalServerErrorException('Forum creation failed');
+      throw new InternalServerErrorException(MSG.FORUM.CREATE_FORUM_FAILED);
     }
   }
 
@@ -199,8 +200,8 @@ export class ForumService {
       const { data: forums, error, count } = await query;
 
       if (error) {
-        logger.error('Failed to fetch forums', { error: error.message });
-        throw new BadRequestException('Failed to fetch forums');
+        logger.error(MSG.FORUM.FORUMS_FAILED, { error: error.message });
+        throw new BadRequestException(MSG.FORUM.FORUMS_FAILED);
       }
 
       const total = count || 0;
@@ -226,7 +227,7 @@ export class ForumService {
       logger.error('Unexpected error fetching forums', {
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException('Failed to fetch forums');
+      throw new InternalServerErrorException(MSG.FORUM.FORUMS_FAILED);
     }
   }
 
@@ -261,17 +262,17 @@ export class ForumService {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          throw new NotFoundException('Forum not found');
+          throw new NotFoundException(MSG.FORUM.NOT_FOUND);
         }
-        logger.error('Failed to fetch forum', {
+        logger.error(MSG.FORUM.FORUMS_FAILED, {
           forumId: id,
           error: error.message,
         });
-        throw new BadRequestException('Failed to fetch forum');
+        throw new BadRequestException(MSG.FORUM.FORUMS_FAILED);
       }
 
       if (!forum) {
-        throw new NotFoundException('Forum not found');
+        throw new NotFoundException(MSG.FORUM.NOT_FOUND);
       }
 
       // Use the cached counts from the forum table instead of separate queries
@@ -291,7 +292,7 @@ export class ForumService {
         throw error;
       }
       logger.error('Unexpected error fetching forum', { forumId: id, error });
-      throw new InternalServerErrorException('Failed to fetch forum');
+      throw new InternalServerErrorException(MSG.FORUM.FORUMS_FAILED);
     }
   }
 
@@ -336,7 +337,7 @@ export class ForumService {
           forumId: id,
           error: error.message,
         });
-        throw new BadRequestException('Failed to update forum');
+        throw new BadRequestException(MSG.FORUM.UPDATE_FORUM_FAILED);
       }
 
       logger.info('Forum updated successfully', { forumId: id });
@@ -352,7 +353,7 @@ export class ForumService {
         forumId: id,
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException('Failed to update forum');
+      throw new InternalServerErrorException(MSG.FORUM.UPDATE_FORUM_FAILED);
     }
   }
 
@@ -370,11 +371,11 @@ export class ForumService {
           forumId: id,
           error: error.message,
         });
-        throw new BadRequestException('Failed to delete forum');
+        throw new BadRequestException(MSG.FORUM.DELETE_FORUM_FAILED);
       }
 
       logger.info('Forum deleted successfully', { forumId: id });
-      return { success: true, message: 'Forum deleted successfully' };
+      return { success: true, message: MSG.FORUM.FORUM_DELETED };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -383,7 +384,7 @@ export class ForumService {
         throw error;
       }
       logger.error('Unexpected error deleting forum', { forumId: id, error });
-      throw new InternalServerErrorException('Failed to delete forum');
+      throw new InternalServerErrorException(MSG.FORUM.DELETE_FORUM_FAILED);
     }
   }
 
@@ -412,7 +413,7 @@ export class ForumService {
 
       if (existingMember) {
         logger.warn('User already member of forum', { forumId, userId });
-        throw new ConflictException('User is already a member of this forum');
+        throw new ConflictException(MSG.FORUM.ALREADY_MEMBER);
       }
 
       // Add user to forum
@@ -424,12 +425,12 @@ export class ForumService {
       });
 
       if (error) {
-        logger.error('Failed to join forum', {
+        logger.error(MSG.FORUM.JOIN_FAILED, {
           forumId,
           userId,
           error: error.message,
         });
-        throw new BadRequestException('Failed to join forum');
+        throw new BadRequestException(MSG.FORUM.JOIN_FAILED);
       }
 
       const { error: incError } = await this.admin.rpc(
@@ -452,7 +453,7 @@ export class ForumService {
           .eq('id', forumId);
       }
       logger.info('User joined forum successfully', { forumId, userId });
-      return { success: true, message: 'Successfully joined forum' };
+      return { success: true, message: MSG.FORUM.JOINED };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -466,7 +467,7 @@ export class ForumService {
         userId,
         error,
       });
-      throw new InternalServerErrorException('Failed to join forum');
+      throw new InternalServerErrorException(MSG.FORUM.JOIN_FAILED);
     }
   }
 
@@ -486,7 +487,7 @@ export class ForumService {
         .single();
 
       if (checkError?.code === 'PGRST116' || !existingMember) {
-        throw new ConflictException('User is not a member of this forum');
+        throw new ConflictException(MSG.FORUM.NOT_MEMBER);
       }
 
       // Remove user from forum
@@ -497,12 +498,12 @@ export class ForumService {
         .eq('user_id', userId);
 
       if (error) {
-        logger.error('Failed to leave forum', {
+        logger.error(MSG.FORUM.LEAVE_FAILED, {
           forumId,
           userId,
           error: error.message,
         });
-        throw new BadRequestException('Failed to leave forum');
+        throw new BadRequestException(MSG.FORUM.LEAVE_FAILED);
       }
 
       // Optimized: Update member count using decrement
@@ -533,7 +534,7 @@ export class ForumService {
       }
 
       logger.info('User left forum successfully', { forumId, userId });
-      return { success: true, message: 'Successfully left forum' };
+      return { success: true, message: MSG.FORUM.LEFT };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -547,7 +548,7 @@ export class ForumService {
         userId,
         error,
       });
-      throw new InternalServerErrorException('Failed to leave forum');
+      throw new InternalServerErrorException(MSG.FORUM.LEAVE_FAILED);
     }
   }
 
@@ -588,7 +589,7 @@ export class ForumService {
           userId,
           error: error.message,
         });
-        throw new BadRequestException('Failed to fetch user forums');
+        throw new BadRequestException(MSG.FORUM.USER_FORUMS_FAILED);
       }
 
       if (!memberships || memberships.length === 0) {
@@ -627,7 +628,7 @@ export class ForumService {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException('Failed to fetch user forums');
+      throw new InternalServerErrorException(MSG.FORUM.USER_FORUMS_FAILED);
     }
   }
 
@@ -913,11 +914,11 @@ export class ForumService {
         .eq('is_global', false);
 
       if (error) {
-        logger.error('Failed to fetch local forum metrics', {
+        logger.error(MSG.FORUM.METRICS_FAILED, {
           companyName,
           error: error.message,
         });
-        throw new BadRequestException('Failed to fetch local forum metrics');
+        throw new BadRequestException(MSG.FORUM.METRICS_FAILED);
       }
 
       logger.debug('Final forums query results', {
@@ -989,9 +990,7 @@ export class ForumService {
         companyName,
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException(
-        'Failed to fetch local forum metrics',
-      );
+      throw new InternalServerErrorException(MSG.FORUM.METRICS_FAILED);
     }
   }
 
@@ -1019,10 +1018,10 @@ export class ForumService {
         .order('member_count', { ascending: false });
 
       if (error) {
-        logger.error('Failed to fetch global forum metrics', {
+        logger.error(MSG.FORUM.METRICS_FAILED, {
           error: error.message,
         });
-        throw new BadRequestException('Failed to fetch global forum metrics');
+        throw new BadRequestException(MSG.FORUM.METRICS_FAILED);
       }
 
       // Calculate engagement score for each forum (combination of topics and members)
@@ -1059,9 +1058,7 @@ export class ForumService {
       logger.error('Unexpected error fetching global forum metrics', {
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException(
-        'Failed to fetch global forum metrics',
-      );
+      throw new InternalServerErrorException(MSG.FORUM.METRICS_FAILED);
     }
   }
 
@@ -1091,11 +1088,11 @@ export class ForumService {
         .order('name', { ascending: true });
 
       if (error) {
-        logger.error('Failed to fetch foundation forums', {
+        logger.error(MSG.FORUM.FORUMS_FAILED, {
           companyName,
           error: error.message,
         });
-        throw new BadRequestException('Failed to fetch foundation forums');
+        throw new BadRequestException(MSG.FORUM.FORUMS_FAILED);
       }
 
       if (!forums || forums.length === 0) {

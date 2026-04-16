@@ -7,6 +7,7 @@ import {
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { ConfigService } from '@nestjs/config';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ChatParticipantGuard implements CanActivate {
@@ -27,7 +28,7 @@ export class ChatParticipantGuard implements CanActivate {
       logger.warn('No user ID found in request', {
         module: 'ChatParticipantGuard',
       });
-      throw new ForbiddenException('User ID not found');
+      throw new ForbiddenException(MSG.MESSAGING.NOT_AUTHORIZED);
     }
 
     // Get conversation ID from different possible locations
@@ -39,7 +40,7 @@ export class ChatParticipantGuard implements CanActivate {
       request.query?.conversation_id;
 
     if (!conversationId) {
-      throw new ForbiddenException('Conversation ID is required');
+      throw new ForbiddenException(MSG.MESSAGING.CONV_NOT_FOUND);
     }
 
     try {
@@ -50,7 +51,7 @@ export class ChatParticipantGuard implements CanActivate {
         .single();
 
       if (error || !conversation) {
-        throw new ForbiddenException('Conversation not found');
+        throw new ForbiddenException(MSG.MESSAGING.CONV_NOT_FOUND);
       }
 
       // Convert both to strings for comparison
@@ -67,11 +68,11 @@ export class ChatParticipantGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof ForbiddenException) throw error;
-      logger.error('Failed to verify conversation access', {
+      logger.error(MSG.MESSAGING.NOT_AUTHORIZED, {
         module: 'ChatParticipantGuard',
         error,
       });
-      throw new ForbiddenException('Failed to verify conversation access');
+      throw new ForbiddenException(MSG.MESSAGING.NOT_AUTHORIZED);
     }
   }
 }

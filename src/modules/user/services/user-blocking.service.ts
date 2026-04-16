@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
 import { BlockUserDto } from '../dto/update-profile.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class UserBlockingService {
@@ -25,7 +26,7 @@ export class UserBlockingService {
     try {
       // Prevent self-blocking
       if (blockerId === blockedId) {
-        throw new BadRequestException('You cannot block yourself');
+        throw new BadRequestException(MSG.USER.CANNOT_BLOCK_SELF);
       }
 
       // Verify blocked user exists
@@ -36,7 +37,7 @@ export class UserBlockingService {
         .single();
 
       if (!blockedUser) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       // Check if already blocked
@@ -48,7 +49,7 @@ export class UserBlockingService {
         .maybeSingle();
 
       if (existing) {
-        throw new BadRequestException('User is already blocked');
+        throw new BadRequestException(MSG.USER.ALREADY_BLOCKED);
       }
 
       // Create block entry
@@ -59,7 +60,7 @@ export class UserBlockingService {
       });
 
       if (error) {
-        throw new BadRequestException('Failed to block user');
+        throw new BadRequestException(MSG.USER.BLOCK_FAILED);
       }
 
       // Remove any existing follow relationships
@@ -95,8 +96,8 @@ export class UserBlockingService {
       ) {
         throw error;
       }
-      logger.error('Failed to block user', { error });
-      throw new BadRequestException('Failed to block user');
+      logger.error(MSG.USER.BLOCK_FAILED, { error });
+      throw new BadRequestException(MSG.USER.BLOCK_FAILED);
     }
   }
 
@@ -115,7 +116,7 @@ export class UserBlockingService {
         .maybeSingle();
 
       if (!block) {
-        throw new NotFoundException('Block not found');
+        throw new NotFoundException(MSG.USER.BLOCK_NOT_FOUND);
       }
 
       // Remove block
@@ -125,14 +126,14 @@ export class UserBlockingService {
         .eq('id', block.id);
 
       if (error) {
-        throw new BadRequestException('Failed to unblock user');
+        throw new BadRequestException(MSG.USER.UNBLOCK_FAILED);
       }
 
       logger.info('User unblocked successfully', { blockerId, blockedId });
 
       return {
         success: true,
-        message: 'User has been unblocked',
+        message: MSG.USER.UNBLOCKED,
       };
     } catch (error) {
       if (
@@ -141,8 +142,8 @@ export class UserBlockingService {
       ) {
         throw error;
       }
-      logger.error('Failed to unblock user', { error });
-      throw new BadRequestException('Failed to unblock user');
+      logger.error(MSG.USER.UNBLOCK_FAILED, { error });
+      throw new BadRequestException(MSG.USER.UNBLOCK_FAILED);
     }
   }
 
@@ -180,7 +181,7 @@ export class UserBlockingService {
         .range(offset, offset + limit - 1);
 
       if (error) {
-        throw new BadRequestException('Failed to fetch blocked users');
+        throw new BadRequestException(MSG.USER.BLOCK_STATUS_FAILED);
       }
 
       const formattedBlocks = (blocks || []).map((block: any) => ({
@@ -207,8 +208,8 @@ export class UserBlockingService {
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to fetch blocked users', { error });
-      throw new BadRequestException('Failed to fetch blocked users');
+      logger.error(MSG.USER.BLOCK_STATUS_FAILED, { error });
+      throw new BadRequestException(MSG.USER.BLOCK_STATUS_FAILED);
     }
   }
 
@@ -244,8 +245,8 @@ export class UserBlockingService {
         },
       };
     } catch (error) {
-      logger.error('Failed to get block status', { error });
-      throw new BadRequestException('Failed to get block status');
+      logger.error(MSG.USER.BLOCK_STATUS_FAILED, { error });
+      throw new BadRequestException(MSG.USER.BLOCK_STATUS_FAILED);
     }
   }
 }

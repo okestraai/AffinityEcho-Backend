@@ -13,6 +13,7 @@ import { MentionService } from '../../mentions/mention.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import logger from '../../../common/utils/logger.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class NookMessagesService {
@@ -40,7 +41,7 @@ export class NookMessagesService {
       .eq('id', nookId)
       .single();
 
-    if (nookError || !nook) throw new NotFoundException('Nook not found');
+    if (nookError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     // Get messages
     const messageSelect = `
@@ -214,14 +215,14 @@ export class NookMessagesService {
       .eq('id', nookId)
       .single();
 
-    if (nookError || !nook) throw new NotFoundException('Nook not found');
+    if (nookError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     if (!nook.is_active || nook.is_locked) {
-      throw new BadRequestException('Nook is not active or is locked');
+      throw new BadRequestException(MSG.NOOK.INACTIVE);
     }
 
     if (new Date(nook.expires_at) < new Date()) {
-      throw new BadRequestException('Nook has expired');
+      throw new BadRequestException(MSG.NOOK.EXPIRED);
     }
 
     // Check if user is a member
@@ -235,7 +236,7 @@ export class NookMessagesService {
         .maybeSingle();
 
       if (!parentMessage) {
-        throw new BadRequestException('Parent message not found');
+        throw new BadRequestException(MSG.NOOK.PARENT_NOT_FOUND);
       }
     }
 
@@ -340,7 +341,7 @@ export class NookMessagesService {
     return {
       success: true,
       data: { message: { ...message, is_mine: true } },
-      message: 'Message posted successfully',
+      message: MSG.NOOK.MESSAGE_POSTED,
     };
   }
 
@@ -361,7 +362,7 @@ export class NookMessagesService {
       .single();
 
     if (fetchError || !message)
-      throw new NotFoundException('Message not found');
+      throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
 
     // Check if user is creator or admin
     const isCreator = message.user_id === userId;
@@ -401,7 +402,7 @@ export class NookMessagesService {
 
     return {
       success: true,
-      message: 'Message deleted successfully',
+      message: MSG.NOOK.MESSAGE_DELETED,
     };
   }
 
@@ -419,11 +420,11 @@ export class NookMessagesService {
       .single();
 
     if (fetchError || !message)
-      throw new NotFoundException('Message not found');
+      throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
     if (message.user_id !== userId)
-      throw new ForbiddenException('Only the message author can edit');
+      throw new ForbiddenException(MSG.NOOK.NOT_AUTHOR);
     if (message.is_removed)
-      throw new BadRequestException('Cannot edit a removed message');
+      throw new BadRequestException(MSG.NOOK.EDIT_REMOVED);
 
     const { data: nook } = await this.admin
       .from('nooks')
@@ -432,10 +433,10 @@ export class NookMessagesService {
       .single();
 
     if (!nook?.is_active || nook.is_locked) {
-      throw new BadRequestException('Nook is not active or is locked');
+      throw new BadRequestException(MSG.NOOK.INACTIVE);
     }
     if (new Date(nook.expires_at) < new Date()) {
-      throw new BadRequestException('Nook has expired');
+      throw new BadRequestException(MSG.NOOK.EXPIRED);
     }
 
     const { data: updated, error: updateError } = await this.admin
@@ -450,7 +451,7 @@ export class NookMessagesService {
     return {
       success: true,
       data: { message: updated },
-      message: 'Message updated successfully',
+      message: MSG.NOOK.MESSAGE_UPDATED,
     };
   }
 

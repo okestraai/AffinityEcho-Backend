@@ -3,6 +3,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class UserDiscoveryService {
@@ -66,8 +67,8 @@ export class UserDiscoveryService {
         data: { users: filtered },
       };
     } catch (error) {
-      logger.error('Failed to search users', { error, userId });
-      throw new BadRequestException('Failed to search users');
+      logger.error(MSG.USER.SEARCH_FAILED, { error, userId });
+      throw new BadRequestException(MSG.USER.SEARCH_FAILED);
     }
   }
 
@@ -222,8 +223,8 @@ export class UserDiscoveryService {
         },
       };
     } catch (error) {
-      logger.error('Failed to get connectable users', { error, userId });
-      throw new BadRequestException('Failed to get connectable users');
+      logger.error(MSG.USER.CONNECTABLE_FAILED, { error, userId });
+      throw new BadRequestException(MSG.USER.CONNECTABLE_FAILED);
     }
   }
 

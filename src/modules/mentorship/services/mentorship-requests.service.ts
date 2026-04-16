@@ -15,6 +15,7 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class MentorshipRequestsService {
@@ -157,7 +158,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Direct mentorship request sent successfully',
+        message: MSG.MENTORSHIP.REQUEST_SENT,
         data: {
           request,
         },
@@ -344,7 +345,7 @@ export class MentorshipRequestsService {
 
       if (error) {
         this.logger.error('Error fetching direct requests:', error);
-        throw new BadRequestException('Failed to retrieve direct requests');
+        throw new BadRequestException(MSG.MENTORSHIP.REQUESTS_FAILED);
       }
 
       // Mark as read if requested
@@ -355,7 +356,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Direct requests retrieved successfully',
+        message: MSG.MENTORSHIP.REQUESTS_FAILED,
         data: {
           requests: requests || [],
           pagination: {
@@ -371,7 +372,7 @@ export class MentorshipRequestsService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to retrieve direct requests');
+      throw new BadRequestException(MSG.MENTORSHIP.REQUESTS_FAILED);
     }
   }
 
@@ -443,7 +444,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Sent direct requests retrieved successfully',
+        message: MSG.MENTORSHIP.REQUESTS_FAILED,
         data: {
           requests: requests || [],
           pagination: {
@@ -538,7 +539,7 @@ export class MentorshipRequestsService {
 
       if (error) {
         this.logger.error('Error fetching all direct requests:', error);
-        throw new BadRequestException('Failed to retrieve direct requests');
+        throw new BadRequestException(MSG.MENTORSHIP.REQUESTS_FAILED);
       }
 
       // Mark all as read if requested
@@ -588,7 +589,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'All direct requests retrieved successfully',
+        message: MSG.MENTORSHIP.REQUESTS_FAILED,
         data: {
           requests: processedRequests,
           pagination: {
@@ -604,7 +605,7 @@ export class MentorshipRequestsService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to retrieve direct requests');
+      throw new BadRequestException(MSG.MENTORSHIP.REQUESTS_FAILED);
     }
   }
 
@@ -678,7 +679,7 @@ export class MentorshipRequestsService {
           success: true,
           hasSentRequest: false,
           hasReceivedRequest: false,
-          message: 'No request found',
+          message: MSG.MENTORSHIP.NO_REQUEST,
           data: null,
         };
       }
@@ -1445,7 +1446,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Request metrics retrieved successfully',
+        message: MSG.MENTORSHIP.REQUIREMENTS_CHECKED,
         data: metrics,
       };
     } catch (error: any) {
@@ -1516,7 +1517,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Request statistics retrieved successfully',
+        message: MSG.MENTORSHIP.REQUIREMENTS_CHECKED,
         data: {
           sent: sentStats,
           received: receivedStats,
@@ -1837,7 +1838,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Mentors retrieved successfully',
+        message: MSG.MENTORSHIP.MENTORS_RETRIEVED,
         data: {
           mentors: uniqueMentors,
           stats: {
@@ -1998,7 +1999,7 @@ export class MentorshipRequestsService {
 
       return {
         success: true,
-        message: 'Mentees retrieved successfully',
+        message: MSG.MENTORSHIP.MENTEES_RETRIEVED,
         data: {
           mentees: uniqueMentees,
           stats: {

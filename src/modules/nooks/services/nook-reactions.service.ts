@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ReactionDto } from '../dto/reaction.dto';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { MSG } from '../../../common/constants/messages';
 
 interface MessageReactionCounts {
   heard_count?: number;
@@ -43,7 +44,7 @@ export class NookReactionsService {
       .eq('id', nookId)
       .single();
 
-    if (nookError || !nook) throw new NotFoundException('Nook not found');
+    if (nookError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     // Check if already reacted
     const { data: existing } = await this.admin
@@ -55,7 +56,7 @@ export class NookReactionsService {
       .maybeSingle();
 
     if (existing) {
-      throw new BadRequestException('You already reacted with this type');
+      throw new BadRequestException(MSG.NOOK.REACTION_EXISTS);
     }
 
     const { data: reaction, error } = await this.admin
@@ -83,7 +84,7 @@ export class NookReactionsService {
       .maybeSingle();
 
     if (fetchError || !reaction) {
-      throw new NotFoundException('Reaction not found or not yours');
+      throw new NotFoundException(MSG.NOOK.REACTION_NOT_FOUND);
     }
 
     const { error } = await this.admin
@@ -93,7 +94,7 @@ export class NookReactionsService {
 
     if (error) throw new BadRequestException(error.message);
 
-    return { success: true, message: 'Reaction removed successfully' };
+    return { success: true, message: MSG.NOOK.REACTION_REMOVED };
   }
 
   // ── MESSAGE-LEVEL REACTIONS (TOGGLE) ────────────────────────────────────
@@ -125,7 +126,8 @@ export class NookReactionsService {
       .eq('id', messageId)
       .single();
 
-    if (msgErr || !message) throw new NotFoundException('Message not found');
+    if (msgErr || !message)
+      throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
 
     const { data: nook, error: nookErr } = await this.admin
       .from('nooks')
@@ -133,7 +135,7 @@ export class NookReactionsService {
       .eq('id', message.nook_id)
       .single();
 
-    if (nookErr || !nook) throw new NotFoundException('Nook not found');
+    if (nookErr || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
 
     const isCreator = nook.creator_id === userId;
 
@@ -154,7 +156,7 @@ export class NookReactionsService {
       .single();
 
     if (countErr || !fullMessage)
-      throw new NotFoundException('Message not found');
+      throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
 
     let action: 'added' | 'removed';
 

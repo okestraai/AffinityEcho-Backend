@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralBookmarksService {
@@ -36,8 +37,8 @@ export class ReferralBookmarksService {
         data: { bookmarked: true, bookmarksCount: data?.bookmarks_count || 0 },
       };
     } catch (error) {
-      logger.error('Failed to bookmark referral', { error });
-      throw new BadRequestException('Failed to bookmark referral');
+      logger.error(MSG.REFERRAL.BOOKMARK_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.BOOKMARK_FAILED);
     }
   }
 
@@ -68,8 +69,8 @@ export class ReferralBookmarksService {
         data: { bookmarked: false, bookmarksCount: data?.bookmarks_count || 0 },
       };
     } catch (error) {
-      logger.error('Failed to remove bookmark', { error });
-      throw new BadRequestException('Failed to remove bookmark');
+      logger.error(MSG.REFERRAL.UNBOOKMARK_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.UNBOOKMARK_FAILED);
     }
   }
 
@@ -87,8 +88,8 @@ export class ReferralBookmarksService {
 
       return { success: true, data };
     } catch (error) {
-      logger.error('Failed to fetch user bookmarks', { error });
-      throw new BadRequestException('Failed to fetch user bookmarks');
+      logger.error(MSG.REFERRAL.BOOKMARKS_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.BOOKMARKS_FAILED);
     }
   }
 }

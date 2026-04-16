@@ -306,7 +306,7 @@ describe('NookMessagesService', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.message).toEqual(createdMessage);
-      expect(result.message).toBe('Message posted successfully');
+      expect(result.message).toBe('Message sent');
 
       // Verify the insert was called on nook_messages
       expect(mockClient.from).toHaveBeenCalledWith('nook_messages');
@@ -571,7 +571,7 @@ describe('NookMessagesService', () => {
       const result = await service.deleteMessage(nookId, messageId, userId);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Message deleted successfully');
+      expect(result.message).toBe('Message deleted');
       expect(mockClient.from).toHaveBeenCalledWith('nook_messages');
     });
 
@@ -606,7 +606,7 @@ describe('NookMessagesService', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Message deleted successfully');
+      expect(result.message).toBe('Message deleted');
     });
 
     it('should throw ForbiddenException when not author or nook creator', async () => {

@@ -15,6 +15,7 @@ import {
   AddConnectionNotesDto,
 } from '../dto/connection.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralConnectionsService {
@@ -130,8 +131,8 @@ export class ReferralConnectionsService {
 
       return { success: true, data: { sent, received } };
     } catch (error) {
-      logger.error('Failed to fetch connections', { error });
-      throw new BadRequestException('Failed to fetch connections');
+      logger.error(MSG.REFERRAL.FETCH_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.FETCH_FAILED);
     }
   }
 
@@ -147,11 +148,12 @@ export class ReferralConnectionsService {
         .eq('id', connectionId)
         .single();
 
-      if (error || !data) throw new NotFoundException('Connection not found');
+      if (error || !data)
+        throw new NotFoundException(MSG.REFERRAL.CONNECTION_NOT_FOUND);
 
       // Verify user is part of this connection
       if (data.sender_id !== userId && data.receiver_id !== userId) {
-        throw new ForbiddenException('Not authorized to view this connection');
+        throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
       }
 
       const isSender = data.sender_id === userId;
@@ -209,8 +211,8 @@ export class ReferralConnectionsService {
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to fetch connection', { error });
-      throw new BadRequestException('Failed to fetch connection');
+      logger.error(MSG.REFERRAL.FETCH_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.FETCH_FAILED);
     }
   }
 
@@ -230,7 +232,7 @@ export class ReferralConnectionsService {
         .single();
 
       if (postError || !post)
-        throw new NotFoundException('Referral post not found');
+        throw new NotFoundException(MSG.REFERRAL.NOT_FOUND);
 
       if (post.user_id === userId) {
         throw new BadRequestException(
@@ -239,7 +241,7 @@ export class ReferralConnectionsService {
       }
 
       if (post.status !== 'open') {
-        throw new BadRequestException('This referral is no longer open');
+        throw new BadRequestException(MSG.REFERRAL.NOT_OPEN);
       }
 
       // Check if connection already exists
@@ -330,7 +332,7 @@ export class ReferralConnectionsService {
           status: data.status,
           createdAt: data.created_at,
         },
-        message: 'Connection request sent successfully',
+        message: MSG.REFERRAL.CONNECTION_SENT,
       };
     } catch (error) {
       if (
@@ -338,8 +340,8 @@ export class ReferralConnectionsService {
         error instanceof BadRequestException
       )
         throw error;
-      logger.error('Failed to send connection request', { error });
-      throw new BadRequestException('Failed to send connection request');
+      logger.error(MSG.REFERRAL.CONNECT_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.CONNECT_FAILED);
     }
   }
 
@@ -354,7 +356,7 @@ export class ReferralConnectionsService {
         .single();
 
       if (fetchError || !connection)
-        throw new NotFoundException('Connection not found');
+        throw new NotFoundException(MSG.REFERRAL.CONNECTION_NOT_FOUND);
 
       if (connection.receiver_id !== userId) {
         throw new ForbiddenException(
@@ -363,7 +365,7 @@ export class ReferralConnectionsService {
       }
 
       if (connection.status !== 'pending') {
-        throw new BadRequestException('Connection is not pending');
+        throw new BadRequestException(MSG.REFERRAL.NOT_PENDING);
       }
 
       const { data, error } = await this.admin
@@ -436,7 +438,7 @@ export class ReferralConnectionsService {
       return {
         success: true,
         data: { id: data.id, status: data.status },
-        message: 'Connection accepted successfully',
+        message: MSG.REFERRAL.CONNECTION_ACCEPTED,
       };
     } catch (error) {
       if (
@@ -445,8 +447,8 @@ export class ReferralConnectionsService {
         error instanceof BadRequestException
       )
         throw error;
-      logger.error('Failed to accept connection', { error });
-      throw new BadRequestException('Failed to accept connection');
+      logger.error(MSG.REFERRAL.ACCEPT_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.ACCEPT_FAILED);
     }
   }
 
@@ -460,7 +462,8 @@ export class ReferralConnectionsService {
         .eq('id', connectionId)
         .single();
 
-      if (!connection) throw new NotFoundException('Connection not found');
+      if (!connection)
+        throw new NotFoundException(MSG.REFERRAL.CONNECTION_NOT_FOUND);
 
       if (connection.receiver_id !== userId) {
         throw new ForbiddenException(
@@ -469,7 +472,7 @@ export class ReferralConnectionsService {
       }
 
       if (connection.status !== 'pending') {
-        throw new BadRequestException('Connection is not pending');
+        throw new BadRequestException(MSG.REFERRAL.NOT_PENDING);
       }
 
       const { data, error } = await this.admin
@@ -487,7 +490,7 @@ export class ReferralConnectionsService {
       return {
         success: true,
         data: { id: data.id, status: data.status },
-        message: 'Connection rejected',
+        message: MSG.REFERRAL.CONNECTION_REJECTED,
       };
     } catch (error) {
       if (
@@ -496,8 +499,8 @@ export class ReferralConnectionsService {
         error instanceof BadRequestException
       )
         throw error;
-      logger.error('Failed to reject connection', { error });
-      throw new BadRequestException('Failed to reject connection');
+      logger.error(MSG.REFERRAL.REJECT_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.REJECT_FAILED);
     }
   }
 
@@ -515,7 +518,8 @@ export class ReferralConnectionsService {
         .eq('id', connectionId)
         .single();
 
-      if (!connection) throw new NotFoundException('Connection not found');
+      if (!connection)
+        throw new NotFoundException(MSG.REFERRAL.CONNECTION_NOT_FOUND);
 
       if (
         connection.sender_id !== userId &&
@@ -560,7 +564,7 @@ export class ReferralConnectionsService {
           interviewScheduled: data.interview_scheduled,
           offerReceived: data.offer_received,
         },
-        message: 'Progress updated successfully',
+        message: MSG.REFERRAL.PROGRESS_UPDATED,
       };
     } catch (error) {
       if (
@@ -569,8 +573,8 @@ export class ReferralConnectionsService {
         error instanceof BadRequestException
       )
         throw error;
-      logger.error('Failed to update progress', { error });
-      throw new BadRequestException('Failed to update progress');
+      logger.error(MSG.REFERRAL.PROGRESS_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.PROGRESS_FAILED);
     }
   }
 
@@ -588,13 +592,14 @@ export class ReferralConnectionsService {
         .eq('id', connectionId)
         .single();
 
-      if (!connection) throw new NotFoundException('Connection not found');
+      if (!connection)
+        throw new NotFoundException(MSG.REFERRAL.CONNECTION_NOT_FOUND);
 
       const isSender = connection.sender_id === userId;
       const isReceiver = connection.receiver_id === userId;
 
       if (!isSender && !isReceiver) {
-        throw new ForbiddenException('Not authorized to add notes');
+        throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
       }
 
       const updateData: any = {};
@@ -621,7 +626,7 @@ export class ReferralConnectionsService {
       return {
         success: true,
         data: { id: data.id },
-        message: 'Notes added successfully',
+        message: MSG.REFERRAL.NOTES_ADDED,
       };
     } catch (error) {
       if (
@@ -630,8 +635,8 @@ export class ReferralConnectionsService {
         error instanceof BadRequestException
       )
         throw error;
-      logger.error('Failed to add notes', { error });
-      throw new BadRequestException('Failed to add notes');
+      logger.error(MSG.REFERRAL.NOTES_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.NOTES_FAILED);
     }
   }
 }

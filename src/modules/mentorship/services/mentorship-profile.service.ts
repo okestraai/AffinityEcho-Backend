@@ -11,6 +11,7 @@ import { UpdateMentorProfileDto } from '../dto/update-mentor-profile.dto';
 import { CreateMenteeProfileDto } from '../dto/create-mentee-profile.dto';
 import { UpdateMenteeProfileDto } from '../dto/update-mentee-profile.dto';
 import { USER_PROFILE_MENTORSHIP_FIELDS } from '../../../common/constants/select-fields';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class MentorshipProfileService {
@@ -117,7 +118,7 @@ export class MentorshipProfileService {
 
       return {
         success: true,
-        message: 'Mentor profile created successfully',
+        message: MSG.MENTORSHIP.MENTOR_CREATED,
         data: updatedProfile,
       };
     } catch (error) {
@@ -200,7 +201,7 @@ export class MentorshipProfileService {
 
       return {
         success: true,
-        message: 'Mentor profile updated successfully',
+        message: MSG.MENTORSHIP.MENTOR_UPDATED,
         data: updatedProfile,
       };
     } catch (error) {
@@ -281,7 +282,7 @@ export class MentorshipProfileService {
 
       return {
         success: true,
-        message: 'Mentee profile created successfully',
+        message: MSG.MENTORSHIP.MENTEE_CREATED,
         data: updatedProfile,
       };
     } catch (error) {
@@ -361,7 +362,7 @@ export class MentorshipProfileService {
 
       return {
         success: true,
-        message: 'Mentee profile updated successfully',
+        message: MSG.MENTORSHIP.MENTEE_UPDATED,
         data: updatedProfile,
       };
     } catch (error) {
@@ -879,7 +880,7 @@ export class MentorshipProfileService {
       // In a real implementation, you would save feedback to a database
       return {
         success: true,
-        message: 'Feedback submitted successfully',
+        message: MSG.MENTORSHIP.FEEDBACK_SUBMITTED,
         data: {
           feedbackId: 'feedback_' + Date.now(),
           ...feedbackData,

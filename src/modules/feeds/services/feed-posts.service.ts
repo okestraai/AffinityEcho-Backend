@@ -13,6 +13,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MentionService } from '../../mentions/mention.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class FeedPostsService {
@@ -80,8 +81,8 @@ export class FeedPostsService {
         .single();
 
       if (error) {
-        logger.error('Failed to create post', { error });
-        throw new BadRequestException('Failed to create post');
+        logger.error(MSG.FEED.CREATE_FAILED, { error });
+        throw new BadRequestException(MSG.FEED.CREATE_FAILED);
       }
 
       logger.info('Post created successfully', { postId: post.id });
@@ -104,12 +105,12 @@ export class FeedPostsService {
       return {
         success: true,
         data: this.formatPost(post),
-        message: 'Post created successfully',
+        message: MSG.FEED.POST_CREATED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       logger.error('Unexpected error creating post', { error });
-      throw new BadRequestException('Failed to create post');
+      throw new BadRequestException(MSG.FEED.CREATE_FAILED);
     }
   }
 
@@ -179,7 +180,7 @@ export class FeedPostsService {
       const { data: post, error } = postResult;
 
       if (error || !post) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
 
       // Track view (fire-and-forget)
@@ -237,8 +238,8 @@ export class FeedPostsService {
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      logger.error('Failed to fetch post', { error });
-      throw new BadRequestException('Failed to fetch post');
+      logger.error(MSG.FEED.POST_FAILED, { error });
+      throw new BadRequestException(MSG.FEED.POST_FAILED);
     }
   }
 
@@ -281,7 +282,7 @@ export class FeedPostsService {
 
       if (error) {
         logger.error('Failed to fetch user posts', { error });
-        throw new BadRequestException('Failed to fetch posts');
+        throw new BadRequestException(MSG.FEED.POSTS_FAILED);
       }
 
       const formatted = (posts || []).map((p: any) => this.formatPost(p));
@@ -326,7 +327,7 @@ export class FeedPostsService {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       logger.error('Unexpected error fetching user posts', { error });
-      throw new BadRequestException('Failed to fetch posts');
+      throw new BadRequestException(MSG.FEED.POSTS_FAILED);
     }
   }
 
@@ -346,11 +347,11 @@ export class FeedPostsService {
         .single();
 
       if (!existing) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
 
       if (existing.user_id !== userId) {
-        throw new ForbiddenException('You can only edit your own posts');
+        throw new ForbiddenException(MSG.FEED.NOT_YOUR_POST);
       }
 
       const updateData: any = {
@@ -382,8 +383,8 @@ export class FeedPostsService {
         .single();
 
       if (error) {
-        logger.error('Failed to update post', { error });
-        throw new BadRequestException('Failed to update post');
+        logger.error(MSG.FEED.UPDATE_FAILED, { error });
+        throw new BadRequestException(MSG.FEED.UPDATE_FAILED);
       }
 
       await this.redis.delPattern('feeds:*');
@@ -391,7 +392,7 @@ export class FeedPostsService {
       return {
         success: true,
         data: this.formatPost(post),
-        message: 'Post updated successfully',
+        message: MSG.FEED.POST_UPDATED,
       };
     } catch (error) {
       if (
@@ -402,7 +403,7 @@ export class FeedPostsService {
         throw error;
       }
       logger.error('Unexpected error updating post', { error });
-      throw new BadRequestException('Failed to update post');
+      throw new BadRequestException(MSG.FEED.UPDATE_FAILED);
     }
   }
 
@@ -418,11 +419,11 @@ export class FeedPostsService {
         .single();
 
       if (!existing) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
 
       if (existing.user_id !== userId) {
-        throw new ForbiddenException('You can only delete your own posts');
+        throw new ForbiddenException(MSG.FEED.CANT_DELETE);
       }
 
       // Soft delete by archiving
@@ -432,15 +433,15 @@ export class FeedPostsService {
         .eq('id', postId);
 
       if (error) {
-        logger.error('Failed to delete post', { error });
-        throw new BadRequestException('Failed to delete post');
+        logger.error(MSG.FEED.DELETE_FAILED, { error });
+        throw new BadRequestException(MSG.FEED.DELETE_FAILED);
       }
 
       await this.redis.delPattern('feeds:*');
 
       return {
         success: true,
-        message: 'Post deleted successfully',
+        message: MSG.FEED.POST_DELETED,
       };
     } catch (error) {
       if (
@@ -451,7 +452,7 @@ export class FeedPostsService {
         throw error;
       }
       logger.error('Unexpected error deleting post', { error });
-      throw new BadRequestException('Failed to delete post');
+      throw new BadRequestException(MSG.FEED.DELETE_FAILED);
     }
   }
 
@@ -466,11 +467,11 @@ export class FeedPostsService {
         .single();
 
       if (!existing) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
 
       if (existing.user_id !== userId) {
-        throw new ForbiddenException('You can only pin your own posts');
+        throw new ForbiddenException(MSG.FEED.CANT_PIN);
       }
 
       const { error } = await this.admin
@@ -479,14 +480,14 @@ export class FeedPostsService {
         .eq('id', postId);
 
       if (error) {
-        throw new BadRequestException('Failed to pin post');
+        throw new BadRequestException(MSG.FEED.PIN_FAILED);
       }
 
       await this.redis.delPattern('feeds:*');
 
       return {
         success: true,
-        message: 'Post pinned successfully',
+        message: MSG.FEED.POST_PINNED,
       };
     } catch (error) {
       if (
@@ -497,7 +498,7 @@ export class FeedPostsService {
         throw error;
       }
       logger.error('Unexpected error pinning post', { error });
-      throw new BadRequestException('Failed to pin post');
+      throw new BadRequestException(MSG.FEED.PIN_FAILED);
     }
   }
 
@@ -512,11 +513,11 @@ export class FeedPostsService {
         .single();
 
       if (!existing) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
 
       if (existing.user_id !== userId) {
-        throw new ForbiddenException('You can only unpin your own posts');
+        throw new ForbiddenException(MSG.FEED.CANT_PIN);
       }
 
       const { error } = await this.admin
@@ -525,14 +526,14 @@ export class FeedPostsService {
         .eq('id', postId);
 
       if (error) {
-        throw new BadRequestException('Failed to unpin post');
+        throw new BadRequestException(MSG.FEED.UNPIN_FAILED);
       }
 
       await this.redis.delPattern('feeds:*');
 
       return {
         success: true,
-        message: 'Post unpinned successfully',
+        message: MSG.FEED.POST_UNPINNED,
       };
     } catch (error) {
       if (
@@ -543,7 +544,7 @@ export class FeedPostsService {
         throw error;
       }
       logger.error('Unexpected error unpinning post', { error });
-      throw new BadRequestException('Failed to unpin post');
+      throw new BadRequestException(MSG.FEED.UNPIN_FAILED);
     }
   }
 

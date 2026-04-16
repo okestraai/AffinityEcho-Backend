@@ -15,6 +15,7 @@ import {
 } from '../dto/identity-reveal.dto';
 import logger from '../../../common/utils/logger.util';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class IdentityRevealService {
@@ -164,7 +165,7 @@ export class IdentityRevealService {
           status: reveal.status,
           requested_at: reveal.created_at,
         },
-        message: 'Identity reveal request sent',
+        message: MSG.MESSAGING.REVEAL_SENT,
       };
     } catch (error) {
       if (
@@ -387,7 +388,7 @@ export class IdentityRevealService {
 
       return {
         success: true,
-        message: 'Identity reveal request cancelled',
+        message: MSG.MESSAGING.REVEAL_CANCELLED,
       };
     } catch (error) {
       if (

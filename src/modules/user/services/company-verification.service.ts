@@ -13,6 +13,7 @@ import {
   isCompanyEligible,
   isEmailDomainValid,
 } from '../../../common/constants/company-domains';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class CompanyVerificationService {
@@ -84,12 +85,12 @@ export class CompanyVerificationService {
       }
 
       if (profile.is_company_verified) {
-        throw new BadRequestException('Company already verified');
+        throw new BadRequestException(MSG.COMPANY.ALREADY_VERIFIED);
       }
 
       const companyName = this.decryptField(profile.company_encrypted);
       if (!companyName) {
-        throw new BadRequestException('No company found on your profile');
+        throw new BadRequestException(MSG.COMPANY.NO_COMPANY);
       }
 
       if (!isCompanyEligible(companyName)) {
@@ -190,7 +191,7 @@ export class CompanyVerificationService {
 
       return {
         success: true,
-        message: 'Verification email sent to your company email',
+        message: MSG.COMPANY.VERIFICATION_SENT,
       };
     } catch (error) {
       if (
@@ -239,7 +240,7 @@ export class CompanyVerificationService {
 
       const companyName = this.decryptField(profile.company_encrypted);
       if (!companyName) {
-        throw new BadRequestException('No company found on your profile');
+        throw new BadRequestException(MSG.COMPANY.NO_COMPANY);
       }
 
       if (!isEmailDomainValid(newEmail, companyName)) {
@@ -321,7 +322,7 @@ export class CompanyVerificationService {
 
       return {
         success: true,
-        message: 'Verification email updated and resent to your new address',
+        message: MSG.COMPANY.VERIFICATION_UPDATED,
       };
     } catch (error) {
       if (
@@ -377,7 +378,7 @@ export class CompanyVerificationService {
 
     return {
       success: true,
-      message: 'Verification email resent to your address',
+      message: MSG.COMPANY.VERIFICATION_RESENT,
     };
   }
 

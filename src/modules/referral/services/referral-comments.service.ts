@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
 import { CreateCommentDto } from '../dto/comment.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralCommentsService {
@@ -54,8 +55,8 @@ export class ReferralCommentsService {
         pagination: { total: count, limit, offset },
       };
     } catch (error) {
-      logger.error('Failed to fetch comments', { error });
-      throw new BadRequestException('Failed to fetch comments');
+      logger.error(MSG.REFERRAL.COMMENTS_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.COMMENTS_FAILED);
     }
   }
 
@@ -121,11 +122,11 @@ export class ReferralCommentsService {
       return {
         success: true,
         data,
-        message: 'Comment created successfully',
+        message: MSG.REFERRAL.COMMENT_CREATED,
       };
     } catch (error) {
-      logger.error('Failed to create comment', { error });
-      throw new BadRequestException('Failed to create comment');
+      logger.error(MSG.REFERRAL.COMMENT_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.COMMENT_FAILED);
     }
   }
 
@@ -143,9 +144,10 @@ export class ReferralCommentsService {
         .eq('id', commentId)
         .single();
 
-      if (!existing) throw new NotFoundException('Comment not found');
+      if (!existing)
+        throw new NotFoundException(MSG.REFERRAL.COMMENT_NOT_FOUND);
       if (existing.user_id !== userId)
-        throw new ForbiddenException('Not authorized');
+        throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
 
       const { data, error } = await this.admin
         .from('referral_comments')
@@ -163,8 +165,8 @@ export class ReferralCommentsService {
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to update comment', { error });
-      throw new BadRequestException('Failed to update comment');
+      logger.error(MSG.REFERRAL.COMMENT_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.COMMENT_FAILED);
     }
   }
 
@@ -178,9 +180,10 @@ export class ReferralCommentsService {
         .eq('id', commentId)
         .single();
 
-      if (!existing) throw new NotFoundException('Comment not found');
+      if (!existing)
+        throw new NotFoundException(MSG.REFERRAL.COMMENT_NOT_FOUND);
       if (existing.user_id !== userId)
-        throw new ForbiddenException('Not authorized');
+        throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
 
       const { error } = await this.admin
         .from('referral_comments')
@@ -193,15 +196,15 @@ export class ReferralCommentsService {
         referral_id: existing.referral_post_id,
       });
 
-      return { success: true, message: 'Comment deleted successfully' };
+      return { success: true, message: MSG.REFERRAL.COMMENT_DELETED };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to delete comment', { error });
-      throw new BadRequestException('Failed to delete comment');
+      logger.error(MSG.REFERRAL.COMMENT_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.COMMENT_FAILED);
     }
   }
 }

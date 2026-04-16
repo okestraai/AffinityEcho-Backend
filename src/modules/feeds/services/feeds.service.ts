@@ -12,6 +12,7 @@ import { FeedRankingService, RankingContext } from './feed-ranking.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { RedisService } from '../../../common/services/redis.service';
+import { MSG } from '../../../common/constants/messages';
 
 interface FeedItem {
   id: string;
@@ -277,7 +278,7 @@ export class FeedsService {
       };
     } catch (error) {
       logger.error('Failed to fetch aggregated feed', { error });
-      throw new BadRequestException('Failed to fetch feed');
+      throw new BadRequestException(MSG.FEED.FEED_FAILED);
     }
   }
 

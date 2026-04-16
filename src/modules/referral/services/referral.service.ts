@@ -14,6 +14,7 @@ import {
   UpdateReferralDto,
   GetReferralsQueryDto,
 } from '../dto/referral.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralService {
@@ -251,14 +252,14 @@ export class ReferralService {
 
       return result;
     } catch (err: any) {
-      logger.error('Failed to fetch referrals', {
+      logger.error(MSG.REFERRAL.FETCH_FAILED, {
         error: err.message || String(err),
         stack: err.stack,
         userId,
         correlationId,
         duration: Date.now() - startTime,
       });
-      throw new BadRequestException('Failed to fetch referrals');
+      throw new BadRequestException(MSG.REFERRAL.FETCH_FAILED);
     }
   }
   /**
@@ -324,12 +325,12 @@ export class ReferralService {
         .single();
 
       if (error || !result) {
-        throw new NotFoundException('Referral not found');
+        throw new NotFoundException(MSG.REFERRAL.NOT_FOUND);
       }
 
       // Add type checking for the result
       if (typeof result !== 'object' || result === null) {
-        throw new NotFoundException('Referral not found');
+        throw new NotFoundException(MSG.REFERRAL.NOT_FOUND);
       }
 
       // Explicitly type the destructuring
@@ -429,14 +430,14 @@ export class ReferralService {
       return response;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      logger.error('Failed to fetch referral', {
+      logger.error(MSG.REFERRAL.FETCH_FAILED, {
         error,
         referralId,
         userId,
         correlationId,
         duration: `${Date.now() - startTime}ms`,
       });
-      throw new BadRequestException('Failed to fetch referral');
+      throw new BadRequestException(MSG.REFERRAL.FETCH_FAILED);
     }
   }
 
@@ -489,19 +490,19 @@ export class ReferralService {
           status: data.status,
           createdAt: data.created_at,
         },
-        message: 'Referral post created successfully',
+        message: MSG.REFERRAL.CREATED,
         metadata: {
           correlationId,
           timestamp: new Date().toISOString(),
         },
       };
     } catch (error) {
-      logger.error('Failed to create referral', {
+      logger.error(MSG.REFERRAL.CREATE_FAILED, {
         error,
         userId,
         correlationId,
       });
-      throw new BadRequestException('Failed to create referral');
+      throw new BadRequestException(MSG.REFERRAL.CREATE_FAILED);
     }
   }
 
@@ -525,9 +526,9 @@ export class ReferralService {
         .eq('id', referralId)
         .single();
 
-      if (!existing) throw new NotFoundException('Referral not found');
+      if (!existing) throw new NotFoundException(MSG.REFERRAL.NOT_FOUND);
       if (existing.user_id !== userId)
-        throw new ForbiddenException('Not authorized to update this referral');
+        throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
 
       const updateData: any = {
         updated_at: new Date().toISOString(),
@@ -557,7 +558,7 @@ export class ReferralService {
       return {
         success: true,
         data: { id: data.id, updatedAt: data.updated_at },
-        message: 'Referral updated successfully',
+        message: MSG.REFERRAL.UPDATED,
         metadata: {
           correlationId,
           timestamp: new Date().toISOString(),
@@ -569,13 +570,13 @@ export class ReferralService {
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to update referral', {
+      logger.error(MSG.REFERRAL.UPDATE_FAILED, {
         error,
         userId,
         referralId,
         correlationId,
       });
-      throw new BadRequestException('Failed to update referral');
+      throw new BadRequestException(MSG.REFERRAL.UPDATE_FAILED);
     }
   }
 
@@ -594,9 +595,9 @@ export class ReferralService {
         .eq('id', referralId)
         .single();
 
-      if (!existing) throw new NotFoundException('Referral not found');
+      if (!existing) throw new NotFoundException(MSG.REFERRAL.NOT_FOUND);
       if (existing.user_id !== userId)
-        throw new ForbiddenException('Not authorized to delete this referral');
+        throw new ForbiddenException(MSG.REFERRAL.NOT_AUTHORIZED);
 
       const { error } = await this.admin
         .from('referral_posts')
@@ -607,7 +608,7 @@ export class ReferralService {
 
       return {
         success: true,
-        message: 'Referral deleted successfully',
+        message: MSG.REFERRAL.DELETED,
         metadata: {
           correlationId,
           timestamp: new Date().toISOString(),
@@ -619,13 +620,13 @@ export class ReferralService {
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to delete referral', {
+      logger.error(MSG.REFERRAL.DELETE_FAILED, {
         error,
         userId,
         referralId,
         correlationId,
       });
-      throw new BadRequestException('Failed to delete referral');
+      throw new BadRequestException(MSG.REFERRAL.DELETE_FAILED);
     }
   }
 
@@ -659,12 +660,12 @@ export class ReferralService {
         },
       };
     } catch (error) {
-      logger.error('Failed to increment view count', {
+      logger.error(MSG.REFERRAL.VIEW_FAILED, {
         error,
         referralId,
         correlationId,
       });
-      throw new BadRequestException('Failed to increment view count');
+      throw new BadRequestException(MSG.REFERRAL.VIEW_FAILED);
     }
   }
 
@@ -865,12 +866,12 @@ export class ReferralService {
 
       return result;
     } catch (error) {
-      logger.error('Failed to search referrals', {
+      logger.error(MSG.REFERRAL.SEARCH_FAILED, {
         error,
         userId,
         correlationId,
       });
-      throw new BadRequestException('Failed to search referrals');
+      throw new BadRequestException(MSG.REFERRAL.SEARCH_FAILED);
     }
   }
 
@@ -1070,12 +1071,12 @@ export class ReferralService {
 
       return result;
     } catch (error) {
-      logger.error('Failed to fetch statistics', {
+      logger.error(MSG.REFERRAL.STATS_FAILED, {
         error,
         userId,
         correlationId,
       });
-      throw new BadRequestException('Failed to fetch statistics');
+      throw new BadRequestException(MSG.REFERRAL.STATS_FAILED);
     }
   }
 
@@ -1302,12 +1303,12 @@ export class ReferralService {
 
       return result;
     } catch (error) {
-      logger.error('Failed to fetch user activity', {
+      logger.error(MSG.REFERRAL.STATS_FAILED, {
         error,
         userId,
         correlationId,
       });
-      throw new BadRequestException('Failed to fetch user activity');
+      throw new BadRequestException(MSG.REFERRAL.STATS_FAILED);
     }
   }
 }

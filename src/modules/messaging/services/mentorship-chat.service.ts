@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class MentorshipChatService {
@@ -319,7 +320,7 @@ export class MentorshipChatService {
           duration_minutes: session.duration_minutes,
           status: session.status,
         },
-        message: 'Session scheduled successfully',
+        message: MSG.MENTORSHIP.SESSION_CREATED,
       };
     } catch (error) {
       if (
@@ -474,7 +475,7 @@ export class MentorshipChatService {
           },
           chat_type: 'mentorship',
         },
-        message: 'Mentorship chat started successfully',
+        message: MSG.MENTORSHIP.CHAT_STARTED,
       };
     } catch (error) {
       if (

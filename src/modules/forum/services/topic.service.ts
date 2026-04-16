@@ -15,6 +15,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { RedisService } from '../../../common/services/redis.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
+import { MSG } from '../../../common/constants/messages';
 
 interface UserReaction {
   seen: boolean;
@@ -115,7 +116,8 @@ export class TopicService {
         .eq('id', forumId)
         .single();
 
-      if (forumError || !forum) throw new NotFoundException('Forum not found');
+      if (forumError || !forum)
+        throw new NotFoundException(MSG.FORUM.NOT_FOUND);
 
       if (!forum.is_global) {
         const { data: membership } = await this.admin
@@ -169,7 +171,7 @@ export class TopicService {
 
       if (error || !topic) {
         logger.error('Topic creation failed', { error: error?.message });
-        throw new BadRequestException('Failed to create topic');
+        throw new BadRequestException(MSG.FORUM.CREATE_TOPIC_FAILED);
       }
 
       // Update forum stats
@@ -200,7 +202,7 @@ export class TopicService {
         throw error;
       }
       logger.error('Unexpected error creating topic', { error });
-      throw new InternalServerErrorException('Failed to create topic');
+      throw new InternalServerErrorException(MSG.FORUM.CREATE_TOPIC_FAILED);
     }
   }
 
@@ -286,8 +288,8 @@ export class TopicService {
     const { data: topics, error, count } = await query;
 
     if (error) {
-      logger.error('Failed to fetch topics', { error });
-      throw new InternalServerErrorException('Failed to fetch topics');
+      logger.error(MSG.FORUM.FETCH_TOPICS_FAILED, { error });
+      throw new InternalServerErrorException(MSG.FORUM.FETCH_TOPICS_FAILED);
     }
 
     const topicsWithReactions = (topics || []).map((topic: any) => {
@@ -361,8 +363,8 @@ export class TopicService {
 
       if (fetchError) {
         throw fetchError.code === 'PGRST116'
-          ? new NotFoundException('Topic not found')
-          : new BadRequestException('Failed to fetch topic');
+          ? new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND)
+          : new BadRequestException(MSG.FORUM.FETCH_TOPIC_FAILED);
       }
 
       // Increment view count - FIXED: Use proper RLS-bypassing update
@@ -403,8 +405,8 @@ export class TopicService {
 
       if (error || !topic) {
         throw error?.code === 'PGRST116'
-          ? new NotFoundException('Topic not found')
-          : new BadRequestException('Failed to fetch topic');
+          ? new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND)
+          : new BadRequestException(MSG.FORUM.FETCH_TOPIC_FAILED);
       }
 
       const userReactions: UserReaction = {
@@ -454,7 +456,7 @@ export class TopicService {
       )
         throw error;
       logger.error('Unexpected error fetching topic', { error });
-      throw new InternalServerErrorException('Failed to fetch topic');
+      throw new InternalServerErrorException(MSG.FORUM.FETCH_TOPIC_FAILED);
     }
   }
 
@@ -473,7 +475,8 @@ export class TopicService {
         .eq('id', topicId)
         .single();
 
-      if (topicError || !topic) throw new NotFoundException('Topic not found');
+      if (topicError || !topic)
+        throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
 
       // Upsert with ON CONFLICT DO NOTHING — race-condition-safe toggle:
       // null returned → row already existed → toggle-remove
@@ -587,7 +590,7 @@ export class TopicService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       logger.error('Failed to toggle reaction', { error });
-      throw new InternalServerErrorException('Failed to update reaction');
+      throw new InternalServerErrorException(MSG.FORUM.REACTION_FAILED);
     }
   }
 
@@ -599,9 +602,9 @@ export class TopicService {
         .eq('id', id)
         .single();
 
-      if (!topic) throw new NotFoundException('Topic not found');
+      if (!topic) throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
       if (topic.user_id !== userId)
-        throw new ForbiddenException('Not authorized');
+        throw new ForbiddenException(MSG.FORUM.NOT_AUTHORIZED);
 
       await this.admin.from('forum_topics').delete().eq('id', id);
 
@@ -638,8 +641,8 @@ export class TopicService {
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to delete topic', { error });
-      throw new InternalServerErrorException('Failed to delete topic');
+      logger.error(MSG.FORUM.DELETE_TOPIC_FAILED, { error });
+      throw new InternalServerErrorException(MSG.FORUM.DELETE_TOPIC_FAILED);
     }
   }
 
@@ -715,7 +718,7 @@ export class TopicService {
         logger.error('Failed to fetch forums for filtering', {
           error: forumsError.message,
         });
-        throw new BadRequestException('Failed to fetch discussions');
+        throw new BadRequestException(MSG.FORUM.DISCUSSIONS_FAILED);
       }
 
       // If no forums found, return empty result
@@ -786,10 +789,10 @@ export class TopicService {
       const { data: topics, error, count } = await query;
 
       if (error) {
-        logger.error('Failed to fetch recent discussions', {
+        logger.error(MSG.FORUM.DISCUSSIONS_FAILED, {
           error: error.message,
         });
-        throw new BadRequestException('Failed to fetch recent discussions');
+        throw new BadRequestException(MSG.FORUM.DISCUSSIONS_FAILED);
       }
 
       // Get user reactions in batch
@@ -878,9 +881,7 @@ export class TopicService {
       logger.error('Unexpected error fetching recent discussions', {
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new InternalServerErrorException(
-        'Failed to fetch recent discussions',
-      );
+      throw new InternalServerErrorException(MSG.FORUM.DISCUSSIONS_FAILED);
     }
   }
 
@@ -911,7 +912,7 @@ export class TopicService {
       .range(from, to);
 
     if (error) {
-      throw new BadRequestException('Failed to fetch your topics');
+      throw new BadRequestException(MSG.FORUM.YOUR_TOPICS_FAILED);
     }
 
     const formattedTopics = topics || [];
@@ -949,7 +950,7 @@ export class TopicService {
       .order('created_at', { ascending: false });
 
     if (bmError) {
-      throw new BadRequestException('Failed to fetch bookmarked topics');
+      throw new BadRequestException(MSG.FORUM.BOOKMARKS_FAILED);
     }
 
     const topicIds = (bookmarks || []).map((b: any) => b.content_id);
@@ -985,7 +986,7 @@ export class TopicService {
       .range(from, to);
 
     if (error) {
-      throw new BadRequestException('Failed to fetch bookmarked topics');
+      throw new BadRequestException(MSG.FORUM.BOOKMARKS_FAILED);
     }
 
     const formattedTopics = topics || [];
@@ -1015,7 +1016,7 @@ export class TopicService {
       .single();
 
     if (topicErr || !topic) {
-      throw new NotFoundException('Topic not found');
+      throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
     }
 
     // Check if already bookmarked
@@ -1032,7 +1033,7 @@ export class TopicService {
       return {
         success: true,
         data: { bookmarked: false },
-        message: 'Bookmark removed',
+        message: MSG.FORUM.BOOKMARK_REMOVED,
       };
     } else {
       await this.admin.from('feed_bookmarks').insert({
@@ -1043,7 +1044,7 @@ export class TopicService {
       return {
         success: true,
         data: { bookmarked: true },
-        message: 'Topic bookmarked',
+        message: MSG.FORUM.BOOKMARKED,
       };
     }
   }

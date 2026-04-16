@@ -27,6 +27,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { NookActiveGuard } from '../guards/nook-active.guard';
 import { NookCreatorGuard } from '../guards/nook-creator.guard';
 import { LockNookDto } from '../dto/lock-nook.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @ApiTags('Nooks')
 @Controller('nooks')
@@ -174,7 +175,7 @@ export class NooksController {
     // TODO: Add admin check
     const isAdmin = false; // Implement admin check
     if (!isAdmin) {
-      throw new BadRequestException('Admin privileges required');
+      throw new BadRequestException(MSG.NOOK.ADMIN_REQUIRED);
     }
     return this.nooksService.lock(id, lockDto.reason);
   }

@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { WsJwtGuard } from '../../../common/guards/ws-jwt.guard';
 import { MessagingService } from './messaging.service';
 import { CORS_CONFIG } from '../../../common/config/cors.config';
+import { MSG } from '../../../common/constants/messages';
 
 interface ConnectedUser {
   socketId: string;
@@ -65,14 +66,14 @@ export class ChatGateway
       // Just send initial connection confirmation
       client.emit('connected', {
         socketId: client.id,
-        message: 'WebSocket connection established. Please authenticate.',
+        message: MSG.MESSAGING.WS_CONNECTED,
         timestamp: new Date().toISOString(),
       });
 
       this.logger.log(`✅ Client connected (pending auth): ${client.id}`);
     } catch (error) {
       this.logger.error(`❌ Connection error for ${client.id}:`, error);
-      client.emit('error', { message: 'Connection failed' });
+      client.emit('error', { message: MSG.MESSAGING.WS_AUTH_FAILED });
       client.disconnect();
     }
   }
@@ -107,7 +108,7 @@ export class ChatGateway
 
       if (!user) {
         this.logger.error(`❌ No user data after guard: ${client.id}`);
-        client.emit('auth_error', { message: 'Authentication failed' });
+        client.emit('auth_error', { message: MSG.MESSAGING.WS_AUTH_FAILED });
         client.disconnect();
         return;
       }
@@ -153,7 +154,7 @@ export class ChatGateway
     const user = this.users.get(client.id);
     if (!user) {
       this.logger.error('❌ join_conversation: User not authenticated');
-      client.emit('error', { message: 'User not authenticated' });
+      client.emit('error', { message: MSG.MESSAGING.WS_NOT_AUTH });
       return;
     }
 
@@ -218,7 +219,7 @@ export class ChatGateway
       const user = client.data.user;
       if (!user) {
         this.logger.error('❌ send_message: User not authenticated');
-        client.emit('message_error', { message: 'User not authenticated' });
+        client.emit('message_error', { message: MSG.MESSAGING.WS_NOT_AUTH });
         return;
       }
 
@@ -289,7 +290,7 @@ export class ChatGateway
       const user = client.data.user;
       if (!user) {
         this.logger.error('❌ edit_message: User not authenticated');
-        client.emit('message_error', { message: 'User not authenticated' });
+        client.emit('message_error', { message: MSG.MESSAGING.WS_NOT_AUTH });
         return;
       }
 

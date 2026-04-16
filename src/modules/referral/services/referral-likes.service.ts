@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralLikesService {
@@ -69,8 +70,8 @@ export class ReferralLikesService {
         data: { liked: true, likesCount: data.likes_count },
       };
     } catch (error) {
-      logger.error('Failed to like referral', { error });
-      throw new BadRequestException('Failed to like referral');
+      logger.error(MSG.REFERRAL.LIKE_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.LIKE_FAILED);
     }
   }
 
@@ -104,8 +105,8 @@ export class ReferralLikesService {
         data: { liked: false, likesCount: data.likes_count },
       };
     } catch (error) {
-      logger.error('Failed to unlike referral', { error });
-      throw new BadRequestException('Failed to unlike referral');
+      logger.error(MSG.REFERRAL.UNLIKE_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.UNLIKE_FAILED);
     }
   }
 
@@ -123,8 +124,8 @@ export class ReferralLikesService {
 
       return { success: true, data };
     } catch (error) {
-      logger.error('Failed to fetch user likes', { error });
-      throw new BadRequestException('Failed to fetch user likes');
+      logger.error(MSG.REFERRAL.LIKES_FAILED, { error });
+      throw new BadRequestException(MSG.REFERRAL.LIKES_FAILED);
     }
   }
 }

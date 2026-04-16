@@ -3,6 +3,7 @@ import { WsException } from '@nestjs/websockets';
 import { ConfigService } from '@nestjs/config';
 import logger from '../../common/utils/logger.util';
 import * as jwt from 'jsonwebtoken';
+import { MSG } from '../constants/messages';
 
 @Injectable()
 export class WsJwtGuard implements CanActivate {
@@ -19,7 +20,7 @@ export class WsJwtGuard implements CanActivate {
 
     if (!token) {
       logger.error('❌ WsJwtGuard: No token provided', { clientId: client.id });
-      throw new WsException('No token provided');
+      throw new WsException(MSG.AUTH.NO_TOKEN);
     }
 
     logger.info(`🔐 Token extracted`, {
@@ -34,7 +35,7 @@ export class WsJwtGuard implements CanActivate {
 
       if (!jwtSecret) {
         logger.error('❌ JWT_SECRET not configured');
-        throw new WsException('Server configuration error');
+        throw new WsException(MSG.AUTH.AUTH_FAILED);
       }
 
       logger.info('🔐 Verifying token with JWT secret...', {
@@ -73,12 +74,12 @@ export class WsJwtGuard implements CanActivate {
 
       // Provide specific error messages
       if (error.name === 'TokenExpiredError') {
-        throw new WsException('Token has expired');
+        throw new WsException(MSG.AUTH.TOKEN_EXPIRED);
       } else if (error.name === 'JsonWebTokenError') {
-        throw new WsException('Invalid token');
+        throw new WsException(MSG.AUTH.INVALID_TOKEN);
       }
 
-      throw new WsException('Authentication failed');
+      throw new WsException(MSG.AUTH.AUTH_FAILED);
     }
   }
 

@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { BookmarkDto } from '../dto/bookmark.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class MentorshipBookmarksService {
@@ -63,7 +64,7 @@ export class MentorshipBookmarksService {
       }
 
       return {
-        message: 'Bookmark created successfully',
+        message: MSG.MENTORSHIP.BOOKMARK_CREATED,
         bookmark,
       };
     } catch (error) {
@@ -134,7 +135,7 @@ export class MentorshipBookmarksService {
       }
 
       return {
-        message: 'Bookmark deleted successfully',
+        message: MSG.MENTORSHIP.BOOKMARK_DELETED,
       };
     } catch (error) {
       throw new BadRequestException('Failed to delete bookmark');
@@ -162,7 +163,7 @@ export class MentorshipBookmarksService {
       }
 
       return {
-        message: 'Bookmark updated successfully',
+        message: MSG.MENTORSHIP.BOOKMARK_UPDATED,
         bookmark,
       };
     } catch (error) {

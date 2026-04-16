@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import logger from '../utils/logger.util';
+import { MSG } from '../constants/messages';
 
 @Injectable()
 export class JwtAuthGuard {
@@ -22,14 +23,14 @@ export class JwtAuthGuard {
     const token = this.extractToken(request);
 
     if (!token) {
-      throw new UnauthorizedException('No token provided');
+      throw new UnauthorizedException(MSG.AUTH.NO_TOKEN);
     }
 
     try {
       const payload = this.jwtService.verify(token, { secret: this.jwtSecret });
 
       if (!payload.sub) {
-        throw new UnauthorizedException('Invalid token payload');
+        throw new UnauthorizedException(MSG.AUTH.INVALID_TOKEN);
       }
 
       // Set user in request — CRITICAL for @CurrentUser() to work
@@ -44,12 +45,12 @@ export class JwtAuthGuard {
         throw error;
       }
       if (error.name === 'TokenExpiredError') {
-        throw new UnauthorizedException('Token has expired');
+        throw new UnauthorizedException(MSG.AUTH.TOKEN_EXPIRED);
       }
       if (error.name === 'JsonWebTokenError') {
-        throw new UnauthorizedException('Invalid token');
+        throw new UnauthorizedException(MSG.AUTH.INVALID_TOKEN);
       }
-      throw new UnauthorizedException('Authentication failed');
+      throw new UnauthorizedException(MSG.AUTH.AUTH_FAILED);
     }
   }
 

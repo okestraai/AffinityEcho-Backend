@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { RelationshipStatusDto } from '../dto/relationship-status.dto';
 import { RelationshipUpdateDto } from '../dto/relationship-update.dto';
 import { MENTORSHIP_RELATIONSHIP_FIELDS } from '../../../common/constants/select-fields';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class MentorshipRelationshipsService {
@@ -166,7 +167,7 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (error || !relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       // Parse affinity tags
@@ -246,7 +247,7 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       // Check if user is part of relationship
@@ -254,7 +255,7 @@ export class MentorshipRelationshipsService {
         relationship.mentor_id !== userId &&
         relationship.mentee_id !== userId
       ) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       const updatePayload: any = {
@@ -312,7 +313,7 @@ export class MentorshipRelationshipsService {
       }
 
       return {
-        message: 'Relationship updated successfully',
+        message: MSG.MENTORSHIP.RELATIONSHIP_UPDATED,
         relationship: updatedRelationship,
       };
     } catch (error) {
@@ -336,7 +337,7 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       // Check if user is the mentee (only mentee can accept)
@@ -380,7 +381,7 @@ export class MentorshipRelationshipsService {
       );
 
       return {
-        message: 'Relationship accepted successfully',
+        message: MSG.MENTORSHIP.RELATIONSHIP_ACCEPTED,
         relationship: updatedRelationship,
       };
     } catch (error) {
@@ -404,7 +405,7 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       // Check if user is part of relationship
@@ -412,7 +413,7 @@ export class MentorshipRelationshipsService {
         relationship.mentor_id !== userId &&
         relationship.mentee_id !== userId
       ) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       if (relationship.status !== 'pending') {
@@ -479,7 +480,7 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       if (!['accepted', 'active'].includes(relationship.status)) {
@@ -493,7 +494,7 @@ export class MentorshipRelationshipsService {
       const isMentee = relationship.mentee_id === userId;
 
       if (!isMentor && !isMentee) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       const updateData: any = {
@@ -574,7 +575,7 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       // Check if user is part of relationship
@@ -582,7 +583,7 @@ export class MentorshipRelationshipsService {
         relationship.mentor_id !== userId &&
         relationship.mentee_id !== userId
       ) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       if (!['accepted', 'active', 'pending'].includes(relationship.status)) {
@@ -693,11 +694,11 @@ export class MentorshipRelationshipsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       if (![relationship.mentor_id, relationship.mentee_id].includes(userId)) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       // Here you would typically store the report in a separate table
@@ -705,7 +706,7 @@ export class MentorshipRelationshipsService {
       // For now, we'll return a success response
 
       return {
-        message: 'Report submitted successfully',
+        message: MSG.MENTORSHIP.REPORT_SUBMITTED,
         reportId: 'report_' + Date.now(),
         data: {
           relationshipId,

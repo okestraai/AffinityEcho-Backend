@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { CreateSessionDto } from '../dto/create-session.dto';
 import { UpdateSessionDto } from '../dto/update-session.dto';
 import { SessionStatusDto } from '../dto/session-status.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class MentorshipSessionsService {
@@ -28,7 +29,7 @@ export class MentorshipSessionsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       if (!['accepted', 'active'].includes(relationship.status)) {
@@ -94,7 +95,7 @@ export class MentorshipSessionsService {
       ]);
 
       return {
-        message: 'Session created successfully',
+        message: MSG.MENTORSHIP.SESSION_CREATED,
         session,
       };
     } catch (error) {
@@ -154,7 +155,7 @@ export class MentorshipSessionsService {
         .single();
 
       if (error || !session) {
-        throw new NotFoundException('Session not found');
+        throw new NotFoundException(MSG.MENTORSHIP.SESSION_NOT_FOUND);
       }
 
       return session;
@@ -176,7 +177,7 @@ export class MentorshipSessionsService {
         .single();
 
       if (!currentSession) {
-        throw new NotFoundException('Session not found');
+        throw new NotFoundException(MSG.MENTORSHIP.SESSION_NOT_FOUND);
       }
 
       if (currentSession.status === 'completed') {
@@ -211,7 +212,7 @@ export class MentorshipSessionsService {
       }
 
       return {
-        message: 'Session updated successfully',
+        message: MSG.MENTORSHIP.SESSION_UPDATED,
         session: updatedSession,
       };
     } catch (error) {
@@ -267,7 +268,7 @@ export class MentorshipSessionsService {
         .single();
 
       if (!session) {
-        throw new NotFoundException('Session not found');
+        throw new NotFoundException(MSG.MENTORSHIP.SESSION_NOT_FOUND);
       }
 
       if (session.status !== 'scheduled') {
@@ -284,14 +285,14 @@ export class MentorshipSessionsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       const isMentor = relationship.mentor_id === userId;
       const isMentee = relationship.mentee_id === userId;
 
       if (!isMentor && !isMentee) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       const updateData: any = {
@@ -334,7 +335,7 @@ export class MentorshipSessionsService {
         .eq('id', session.relationship_id);
 
       return {
-        message: 'Session completed successfully',
+        message: MSG.MENTORSHIP.SESSION_COMPLETED,
         session: updatedSession,
       };
     } catch (error) {
@@ -361,7 +362,7 @@ export class MentorshipSessionsService {
         .single();
 
       if (!session) {
-        throw new NotFoundException('Session not found');
+        throw new NotFoundException(MSG.MENTORSHIP.SESSION_NOT_FOUND);
       }
 
       if (session.status === 'completed') {
@@ -376,14 +377,14 @@ export class MentorshipSessionsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       const isMentor = relationship.mentor_id === userId;
       const isMentee = relationship.mentee_id === userId;
 
       if (!isMentor && !isMentee) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       const { data: updatedSession, error } = await this.admin
@@ -426,7 +427,7 @@ export class MentorshipSessionsService {
       );
 
       return {
-        message: 'Session cancelled successfully',
+        message: MSG.MENTORSHIP.SESSION_CANCELLED,
         session: updatedSession,
       };
     } catch (error) {
@@ -453,7 +454,7 @@ export class MentorshipSessionsService {
         .single();
 
       if (!session) {
-        throw new NotFoundException('Session not found');
+        throw new NotFoundException(MSG.MENTORSHIP.SESSION_NOT_FOUND);
       }
 
       if (session.status === 'completed') {
@@ -468,14 +469,14 @@ export class MentorshipSessionsService {
         .single();
 
       if (!relationship) {
-        throw new NotFoundException('Relationship not found');
+        throw new NotFoundException(MSG.MENTORSHIP.RELATIONSHIP_NOT_FOUND);
       }
 
       const isMentor = relationship.mentor_id === userId;
       const isMentee = relationship.mentee_id === userId;
 
       if (!isMentor && !isMentee) {
-        throw new ForbiddenException('You are not part of this relationship');
+        throw new ForbiddenException(MSG.MENTORSHIP.NOT_IN_RELATIONSHIP);
       }
 
       const { data: updatedSession, error } = await this.admin
@@ -518,7 +519,7 @@ export class MentorshipSessionsService {
       );
 
       return {
-        message: 'Session rescheduled successfully',
+        message: MSG.MENTORSHIP.SESSION_RESCHEDULED,
         session: updatedSession,
       };
     } catch (error) {

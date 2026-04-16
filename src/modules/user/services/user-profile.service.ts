@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class UserProfileService {
@@ -73,12 +74,12 @@ export class UserProfileService {
         .single();
 
       if (error || !profile) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       // Hide soft-deleted or deactivated profiles
       if (profile.is_deleted || profile.is_deactivated) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       // Block check — if either user has blocked the other, hide profile
@@ -92,7 +93,7 @@ export class UserProfileService {
           .maybeSingle();
 
         if (block) {
-          throw new NotFoundException('User not found');
+          throw new NotFoundException(MSG.USER.NOT_FOUND);
         }
       }
 
@@ -139,7 +140,7 @@ export class UserProfileService {
         const visibility = profile.profile_visibility || 'public';
 
         if (visibility === 'private') {
-          throw new ForbiddenException('This profile is private');
+          throw new ForbiddenException(MSG.USER.PROFILE_PRIVATE);
         }
 
         if (visibility === 'connections' && !isFollowing) {
@@ -153,7 +154,7 @@ export class UserProfileService {
               bio: null,
               isFollowing: false,
               profileVisibility: 'connections',
-              message: 'Follow this user to see their full profile',
+              message: MSG.USER.FOLLOW_TO_VIEW,
             },
           };
         }
@@ -288,8 +289,8 @@ export class UserProfileService {
         error instanceof ForbiddenException
       )
         throw error;
-      logger.error('Failed to fetch user profile', { error });
-      throw new BadRequestException('Failed to fetch user profile');
+      logger.error(MSG.USER.PROFILE_FAILED, { error });
+      throw new BadRequestException(MSG.USER.PROFILE_FAILED);
     }
   }
 
@@ -668,18 +669,18 @@ export class UserProfileService {
         .single();
 
       if (error) {
-        throw new BadRequestException('Failed to update avatar');
+        throw new BadRequestException(MSG.USER.AVATAR_FAILED);
       }
 
       return {
         success: true,
         data: { avatar: data.avatar },
-        message: 'Avatar updated successfully',
+        message: MSG.USER.AVATAR_UPDATED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to update avatar', { error });
-      throw new BadRequestException('Failed to update avatar');
+      logger.error(MSG.USER.AVATAR_FAILED, { error });
+      throw new BadRequestException(MSG.USER.AVATAR_FAILED);
     }
   }
 
@@ -695,7 +696,7 @@ export class UserProfileService {
         .maybeSingle();
 
       if (existing && existing.id !== userId) {
-        throw new BadRequestException('Username already taken');
+        throw new BadRequestException(MSG.USER.USERNAME_TAKEN);
       }
 
       const { data, error } = await this.admin
@@ -706,18 +707,18 @@ export class UserProfileService {
         .single();
 
       if (error) {
-        throw new BadRequestException('Failed to update username');
+        throw new BadRequestException(MSG.USER.USERNAME_FAILED);
       }
 
       return {
         success: true,
         data: { username: data.username },
-        message: 'Username updated successfully',
+        message: MSG.USER.USERNAME_UPDATED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to update username', { error });
-      throw new BadRequestException('Failed to update username');
+      logger.error(MSG.USER.USERNAME_FAILED, { error });
+      throw new BadRequestException(MSG.USER.USERNAME_FAILED);
     }
   }
 
@@ -735,7 +736,7 @@ export class UserProfileService {
         .single();
 
       if (!profile) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       // Run all COUNT queries in parallel for actual stats
@@ -877,8 +878,8 @@ export class UserProfileService {
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      logger.error('Failed to fetch user stats', { error });
-      throw new BadRequestException('Failed to fetch user stats');
+      logger.error(MSG.USER.STATS_FAILED, { error });
+      throw new BadRequestException(MSG.USER.STATS_FAILED);
     }
   }
 
@@ -1022,8 +1023,8 @@ export class UserProfileService {
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      logger.error('Failed to fetch user badges', { error });
-      throw new BadRequestException('Failed to fetch user badges');
+      logger.error(MSG.USER.BADGES_FAILED, { error });
+      throw new BadRequestException(MSG.USER.BADGES_FAILED);
     }
   }
 
@@ -1267,8 +1268,8 @@ export class UserProfileService {
         },
       };
     } catch (error) {
-      logger.error('Failed to fetch user activity', { error });
-      throw new BadRequestException('Failed to fetch user activity');
+      logger.error(MSG.USER.ACTIVITY_FAILED, { error });
+      throw new BadRequestException(MSG.USER.ACTIVITY_FAILED);
     }
   }
 

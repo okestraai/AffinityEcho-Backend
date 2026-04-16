@@ -6,6 +6,7 @@ import {
   UpdatePrivacySettingsDto,
   UpdateNotificationSettingsDto,
 } from '../dto/update-profile.dto';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class UserSettingsService {
@@ -57,8 +58,8 @@ export class UserSettingsService {
         },
       };
     } catch (error) {
-      logger.error('Failed to fetch privacy settings', { error });
-      throw new BadRequestException('Failed to fetch privacy settings');
+      logger.error(MSG.USER.PRIVACY_FETCH_FAILED, { error });
+      throw new BadRequestException(MSG.USER.PRIVACY_FETCH_FAILED);
     }
   }
 
@@ -98,17 +99,17 @@ export class UserSettingsService {
         .eq('id', userId);
 
       if (error) {
-        throw new BadRequestException('Failed to update privacy settings');
+        throw new BadRequestException(MSG.USER.PRIVACY_FAILED);
       }
 
       return {
         success: true,
-        message: 'Privacy settings updated successfully',
+        message: MSG.USER.PRIVACY_UPDATED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to update privacy settings', { error });
-      throw new BadRequestException('Failed to update privacy settings');
+      logger.error(MSG.USER.PRIVACY_FAILED, { error });
+      throw new BadRequestException(MSG.USER.PRIVACY_FAILED);
     }
   }
 
@@ -159,8 +160,8 @@ export class UserSettingsService {
         },
       };
     } catch (error) {
-      logger.error('Failed to fetch notification settings', { error });
-      throw new BadRequestException('Failed to fetch notification settings');
+      logger.error(MSG.USER.NOTIFICATIONS_FETCH_FAILED, { error });
+      throw new BadRequestException(MSG.USER.NOTIFICATIONS_FETCH_FAILED);
     }
   }
 
@@ -209,17 +210,17 @@ export class UserSettingsService {
         .eq('id', userId);
 
       if (error) {
-        throw new BadRequestException('Failed to update notification settings');
+        throw new BadRequestException(MSG.USER.NOTIFICATIONS_FAILED);
       }
 
       return {
         success: true,
-        message: 'Notification settings updated successfully',
+        message: MSG.USER.NOTIFICATIONS_UPDATED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to update notification settings', { error });
-      throw new BadRequestException('Failed to update notification settings');
+      logger.error(MSG.USER.NOTIFICATIONS_FAILED, { error });
+      throw new BadRequestException(MSG.USER.NOTIFICATIONS_FAILED);
     }
   }
 }

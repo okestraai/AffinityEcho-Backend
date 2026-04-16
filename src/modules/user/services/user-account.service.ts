@@ -12,6 +12,7 @@ import {
   DeleteAccountDto,
 } from '../dto/update-profile.dto';
 import { USER_PROFILE_OWN_FIELDS } from '../../../common/constants/select-fields';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class UserAccountService {
@@ -35,11 +36,11 @@ export class UserAccountService {
         .single();
 
       if (userError || !user) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       if (user.is_deactivated) {
-        throw new BadRequestException('Account is already deactivated');
+        throw new BadRequestException(MSG.USER.ALREADY_DEACTIVATED);
       }
 
       // Deactivate account
@@ -54,7 +55,7 @@ export class UserAccountService {
         .eq('id', userId);
 
       if (error) {
-        throw new BadRequestException('Failed to deactivate account');
+        throw new BadRequestException(MSG.USER.DEACTIVATE_FAILED);
       }
 
       // Log the deactivation
@@ -76,8 +77,8 @@ export class UserAccountService {
       ) {
         throw error;
       }
-      logger.error('Failed to deactivate account', { error });
-      throw new BadRequestException('Failed to deactivate account');
+      logger.error(MSG.USER.DEACTIVATE_FAILED, { error });
+      throw new BadRequestException(MSG.USER.DEACTIVATE_FAILED);
     }
   }
 
@@ -92,11 +93,11 @@ export class UserAccountService {
         .single();
 
       if (userError || !user) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       if (!user.is_deactivated) {
-        throw new BadRequestException('Account is not deactivated');
+        throw new BadRequestException(MSG.USER.NOT_DEACTIVATED);
       }
 
       const { error } = await this.admin
@@ -110,14 +111,14 @@ export class UserAccountService {
         .eq('id', userId);
 
       if (error) {
-        throw new BadRequestException('Failed to reactivate account');
+        throw new BadRequestException(MSG.USER.REACTIVATE_FAILED);
       }
 
       logger.info('Account reactivated', { userId });
 
       return {
         success: true,
-        message: 'Account reactivated successfully. Welcome back!',
+        message: MSG.USER.ACCOUNT_REACTIVATED,
       };
     } catch (error) {
       if (
@@ -126,8 +127,8 @@ export class UserAccountService {
       ) {
         throw error;
       }
-      logger.error('Failed to reactivate account', { error });
-      throw new BadRequestException('Failed to reactivate account');
+      logger.error(MSG.USER.REACTIVATE_FAILED, { error });
+      throw new BadRequestException(MSG.USER.REACTIVATE_FAILED);
     }
   }
 
@@ -139,7 +140,7 @@ export class UserAccountService {
     try {
       // Verify password or confirmation
       if (!dto.confirmDeletion) {
-        throw new BadRequestException('Account deletion must be confirmed');
+        throw new BadRequestException(MSG.USER.DELETE_CONFIRM);
       }
 
       // Verify user exists
@@ -150,7 +151,7 @@ export class UserAccountService {
         .single();
 
       if (userError || !user) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       // Instead of hard delete, mark as deleted and anonymize data
@@ -176,7 +177,7 @@ export class UserAccountService {
         .eq('id', userId);
 
       if (error) {
-        throw new BadRequestException('Failed to delete account');
+        throw new BadRequestException(MSG.USER.DELETE_FAILED);
       }
 
       // Log the deletion (no PII — email/username already anonymized above)
@@ -188,7 +189,7 @@ export class UserAccountService {
 
       return {
         success: true,
-        message: 'Account deleted successfully. We are sorry to see you go.',
+        message: MSG.USER.ACCOUNT_DELETED,
       };
     } catch (error) {
       if (
@@ -197,8 +198,8 @@ export class UserAccountService {
       ) {
         throw error;
       }
-      logger.error('Failed to delete account', { error });
-      throw new BadRequestException('Failed to delete account');
+      logger.error(MSG.USER.DELETE_FAILED, { error });
+      throw new BadRequestException(MSG.USER.DELETE_FAILED);
     }
   }
 
@@ -221,7 +222,7 @@ export class UserAccountService {
         .single();
 
       if (profileError || !profile?.email) {
-        throw new BadRequestException('User not found');
+        throw new BadRequestException(MSG.USER.NOT_FOUND);
       }
 
       if (!profile.password_hash) {
@@ -236,7 +237,7 @@ export class UserAccountService {
         profile.password_hash,
       );
       if (!isValid) {
-        throw new BadRequestException('Current password is incorrect');
+        throw new BadRequestException(MSG.AUTH.PASSWORD_INCORRECT);
       }
 
       // Hash and update new password
@@ -254,19 +255,19 @@ export class UserAccountService {
           userId,
           error: updateError.message,
         });
-        throw new BadRequestException('Failed to update password');
+        throw new BadRequestException(MSG.USER.DEACTIVATE_FAILED);
       }
 
       logger.info('Password changed successfully', { userId });
 
       return {
         success: true,
-        message: 'Password changed successfully',
+        message: MSG.USER.PASSWORD_CHANGED,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      logger.error('Failed to change password', { error });
-      throw new BadRequestException('Failed to change password');
+      logger.error(MSG.USER.DEACTIVATE_FAILED, { error });
+      throw new BadRequestException(MSG.USER.DEACTIVATE_FAILED);
     }
   }
 
@@ -284,7 +285,7 @@ export class UserAccountService {
         .single();
 
       if (!profile) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.USER.NOT_FOUND);
       }
 
       const exportData: any = {
@@ -424,8 +425,8 @@ export class UserAccountService {
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      logger.error('Failed to export user data', { error });
-      throw new BadRequestException('Failed to export user data');
+      logger.error(MSG.USER.EXPORT_FAILED, { error });
+      throw new BadRequestException(MSG.USER.EXPORT_FAILED);
     }
   }
 }

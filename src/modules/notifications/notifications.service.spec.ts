@@ -104,7 +104,7 @@ describe('NotificationsService', () => {
       const result = await service.createNotification(dto as any);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Notification created successfully');
+      expect(result.message).toBe('Notification sent');
       expect(result.data).toEqual(createdNotification);
       expect(mockChatGateway.emitToUser).toHaveBeenCalledWith(
         dto.user_id,
@@ -136,7 +136,7 @@ describe('NotificationsService', () => {
       const result = await service.createNotification(likeDto as any);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Notification skipped by user preference');
+      expect(result.message).toBe('Notification skipped per your preferences');
       expect(result.data).toBeNull();
       expect(mockChatGateway.emitToUser).not.toHaveBeenCalled();
     });
@@ -193,7 +193,7 @@ describe('NotificationsService', () => {
       const result = await service.markAsRead('notif-1', 'user-1');
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Notification marked as read');
+      expect(result.message).toBe('Marked as read');
       expect(result.data).toEqual(updated);
       expect(chain.update).toHaveBeenCalledWith(
         expect.objectContaining({ is_read: true }),
@@ -262,7 +262,7 @@ describe('NotificationsService', () => {
 
       expect(result).toEqual({
         success: true,
-        message: 'Notification deleted successfully',
+        message: 'Notification removed',
       });
       expect(chain.delete).toHaveBeenCalled();
       expect(chain.eq).toHaveBeenCalledWith('id', 'notif-1');

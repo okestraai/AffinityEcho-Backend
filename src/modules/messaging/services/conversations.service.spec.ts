@@ -448,7 +448,7 @@ describe('ConversationsService', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Conversation already exists');
+      expect(result.message).toBe('You already have a conversation with this user');
       expect(result.data.conversation_id).toBe('conv-existing');
       expect(result.data.already_exists).toBe(true);
     });

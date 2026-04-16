@@ -84,7 +84,7 @@ describe('MentorshipRelationshipsService', () => {
         { action: 'accept' },
       );
 
-      expect(result.message).toBe('Relationship accepted successfully');
+      expect(result.message).toBe('Mentorship accepted! You can now start chatting');
       expect(result.relationship).toBeDefined();
       expect(result.relationship.status).toBe('accepted');
 

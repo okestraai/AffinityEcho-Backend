@@ -10,6 +10,7 @@ import { OnboardingDataDto } from '../dto/onboarding.dto';
 import logger from '../../../common/utils/logger.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class OnboardingService {
@@ -80,7 +81,7 @@ export class OnboardingService {
 
       if (error) {
         logger.error('Failed to update user profile', { userId, error });
-        throw new BadRequestException('Failed to save onboarding data');
+        throw new BadRequestException(MSG.AUTH.ONBOARDING_FAILED);
       }
 
       // For welcome email: We cannot safely decrypt names here (security best practice)
@@ -105,7 +106,7 @@ export class OnboardingService {
       }
 
       return {
-        message: 'Welcome to Affinity Echo! Your profile is all set.',
+        message: MSG.AUTH.ONBOARDING_COMPLETE,
         has_completed_onboarding: true,
       };
     } catch (error) {
@@ -131,7 +132,7 @@ export class OnboardingService {
         logger.warn('User not found when fetching onboarding status', {
           userId,
         });
-        throw new NotFoundException('User not found');
+        throw new NotFoundException(MSG.AUTH.USER_NOT_FOUND);
       }
 
       return {

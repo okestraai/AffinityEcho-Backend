@@ -9,6 +9,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
+import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class FollowService {
@@ -77,16 +78,14 @@ export class FollowService {
       // Upsert with ON CONFLICT DO NOTHING — race-condition-safe:
       // null returned → row already existed → already following
       // row returned  → newly created
-      const { data: follow } = await this.admin
-        .from('user_follows')
-        .upsert(
-          {
-            follower_id: followerId,
-            following_id: followingId,
-            created_at: new Date().toISOString(),
-          },
-          { ignoreDuplicates: true },
-        );
+      const { data: follow } = await this.admin.from('user_follows').upsert(
+        {
+          follower_id: followerId,
+          following_id: followingId,
+          created_at: new Date().toISOString(),
+        },
+        { ignoreDuplicates: true },
+      );
 
       if (!follow) {
         throw new BadRequestException('Already following this user');
@@ -106,7 +105,7 @@ export class FollowService {
 
       return {
         success: true,
-        message: 'Successfully followed user',
+        message: MSG.FOLLOW.FOLLOWED,
         data: {
           followId: follow.id,
         },
@@ -161,7 +160,7 @@ export class FollowService {
 
       return {
         success: true,
-        message: 'Successfully unfollowed user',
+        message: MSG.FOLLOW.UNFOLLOWED,
         data: {},
       };
     } catch (error: any) {
@@ -292,7 +291,7 @@ export class FollowService {
 
       return {
         success: true,
-        message: 'Following list retrieved successfully',
+        message: MSG.FOLLOW.FOLLOWING_RETRIEVED,
         data: {
           following: filteredFollows.map((f: any) => {
             const isOwnEntry = f.user.id === viewerId;
@@ -450,7 +449,7 @@ export class FollowService {
 
       return {
         success: true,
-        message: 'Followers list retrieved successfully',
+        message: MSG.FOLLOW.FOLLOWERS_RETRIEVED,
         data: {
           followers: filteredFollows.map((f: any) => {
             const isOwnEntry = f.user.id === viewerId;
@@ -512,7 +511,7 @@ export class FollowService {
       if (iFollowError || theyFollowError) {
         return {
           success: true,
-          message: 'Follow status retrieved',
+          message: MSG.FOLLOW.STATUS_RETRIEVED,
           data: {
             isFollowing: false,
             isFollowedBy: false,
@@ -522,7 +521,7 @@ export class FollowService {
 
       return {
         success: true,
-        message: 'Follow status retrieved',
+        message: MSG.FOLLOW.STATUS_RETRIEVED,
         data: {
           isFollowing: !!iFollow,
           followId: iFollow?.id,
@@ -538,7 +537,7 @@ export class FollowService {
       });
       return {
         success: false,
-        message: 'Failed to check follow status',
+        message: MSG.FOLLOW.STATUS_FAILED,
         data: {
           isFollowing: false,
           isFollowedBy: false,
