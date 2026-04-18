@@ -55,7 +55,7 @@ export const NOTIFICATION_FIELDS_WITH_ACTOR = `
   id, user_id, actor_id, type, title, message, action_url,
   reference_id, reference_type, metadata, delivery_method,
   is_read, is_delivered, action_taken, read_at, delivered_at, created_at,
-  actor:actor_id(id, username, avatar)
+  actor:actor_id(id, username, avatar, first_name_encrypted, last_name_encrypted)
 `;
 
 /** Forum fields returned after create/update. */

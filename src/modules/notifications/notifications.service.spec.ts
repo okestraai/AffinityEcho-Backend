@@ -48,10 +48,18 @@ describe('NotificationsService', () => {
       sendToUser: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockIdentityReveal = {
+      getRevealedUserIds: jest.fn().mockResolvedValue(new Set()),
+      decryptRealName: jest.fn().mockReturnValue(null),
+      isRevealed: jest.fn().mockResolvedValue(false),
+      resolveNotificationName: jest.fn().mockResolvedValue('Someone'),
+    };
+
     service = new NotificationsService(
       mockConfig as any,
       mockChatGateway as any,
       mockPushService as any,
+      mockIdentityReveal as any,
     );
   });
 

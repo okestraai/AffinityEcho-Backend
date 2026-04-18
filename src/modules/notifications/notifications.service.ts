@@ -18,6 +18,7 @@ import {
 } from '../../common/constants/select-fields';
 import { ChatGateway } from '../messaging/services/websocket.gateway';
 import { PushNotificationService } from './push-notification.service';
+import { IdentityRevealUtil } from '../../common/utils/identity-reveal.util';
 import { MSG } from '../../common/constants/messages';
 
 const ACTION_VERBS: Record<string, string> = {
@@ -59,6 +60,7 @@ export class NotificationsService {
     private config: ConfigService,
     @Inject(forwardRef(() => ChatGateway)) private chatGateway: ChatGateway,
     private pushService: PushNotificationService,
+    private identityReveal: IdentityRevealUtil,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -66,6 +68,56 @@ export class NotificationsService {
   /**
    * Check if user has enabled the notification preference for a given type
    */
+  private async resolveActorDisplayNames(
+    userId: string,
+    notifications: any[],
+  ): Promise<void> {
+    const actorIds = [
+      ...new Set(
+        notifications
+          .filter((n) => n.actor_id && n.actor_id !== userId && n.actor)
+          .map((n) => n.actor_id),
+      ),
+    ];
+
+    if (actorIds.length === 0) return;
+
+    const revealedIds = await this.identityReveal.getRevealedUserIds(
+      userId,
+      actorIds,
+    );
+
+    const nameCache = new Map<string, string | null>();
+
+    notifications.forEach((n) => {
+      if (!n.actor) return;
+
+      const isRevealed = revealedIds.has(n.actor_id);
+      if (isRevealed) {
+        if (!nameCache.has(n.actor_id)) {
+          nameCache.set(
+            n.actor_id,
+            this.identityReveal.decryptRealName(
+              n.actor.first_name_encrypted,
+              n.actor.last_name_encrypted,
+            ),
+          );
+        }
+        const realName = nameCache.get(n.actor_id);
+        if (realName) {
+          n.actor.display_name = realName;
+        } else {
+          n.actor.display_name = n.actor.username;
+        }
+      } else {
+        n.actor.display_name = n.actor.username;
+      }
+
+      delete n.actor.first_name_encrypted;
+      delete n.actor.last_name_encrypted;
+    });
+  }
+
   private async shouldNotify(
     userId: string,
     notificationType: string,
@@ -377,6 +429,9 @@ export class NotificationsService {
       }
 
       const notifications = data || [];
+
+      // Resolve actor display names based on identity reveal
+      await this.resolveActorDisplayNames(userId, notifications);
 
       if (grouped) {
         const aggregated = this.aggregateNotifications(notifications, limit);
