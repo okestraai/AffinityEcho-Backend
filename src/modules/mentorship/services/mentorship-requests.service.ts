@@ -260,18 +260,14 @@ export class MentorshipRequestsService {
     requestType: string,
   ) {
     try {
-      const { data: requester } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', requesterId)
-        .single();
+      const actorName = await this.identityReveal.resolveNotificationName(requesterId, targetUserId);
 
       await this.notificationsService.createNotification({
         user_id: targetUserId,
         actor_id: requesterId,
         type: 'mentorship_request',
         title: 'New Mentorship Request',
-        message: `${requester?.username || 'Someone'} sent you a mentorship request`,
+        message: `${actorName} sent you a mentorship request`,
         action_url: `/dashboard/mentorship/requests/${requestId}`,
         reference_id: requestId,
         reference_type: 'mentorship',

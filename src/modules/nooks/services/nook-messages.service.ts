@@ -312,18 +312,14 @@ export class NookMessagesService {
           .single();
 
         if (parentMsg && parentMsg.user_id !== userId) {
-          const { data: replier } = await this.admin
-            .from('user_profiles')
-            .select('username')
-            .eq('id', userId)
-            .single();
+          const actorName = await this.identityReveal.resolveNotificationName(userId, parentMsg.user_id);
 
           await this.notificationsService.createNotification({
             user_id: parentMsg.user_id,
             actor_id: userId,
             type: 'nook_reply',
             title: 'New Reply',
-            message: `${replier?.username || 'Someone'} replied to your message in a nook`,
+            message: `${actorName} replied to your message in a nook`,
             action_url: `/nooks/${nookId}`,
             reference_id: parent_message_id,
             reference_type: 'nook_message',

@@ -575,25 +575,39 @@ export class NooksService {
         ? await this.identityReveal.getRevealedUserIds(userId, otherAuthorIds)
         : new Set<string>();
 
+    const nameCache = new Map<string, string | null>();
+
     items.forEach((item) => {
       if (!item.user_profile) return;
 
+      const authorId = item.user_profile.id || item[ownerField];
       const isOwnContent = item[ownerField] === userId;
-      const isRevealed = revealedIds.has(item.user_profile.id);
+      const isRevealed = revealedIds.has(authorId);
 
       let displayName = item.user_profile.username || 'Unknown';
 
       if (isOwnContent || isRevealed) {
-        const realName = this.identityReveal.decryptRealName(
-          item.user_profile.first_name_encrypted,
-          item.user_profile.last_name_encrypted,
-        );
+        if (!nameCache.has(authorId)) {
+          nameCache.set(
+            authorId,
+            this.identityReveal.decryptRealName(
+              item.user_profile.first_name_encrypted,
+              item.user_profile.last_name_encrypted,
+            ),
+          );
+        }
+        const realName = nameCache.get(authorId);
         if (realName) displayName = realName;
       }
 
       item.user_profile.display_name = displayName;
-      delete item.user_profile.first_name_encrypted;
-      delete item.user_profile.last_name_encrypted;
+    });
+
+    items.forEach((item) => {
+      if (item.user_profile) {
+        delete item.user_profile.first_name_encrypted;
+        delete item.user_profile.last_name_encrypted;
+      }
     });
   }
 

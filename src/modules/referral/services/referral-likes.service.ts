@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { MSG } from '../../../common/constants/messages';
@@ -11,6 +12,7 @@ export class ReferralLikesService {
 
   constructor(
     private config: ConfigService,
+    private identityReveal: IdentityRevealUtil,
     private notificationsService: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
@@ -39,18 +41,14 @@ export class ReferralLikesService {
       // Create notification for referral post author (if not liking own post)
       if (data && data.user_id !== userId) {
         try {
-          const { data: liker } = await this.admin
-            .from('user_profiles')
-            .select('username')
-            .eq('id', userId)
-            .single();
+          const actorName = await this.identityReveal.resolveNotificationName(userId, data.user_id);
 
           await this.notificationsService.createNotification({
             user_id: data.user_id,
             actor_id: userId,
             type: 'referral_like',
             title: 'New Like',
-            message: `${liker?.username || 'Someone'} liked your referral post`,
+            message: `${actorName} liked your referral post`,
             action_url: `/referral/posts/${referralId}`,
             reference_id: referralId,
             reference_type: 'referral_post',

@@ -531,18 +531,14 @@ export class TopicService {
       // Create notification for topic creator (only if not reacting to own topic)
       if (topic.user_id !== userId) {
         try {
-          const { data: reactor } = await this.admin
-            .from('user_profiles')
-            .select('username')
-            .eq('id', userId)
-            .single();
+          const actorName = await this.identityReveal.resolveNotificationName(userId, topic.user_id);
 
           await this.notificationsService.createNotification({
             user_id: topic.user_id,
             actor_id: userId,
             type: 'forum_like',
             title: 'New Reaction',
-            message: `${reactor?.username || 'Someone'} reacted with ${reactionType} to your topic`,
+            message: `${actorName} reacted with ${reactionType} to your topic`,
             action_url: `/forum/topics/${topicId}`,
             reference_id: topicId,
             reference_type: 'forum_topic',
@@ -1074,27 +1070,42 @@ export class TopicService {
       otherAuthorIds,
     );
 
+    const nameCache = new Map<string, string | null>();
+
     items.forEach((item) => {
       if (!item.user_profile) return;
 
-      const isOwnContent = item.user_profile.id === userId;
-      const isRevealed = revealedIds.has(item.user_profile.id);
+      const authorId = item.user_profile.id || item.user_id;
+      const isOwnContent = authorId === userId;
+      const isRevealed = revealedIds.has(authorId);
 
       let displayName = item.is_anonymous
         ? 'Anonymous User'
         : item.user_profile.username;
 
       if (isOwnContent || isRevealed) {
-        const realName = this.identityReveal.decryptRealName(
-          item.user_profile.first_name_encrypted,
-          item.user_profile.last_name_encrypted,
-        );
+        if (!nameCache.has(authorId)) {
+          nameCache.set(
+            authorId,
+            this.identityReveal.decryptRealName(
+              item.user_profile.first_name_encrypted,
+              item.user_profile.last_name_encrypted,
+            ),
+          );
+        }
+        const realName = nameCache.get(authorId);
         if (realName) displayName = realName;
       }
 
       item.user_profile.display_name = displayName;
-      delete item.user_profile.first_name_encrypted;
-      delete item.user_profile.last_name_encrypted;
+    });
+
+    // Clean up encrypted fields after all items are processed
+    items.forEach((item) => {
+      if (item.user_profile) {
+        delete item.user_profile.first_name_encrypted;
+        delete item.user_profile.last_name_encrypted;
+      }
     });
   }
 }

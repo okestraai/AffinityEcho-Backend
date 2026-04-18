@@ -74,6 +74,35 @@ export class IdentityRevealUtil {
   }
 
   /**
+   * Resolve the display name for a notification actor.
+   * If identity is revealed between actor and recipient, returns the real name.
+   * Otherwise returns the username or 'Someone'.
+   */
+  async resolveNotificationName(
+    actorId: string,
+    recipientId: string,
+  ): Promise<string> {
+    const { data: actor } = await this.admin
+      .from('user_profiles')
+      .select('username, first_name_encrypted, last_name_encrypted')
+      .eq('id', actorId)
+      .single();
+
+    if (!actor) return 'Someone';
+
+    const revealed = await this.isRevealed(actorId, recipientId);
+    if (revealed) {
+      const realName = this.decryptRealName(
+        actor.first_name_encrypted,
+        actor.last_name_encrypted,
+      );
+      if (realName) return realName;
+    }
+
+    return actor.username || 'Someone';
+  }
+
+  /**
    * Check if a specific user pair has an accepted identity reveal.
    */
   async isRevealed(userIdA: string, userIdB: string): Promise<boolean> {

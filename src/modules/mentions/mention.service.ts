@@ -1,6 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../database/supabase.client';
+import { IdentityRevealUtil } from '../../common/utils/identity-reveal.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import logger from '../../common/utils/logger.util';
 
@@ -10,6 +11,7 @@ export class MentionService {
 
   constructor(
     private config: ConfigService,
+    private identityReveal: IdentityRevealUtil,
     @Inject(forwardRef(() => NotificationsService))
     private notifications: NotificationsService,
   ) {
@@ -94,24 +96,18 @@ export class MentionService {
         onConflict: 'mentioner_id,mentioned_user_id,content_type,content_id',
       });
 
-      // Get mentioner username for notification message
-      const { data: mentioner } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', mentionerId)
-        .single();
-
       // Create notifications for each mentioned user
       const actionUrl = this.buildActionUrl(contentType, contentId, contextId);
 
       for (const user of mentionableUsers) {
         try {
+          const actorName = await this.identityReveal.resolveNotificationName(mentionerId, user.id);
           await this.notifications.createNotification({
             user_id: user.id,
             actor_id: mentionerId,
             type: 'mention',
             title: 'You were mentioned',
-            message: `${mentioner?.username || 'Someone'} mentioned you`,
+            message: `${actorName} mentioned you`,
             action_url: actionUrl,
             reference_id: contentId,
             reference_type: contentType,

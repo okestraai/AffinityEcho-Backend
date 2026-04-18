@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import logger from '../../../common/utils/logger.util';
 import { RequestIdentityRevealDto } from '../dto/identity-reveal.dto';
@@ -20,6 +21,7 @@ export class IdentityRevealService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
   ) {
@@ -269,10 +271,16 @@ export class IdentityRevealService {
             .single(),
           this.admin
             .from('user_profiles')
-            .select('username')
+            .select('username, first_name_encrypted, last_name_encrypted')
             .eq('id', userId)
             .single(),
         ]);
+
+        const responderName =
+          this.identityReveal.decryptRealName(
+            responder?.first_name_encrypted,
+            responder?.last_name_encrypted,
+          ) || responder?.username || 'Someone';
 
         // Create in-app notification
         await this.notificationsService.createNotification({
@@ -280,7 +288,7 @@ export class IdentityRevealService {
           actor_id: userId,
           type: 'identity_reveal',
           title: 'Identity Revealed',
-          message: `${responder?.username || 'Someone'} accepted your identity reveal request`,
+          message: `${responderName} accepted your identity reveal request`,
           action_url: `/referral/connections/${reveal.connection_id}`,
           reference_id: revealId,
           reference_type: 'identity_reveal',

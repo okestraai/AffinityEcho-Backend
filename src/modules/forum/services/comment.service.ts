@@ -646,18 +646,14 @@ export class CommentService {
       // Create notification for topic creator (if not commenting on own topic)
       if (topic.user_id !== userId) {
         try {
-          const { data: commenter } = await this.admin
-            .from('user_profiles')
-            .select('username')
-            .eq('id', userId)
-            .single();
+          const actorName = await this.identityReveal.resolveNotificationName(userId, topic.user_id);
 
           await this.notificationsService.createNotification({
             user_id: topic.user_id,
             actor_id: userId,
             type: 'forum_comment',
             title: 'New Comment',
-            message: `${commenter?.username || 'Someone'} commented on your topic: ${topic.title}`,
+            message: `${actorName} commented on your topic: ${topic.title}`,
             action_url: `/forum/topics/${topicId}`,
             reference_id: comment.id,
             reference_type: 'forum_comment',
@@ -684,18 +680,14 @@ export class CommentService {
             parentComment.user_id !== userId &&
             parentComment.user_id !== topic.user_id
           ) {
-            const { data: commenter } = await this.admin
-              .from('user_profiles')
-              .select('username')
-              .eq('id', userId)
-              .single();
+            const actorName = await this.identityReveal.resolveNotificationName(userId, parentComment.user_id);
 
             await this.notificationsService.createNotification({
               user_id: parentComment.user_id,
               actor_id: userId,
               type: 'forum_comment',
               title: 'New Reply',
-              message: `${commenter?.username || 'Someone'} replied to your comment`,
+              message: `${actorName} replied to your comment`,
               action_url: `/forum/topics/${topicId}#comment-${comment.id}`,
               reference_id: comment.id,
               reference_type: 'forum_comment',
@@ -906,18 +898,14 @@ export class CommentService {
     // Create notification for comment author (if not reacting to own comment)
     if (commentCheck.user_id !== userId) {
       try {
-        const { data: reactor } = await this.admin
-          .from('user_profiles')
-          .select('username')
-          .eq('id', userId)
-          .single();
+        const actorName = await this.identityReveal.resolveNotificationName(userId, commentCheck.user_id);
 
         await this.notificationsService.createNotification({
           user_id: commentCheck.user_id,
           actor_id: userId,
           type: 'forum_like',
           title: 'Comment Reaction',
-          message: `${reactor?.username || 'Someone'} reacted with ${reactionType} to your comment`,
+          message: `${actorName} reacted with ${reactionType} to your comment`,
           action_url: `/forum/topics/${commentCheck.topic_id}#comment-${commentId}`,
           reference_id: commentId,
           reference_type: 'forum_comment',
@@ -1003,8 +991,11 @@ export class CommentService {
       otherAuthorIds,
     );
 
+    // Cache decrypted names per user to avoid losing data when
+    // multiple comments share the same user_profile object reference
+    const nameCache = new Map<string, string | null>();
+
     items.forEach((item) => {
-      // Normalize user_profile — Supabase join may return array or object
       const profile = Array.isArray(item.user_profile)
         ? item.user_profile[0]
         : item.user_profile;
@@ -1020,16 +1011,28 @@ export class CommentService {
         : profile.username;
 
       if (isOwnContent || isRevealed) {
-        const realName = this.identityReveal.decryptRealName(
-          profile.first_name_encrypted,
-          profile.last_name_encrypted,
-        );
+        if (!nameCache.has(authorId)) {
+          nameCache.set(
+            authorId,
+            this.identityReveal.decryptRealName(
+              profile.first_name_encrypted,
+              profile.last_name_encrypted,
+            ),
+          );
+        }
+        const realName = nameCache.get(authorId);
         if (realName) displayName = realName;
       }
 
       profile.display_name = displayName;
-      delete profile.first_name_encrypted;
-      delete profile.last_name_encrypted;
+    });
+
+    // Clean up encrypted fields after all items are processed
+    items.forEach((item) => {
+      if (item.user_profile) {
+        delete item.user_profile.first_name_encrypted;
+        delete item.user_profile.last_name_encrypted;
+      }
     });
   }
 }

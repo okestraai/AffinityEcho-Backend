@@ -842,21 +842,33 @@ export class FeedEngagementService {
         uniqueAuthorIds,
       );
 
+      const nameCache = new Map<string, string | null>();
       validBookmarks.forEach((item: any) => {
         if (!item.author) return;
         const isOwn = item.user_id === userId;
         const isRevealed = revealedIds.has(item.user_id);
 
         if (isOwn || isRevealed) {
-          const realName = this.identityReveal.decryptRealName(
-            item.author.first_name_encrypted,
-            item.author.last_name_encrypted,
-          );
+          if (!nameCache.has(item.user_id)) {
+            nameCache.set(
+              item.user_id,
+              this.identityReveal.decryptRealName(
+                item.author.first_name_encrypted,
+                item.author.last_name_encrypted,
+              ),
+            );
+          }
+          const realName = nameCache.get(item.user_id);
           if (realName) item.author.display_name = realName;
         }
+      });
 
-        delete item.author.first_name_encrypted;
-        delete item.author.last_name_encrypted;
+      // Clean up after all items processed
+      validBookmarks.forEach((item: any) => {
+        if (item.author) {
+          delete item.author.first_name_encrypted;
+          delete item.author.last_name_encrypted;
+        }
         delete item.is_anonymous;
       });
 
@@ -1031,18 +1043,14 @@ export class FeedEngagementService {
       );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
-      const { data: liker } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', userId)
-        .single();
+      const actorName = await this.identityReveal.resolveNotificationName(userId, contentOwnerId);
 
       await this.notificationsService.createNotification({
         user_id: contentOwnerId,
         actor_id: userId,
         type: contentType === 'post' ? 'feed_like' : 'forum_like',
         title: 'New Like',
-        message: `${liker?.username || 'Someone'} liked your ${contentType === 'post' ? 'post' : contentType}`,
+        message: `${actorName} liked your ${contentType === 'post' ? 'post' : contentType}`,
         action_url: this.getContentUrl(contentType, contentId),
         reference_id: contentId,
         reference_type: contentType,
@@ -1067,18 +1075,14 @@ export class FeedEngagementService {
       );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
-      const { data: commenter } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', userId)
-        .single();
+      const actorName = await this.identityReveal.resolveNotificationName(userId, contentOwnerId);
 
       await this.notificationsService.createNotification({
         user_id: contentOwnerId,
         actor_id: userId,
         type: 'forum_comment',
         title: 'New Comment',
-        message: `${commenter?.username || 'Someone'} commented on your ${contentType === 'post' ? 'post' : contentType}`,
+        message: `${actorName} commented on your ${contentType === 'post' ? 'post' : contentType}`,
         action_url: this.getContentUrl(contentType, contentId),
         reference_id: contentId,
         reference_type: contentType,
@@ -1193,18 +1197,14 @@ export class FeedEngagementService {
       );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
-      const { data: reactor } = await this.admin
-        .from('user_profiles')
-        .select('username')
-        .eq('id', userId)
-        .single();
+      const actorName = await this.identityReveal.resolveNotificationName(userId, contentOwnerId);
 
       await this.notificationsService.createNotification({
         user_id: contentOwnerId,
         actor_id: userId,
         type: contentType === 'post' ? 'feed_like' : 'forum_like',
         title: 'New Reaction',
-        message: `${reactor?.username || 'Someone'} reacted "${reactionType}" to your ${contentType === 'post' ? 'post' : contentType}`,
+        message: `${actorName} reacted "${reactionType}" to your ${contentType === 'post' ? 'post' : contentType}`,
         action_url: this.getContentUrl(contentType, contentId),
         reference_id: contentId,
         reference_type: contentType,

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import logger from '../../../common/utils/logger.util';
 import { CreateCommentDto } from '../dto/comment.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -17,6 +18,7 @@ export class ReferralCommentsService {
 
   constructor(
     private config: ConfigService,
+    private identityReveal: IdentityRevealUtil,
     private notificationsService: NotificationsService,
   ) {
     this.admin = supabaseAdmin(config);
@@ -96,18 +98,14 @@ export class ReferralCommentsService {
       // Create notification for referral post author (if not commenting on own post)
       if (referralPost && referralPost.user_id !== userId) {
         try {
-          const { data: commenter } = await this.admin
-            .from('user_profiles')
-            .select('username')
-            .eq('id', userId)
-            .single();
+          const actorName = await this.identityReveal.resolveNotificationName(userId, referralPost.user_id);
 
           await this.notificationsService.createNotification({
             user_id: referralPost.user_id,
             actor_id: userId,
             type: 'referral_comment',
             title: 'New Comment',
-            message: `${commenter?.username || 'Someone'} commented on your referral post`,
+            message: `${actorName} commented on your referral post`,
             action_url: `/referral/posts/${referralId}`,
             reference_id: data.id,
             reference_type: 'referral_comment',

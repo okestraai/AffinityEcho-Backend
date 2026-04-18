@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import logger from '../../../common/utils/logger.util';
 import {
@@ -24,6 +25,7 @@ export class ReferralConnectionsService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
   ) {
@@ -300,12 +302,13 @@ export class ReferralConnectionsService {
         ]);
 
         // Create in-app notification
+        const senderName = await this.identityReveal.resolveNotificationName(userId, post.user_id);
         await this.notificationsService.createNotification({
           user_id: post.user_id,
           actor_id: userId,
           type: 'referral_connection',
           title: 'New Connection Request',
-          message: `${sender?.username || 'Someone'} sent you a connection request for your referral`,
+          message: `${senderName} sent you a connection request for your referral`,
           action_url: `/referral/connections/${data.id}`,
           reference_id: data.id,
           reference_type: 'referral_connection',
@@ -407,12 +410,13 @@ export class ReferralConnectionsService {
         ]);
 
         // Create in-app notification
+        const receiverName = await this.identityReveal.resolveNotificationName(userId, connection.sender_id);
         await this.notificationsService.createNotification({
           user_id: connection.sender_id,
           actor_id: userId,
           type: 'referral_connection',
           title: 'Connection Accepted',
-          message: `${receiver?.username || 'Someone'} accepted your connection request`,
+          message: `${receiverName} accepted your connection request`,
           action_url: `/referral/connections/${connectionId}`,
           reference_id: connectionId,
           reference_type: 'referral_connection',

@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import logger from '../../../common/utils/logger.util';
@@ -22,6 +23,7 @@ export class MessagingService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
     private emailService: EmailService,
     @Inject(forwardRef(() => NotificationsService))
     private notifications: NotificationsService,
@@ -102,12 +104,14 @@ export class MessagingService {
           ? conversation.user2_id
           : conversation.user1_id;
 
-      // Get sender info for notification
+      // Get sender info for WebSocket broadcast
       const { data: senderProfile } = await this.admin
         .from('user_profiles')
         .select('username, avatar, is_company_verified')
         .eq('id', userId)
         .single();
+
+      const senderName = await this.identityReveal.resolveNotificationName(userId, recipientId);
 
       // Notify recipient of new message
       try {
@@ -116,7 +120,7 @@ export class MessagingService {
           actor_id: userId,
           type: 'message_received',
           title: 'New Message',
-          message: `${senderProfile?.username || 'Someone'} sent you a message`,
+          message: `${senderName} sent you a message`,
           action_url: `/messages/${dto.conversation_id}`,
           reference_id: message.id,
           reference_type: 'message',

@@ -1435,31 +1435,35 @@ export class UserProfileService {
       otherAuthorIds,
     );
 
+    const nameCache = new Map<string, string | null>();
+
     items.forEach((item) => {
       if (!item.author) return;
 
       const isOwnContent = item.user_id === userId;
       const isRevealed = revealedIds.has(item.user_id);
 
-      // Own content: always show real name (even if anonymous — it's YOUR activity page)
-      // Revealed non-anonymous: show real name
-      if (isOwnContent || (!item.is_anonymous && isRevealed)) {
-        const realName = this.identityReveal.decryptRealName(
-          item.author.first_name_encrypted,
-          item.author.last_name_encrypted,
-        );
-        if (realName) {
-          item.author.display_name = realName;
+      if (isOwnContent || isRevealed) {
+        if (!nameCache.has(item.user_id)) {
+          nameCache.set(
+            item.user_id,
+            this.identityReveal.decryptRealName(
+              item.author.first_name_encrypted,
+              item.author.last_name_encrypted,
+            ),
+          );
         }
+        const realName = nameCache.get(item.user_id);
+        if (realName) item.author.display_name = realName;
       }
-
-      // Clean encrypted fields from response
-      delete item.author.first_name_encrypted;
-      delete item.author.last_name_encrypted;
     });
 
-    // Clean is_anonymous from response
+    // Clean encrypted fields and anonymous flag after all items processed
     items.forEach((item) => {
+      if (item.author) {
+        delete item.author.first_name_encrypted;
+        delete item.author.last_name_encrypted;
+      }
       delete item.is_anonymous;
     });
   }

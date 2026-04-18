@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
+import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import {
   RequestIdentityRevealDto,
@@ -24,6 +25,7 @@ export class IdentityRevealService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private identityReveal: IdentityRevealUtil,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
   ) {
@@ -299,21 +301,28 @@ export class IdentityRevealService {
             .single(),
           this.admin
             .from('user_profiles')
-            .select('username')
+            .select('username, first_name_encrypted, last_name_encrypted')
             .eq('id', userId)
             .single(),
         ]);
 
         // Create in-app notification
         const isAccepted = dto.action === 'accept';
+        const responderName = isAccepted
+          ? this.identityReveal.decryptRealName(
+              responder?.first_name_encrypted,
+              responder?.last_name_encrypted,
+            ) || responder?.username || 'Someone'
+          : responder?.username || 'Someone';
+
         await this.notificationsService.createNotification({
           user_id: reveal.requester_id,
           actor_id: userId,
           type: isAccepted ? 'identity_reveal' : 'identity_reveal_rejected',
           title: isAccepted ? 'Identity Revealed' : 'Identity Reveal Declined',
           message: isAccepted
-            ? `${responder?.username || 'Someone'} accepted your identity reveal request`
-            : `${responder?.username || 'Someone'} declined your identity reveal request`,
+            ? `${responderName} accepted your identity reveal request`
+            : `${responderName} declined your identity reveal request`,
           action_url: `/messages/identity-reveals/${dto.reveal_id}`,
           reference_id: dto.reveal_id,
           reference_type: 'identity_reveal',
