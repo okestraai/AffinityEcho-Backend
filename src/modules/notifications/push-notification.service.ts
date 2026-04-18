@@ -186,12 +186,13 @@ export class PushNotificationService {
     if (data) {
       for (const [k, v] of Object.entries(data)) {
         if (v !== null && v !== undefined) {
-          stringData[k] = String(v);
+          stringData[k] =
+            typeof v === 'object' ? JSON.stringify(v) : String(v);
         }
       }
     }
 
-    const channelId = options?.channelId || 'default';
+    const channelId = options?.channelId || 'default-v2';
     const BATCH_SIZE = 500;
 
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
@@ -206,14 +207,16 @@ export class PushNotificationService {
             priority: 'high',
             notification: {
               channelId,
-              sound: 'default',
+              sound: 'notification',
+              priority: 'high',
             },
           },
           apns: {
             payload: {
               aps: {
-                sound: 'default',
+                sound: 'notification.wav',
                 badge: options?.badge ?? 1,
+                'content-available': 1,
               },
             },
           },
@@ -285,29 +288,18 @@ export class PushNotificationService {
    * These must match the channels registered in the mobile app.
    */
   private getChannelId(type?: string): string {
-    if (!type) return 'default';
+    if (!type) return 'default-v2';
 
     const channelMap: Record<string, string> = {
-      message_received: 'messages',
-      mentorship_request: 'requests',
-      mentorship_accepted: 'requests',
-      mentorship_declined: 'requests',
-      referral_connection: 'requests',
-      identity_reveal_request: 'requests',
-      identity_reveal: 'social',
-      user_followed: 'social',
-      user_unfollowed: 'social',
-      forum_like: 'social',
-      feed_like: 'social',
-      referral_like: 'social',
-      post_reaction: 'social',
-      forum_comment: 'comments',
-      referral_comment: 'comments',
-      topic_comment: 'comments',
-      nook_reply: 'comments',
-      mention: 'mentions',
+      message_received: 'messages-v2',
+      new_message: 'messages-v2',
+      message: 'messages-v2',
+      mentorship_request: 'mentorship-v2',
+      mentorship_accepted: 'mentorship-v2',
+      mentorship_declined: 'mentorship-v2',
+      nook_message: 'messages-v2',
     };
 
-    return channelMap[type] || 'default';
+    return channelMap[type] || 'default-v2';
   }
 }

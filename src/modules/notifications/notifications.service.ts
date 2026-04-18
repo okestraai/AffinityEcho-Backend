@@ -160,9 +160,10 @@ export class NotificationsService {
       this.pushService
         .sendToUser(dto.user_id, dto.title, dto.message, {
           type: dto.type,
-          action_url: dto.action_url,
           reference_id: dto.reference_id,
+          reference_type: dto.reference_type,
           notification_id: data.id,
+          metadata: dto.metadata,
         })
         .catch((pushError) => {
           this.logger.warn('Push notification failed:', pushError);
