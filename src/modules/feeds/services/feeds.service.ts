@@ -854,7 +854,7 @@ export class FeedsService {
       const isOwnContent = item.user_id === userId;
       const isRevealed = revealedIds.has(item.user_id);
 
-      if (!item.is_anonymous && (isOwnContent || isRevealed)) {
+      if (isOwnContent || isRevealed) {
         const realName = this.identityReveal.decryptRealName(
           item.author.first_name_encrypted,
           item.author.last_name_encrypted,

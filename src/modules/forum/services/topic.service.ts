@@ -1084,8 +1084,7 @@ export class TopicService {
         ? 'Anonymous User'
         : item.user_profile.username;
 
-      // Don't reveal real name on anonymous content
-      if (!item.is_anonymous && (isOwnContent || isRevealed)) {
+      if (isOwnContent || isRevealed) {
         const realName = this.identityReveal.decryptRealName(
           item.user_profile.first_name_encrypted,
           item.user_profile.last_name_encrypted,

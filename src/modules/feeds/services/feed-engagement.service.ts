@@ -331,7 +331,7 @@ export class FeedEngagementService {
         const formatted = this.formatComment(comment);
 
         // Apply identity reveal
-        if (!comment.is_anonymous) {
+        {
           const isOwn = comment.user_id === userId;
           const isRevealed = revealedIds.has(comment.user_id);
 

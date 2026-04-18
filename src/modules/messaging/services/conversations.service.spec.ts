@@ -48,6 +48,7 @@ describe('ConversationsService', () => {
     mockIdentityReveal = {
       getRevealedUserIds: jest.fn().mockResolvedValue(new Set()),
       decryptRealName: jest.fn().mockReturnValue(null),
+      isRevealed: jest.fn().mockResolvedValue(false),
     };
 
     service = new ConversationsService(

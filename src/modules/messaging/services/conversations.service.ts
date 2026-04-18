@@ -147,8 +147,14 @@ export class ConversationsService {
         };
       }
 
+      // Check if identity is already revealed between the pair
+      const alreadyRevealed = await this.identityReveal.isRevealed(
+        userId,
+        dto.other_user_id,
+      );
+
       // Create conversation
-      const conversationData = {
+      const conversationData: any = {
         user1_id: userId,
         user2_id: dto.other_user_id,
         context_type: dto.context_type,
@@ -156,6 +162,11 @@ export class ConversationsService {
         is_active: true,
         last_message_at: new Date().toISOString(),
       };
+
+      if (alreadyRevealed) {
+        conversationData.user1_identity_revealed = true;
+        conversationData.user2_identity_revealed = true;
+      }
 
       const { data: conversation, error: convError } = await this.admin
         .from('conversations')
