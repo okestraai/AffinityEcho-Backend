@@ -993,40 +993,43 @@ export class CommentService {
     const otherAuthorIds = [
       ...new Set(
         items
-          .filter(
-            (item) => item.user_profile?.id && item.user_profile.id !== userId,
-          )
-          .map((item) => item.user_profile.id),
+          .filter((item) => item.user_id && item.user_id !== userId)
+          .map((item) => item.user_id),
       ),
     ];
 
-    // Get revealed IDs using shared utility
     const revealedIds = await this.identityReveal.getRevealedUserIds(
       userId,
       otherAuthorIds,
     );
 
     items.forEach((item) => {
-      if (!item.user_profile) return;
+      // Normalize user_profile — Supabase join may return array or object
+      const profile = Array.isArray(item.user_profile)
+        ? item.user_profile[0]
+        : item.user_profile;
+      if (!profile) return;
+      item.user_profile = profile;
 
-      const isOwnContent = item.user_profile.id === userId;
-      const isRevealed = revealedIds.has(item.user_profile.id);
+      const authorId = item.user_id;
+      const isOwnContent = authorId === userId;
+      const isRevealed = revealedIds.has(authorId);
 
       let displayName = item.is_anonymous
         ? 'Anonymous User'
-        : item.user_profile.username;
+        : profile.username;
 
       if (isOwnContent || isRevealed) {
         const realName = this.identityReveal.decryptRealName(
-          item.user_profile.first_name_encrypted,
-          item.user_profile.last_name_encrypted,
+          profile.first_name_encrypted,
+          profile.last_name_encrypted,
         );
         if (realName) displayName = realName;
       }
 
-      item.user_profile.display_name = displayName;
-      delete item.user_profile.first_name_encrypted;
-      delete item.user_profile.last_name_encrypted;
+      profile.display_name = displayName;
+      delete profile.first_name_encrypted;
+      delete profile.last_name_encrypted;
     });
   }
 }
