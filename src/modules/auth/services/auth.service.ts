@@ -457,6 +457,153 @@ export class AuthService {
     }
   }
 
+  // APPLE SIGN-IN VERIFICATION
+  async verifyAppleToken(
+    idToken: string,
+    appleUser?: { email?: string; fullName?: { givenName?: string; familyName?: string } },
+  ) {
+    logger.info('Verifying Apple Sign-In token');
+
+    try {
+      const jwt = await import('jsonwebtoken');
+
+      // 1. Decode token header to get kid
+      const decoded = jwt.default.decode(idToken, { complete: true });
+      if (!decoded || typeof decoded === 'string') {
+        throw new BadRequestException('Invalid Apple ID token');
+      }
+
+      const kid = decoded.header.kid;
+
+      // 2. Fetch Apple's public keys (JWKS)
+      const response = await fetch('https://appleid.apple.com/auth/keys');
+      const jwks = await response.json();
+      const appleKey = jwks.keys.find((k: any) => k.kid === kid);
+
+      if (!appleKey) {
+        throw new BadRequestException('Apple key not found for token');
+      }
+
+      // 3. Convert JWK to PEM
+      const crypto = await import('crypto');
+      const publicKey = crypto.createPublicKey({
+        key: appleKey,
+        format: 'jwk',
+      });
+      const pem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
+
+      // 4. Verify token
+      const payload = jwt.default.verify(idToken, pem, {
+        algorithms: ['RS256'],
+        issuer: 'https://appleid.apple.com',
+        audience: this.config.get('APPLE_SERVICE_ID') || 'com.okestra.affinityecho',
+      }) as any;
+
+      const appleId = payload.sub;
+      const email = (payload.email || appleUser?.email || '').toLowerCase();
+
+      if (!appleId) {
+        throw new BadRequestException('No user ID in Apple token');
+      }
+
+      // 5. Find or create user
+      let { data: existingUser } = await this.admin
+        .from('user_profiles')
+        .select('id, email, apple_id, has_completed_onboarding, username')
+        .eq('apple_id', appleId)
+        .maybeSingle();
+
+      if (!existingUser && email) {
+        // Try by email
+        const { data: emailUser } = await this.admin
+          .from('user_profiles')
+          .select('id, email, apple_id, has_completed_onboarding, username')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (emailUser) {
+          // Link Apple account to existing email user
+          await this.admin
+            .from('user_profiles')
+            .update({
+              apple_id: appleId,
+              auth_provider: 'apple',
+              email_confirmed_at: new Date().toISOString(),
+            })
+            .eq('id', emailUser.id);
+          existingUser = emailUser;
+        }
+      }
+
+      if (!existingUser) {
+        // New Apple signup
+        const userId = uuidv4();
+        const username = this.generateUsername();
+        const avatar = AvatarGenerator.generate(userId).emoji;
+
+        // Encrypt name if provided (first login only)
+        let firstNameEncrypted: string | null = null;
+        let lastNameEncrypted: string | null = null;
+        if (appleUser?.fullName?.givenName) {
+          firstNameEncrypted = this.encryption.encrypt(appleUser.fullName.givenName);
+        }
+        if (appleUser?.fullName?.familyName) {
+          lastNameEncrypted = this.encryption.encrypt(appleUser.fullName.familyName);
+        }
+
+        await this.createProfile(
+          userId,
+          username,
+          email,
+          avatar,
+          undefined,
+          'apple',
+          undefined,
+          appleId,
+        );
+
+        // Store encrypted name
+        if (firstNameEncrypted || lastNameEncrypted) {
+          await this.admin
+            .from('user_profiles')
+            .update({
+              first_name_encrypted: firstNameEncrypted,
+              last_name_encrypted: lastNameEncrypted,
+              email_confirmed_at: new Date().toISOString(),
+            })
+            .eq('id', userId);
+        } else {
+          await this.admin
+            .from('user_profiles')
+            .update({ email_confirmed_at: new Date().toISOString() })
+            .eq('id', userId);
+        }
+
+        existingUser = { id: userId, email, username, has_completed_onboarding: false };
+      }
+
+      // 6. Generate tokens
+      const tokens = this.generateTokens(existingUser.id, existingUser.email || email);
+
+      logger.info('Apple Sign-In successful', { userId: existingUser.id });
+
+      return {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        user: {
+          id: existingUser.id,
+          username: existingUser.username,
+          email: existingUser.email || email,
+          has_completed_onboarding: existingUser.has_completed_onboarding || false,
+        },
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      logger.error('Apple Sign-In verification failed', { error });
+      throw new BadRequestException('Apple Sign-In verification failed');
+    }
+  }
+
   // GOOGLE OAUTH CALLBACK
   async googleCallback(
     code: string,
@@ -1274,6 +1421,7 @@ export class AuthService {
     passwordHash?: string,
     authProvider: string = 'email',
     googleId?: string,
+    appleId?: string,
   ): Promise<boolean> {
     logger.info('Creating user profile', { userId, username });
 
@@ -1284,6 +1432,7 @@ export class AuthService {
       password_hash: passwordHash || null,
       auth_provider: authProvider,
       google_id: googleId || null,
+      apple_id: appleId || null,
       avatar: avatar || AvatarGenerator.generate(userId).emoji,
       privacy_level: 'anonymous',
       has_completed_onboarding: false,
