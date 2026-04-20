@@ -27,10 +27,11 @@ export const CORS_CONFIG: CorsOptions = {
   origin: origins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
-    'Origin', // ADD THIS - it's required for WebSocket
+    'Origin',
     'Content-Type',
     'Authorization',
     'X-Requested-With',
+    'X-XSRF-TOKEN',
     'Accept',
     'Access-Control-Allow-Origin',
     'Access-Control-Allow-Headers',

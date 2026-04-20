@@ -8,6 +8,7 @@ import { UserModule } from './modules/user/user.module';
 import { ForumModule } from './modules/forum/forum.module';
 
 import { RateLimitMiddleware } from './common/middlewares/rate-limit.middleware';
+import { CsrfMiddleware } from './common/middlewares/csrf.middleware';
 import { EncryptionUtil } from './common/utils/encryption.util';
 import configuration from './config/configuration';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -82,5 +83,6 @@ import { OkestraModule } from './modules/okestra/okestra.module';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RateLimitMiddleware).forRoutes('*');
+    consumer.apply(CsrfMiddleware).forRoutes('*');
   }
 }

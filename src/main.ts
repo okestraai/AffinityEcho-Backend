@@ -10,6 +10,7 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import * as swaggerUi from 'swagger-ui-express';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -134,6 +135,9 @@ async function bootstrap() {
     type: VersioningType.URI,
   });
 
+  // COOKIE PARSER (required for CSRF)
+  app.use(cookieParser());
+
   // SECURITY
   app.use(
     helmet({
@@ -147,8 +151,19 @@ async function bootstrap() {
         },
       },
       crossOriginEmbedderPolicy: false,
+      xFrameOptions: { action: 'deny' },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     }),
   );
+
+  // Permissions-Policy header (not in helmet)
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=()',
+    );
+    next();
+  });
 
   // Enable CORS
   app.enableCors(CORS_CONFIG);
