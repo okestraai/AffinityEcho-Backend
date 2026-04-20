@@ -209,13 +209,23 @@ export class NotificationsService {
       }
 
       // Send push notification to mobile devices (fire-and-forget)
-      this.pushService
-        .sendToUser(dto.user_id, dto.title, dto.message, {
-          type: dto.type,
-          reference_id: dto.reference_id,
-          reference_type: dto.reference_type,
-          notification_id: data.id,
-          metadata: dto.metadata,
+      // Fetch unread count for accurate iOS badge
+      this.getUnreadCount(dto.user_id)
+        .then((result) => {
+          const badge = result?.count ?? 1;
+          return this.pushService.sendToUser(
+            dto.user_id,
+            dto.title,
+            dto.message,
+            {
+              type: dto.type,
+              reference_id: dto.reference_id,
+              reference_type: dto.reference_type,
+              notification_id: data.id,
+              metadata: dto.metadata,
+            },
+            { badge },
+          );
         })
         .catch((pushError) => {
           this.logger.warn('Push notification failed:', pushError);
