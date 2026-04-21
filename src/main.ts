@@ -141,15 +141,7 @@ async function bootstrap() {
   // SECURITY
   app.use(
     helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: ["'self'", 'ws://localhost:3000', 'wss://*'],
-        },
-      },
+      contentSecurityPolicy: false, // API backend — CSP is for HTML pages, not JSON APIs
       crossOriginEmbedderPolicy: false,
       xFrameOptions: { action: 'deny' },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
