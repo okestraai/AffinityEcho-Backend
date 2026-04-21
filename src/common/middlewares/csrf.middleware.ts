@@ -18,13 +18,17 @@ import * as crypto from 'crypto';
 @Injectable()
 export class CsrfMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    // Always set/refresh the XSRF-TOKEN cookie so frontend can read it
-    const existingToken = req.cookies?.['XSRF-TOKEN'];
-    const csrfToken = existingToken || crypto.randomBytes(32).toString('hex');
+    // Skip everything for mobile / API clients that don't use cookies
+    const authHeader = req.headers['authorization'];
+    const hasBearerToken = authHeader && authHeader.startsWith('Bearer ');
+    const hasCsrfCookie = !!req.cookies?.['XSRF-TOKEN'];
+    const isWebClient = !hasBearerToken && (hasCsrfCookie || req.headers['origin'] || req.headers['referer']);
 
-    if (!existingToken) {
+    // Only set CSRF cookie for web clients (not mobile)
+    if (isWebClient && !hasCsrfCookie) {
+      const csrfToken = crypto.randomBytes(32).toString('hex');
       res.cookie('XSRF-TOKEN', csrfToken, {
-        httpOnly: false, // Frontend must read this
+        httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
         path: '/',
@@ -37,14 +41,8 @@ export class CsrfMiddleware implements NestMiddleware {
       return next();
     }
 
-    // Skip CSRF for Bearer-authenticated requests (mobile)
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      return next();
-    }
-
-    // Skip CSRF for requests without cookies (API clients)
-    if (!req.cookies || !req.cookies['XSRF-TOKEN']) {
+    // Skip CSRF for Bearer auth (mobile) or non-web clients
+    if (hasBearerToken || !hasCsrfCookie) {
       return next();
     }
 
