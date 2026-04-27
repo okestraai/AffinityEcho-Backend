@@ -353,6 +353,12 @@ export class AuthService {
 
       const tokens = this.generateTokens(user.id, user.email);
 
+      // Update last_active_at on login
+      await this.admin
+        .from('user_profiles')
+        .update({ last_active_at: new Date().toISOString() })
+        .eq('id', user.id);
+
       let adminPermissions: string[] | null | undefined = undefined;
       if (userRole === 'admin') {
         adminPermissions = await this.fetchAdminPermissions(user.id);
@@ -582,7 +588,13 @@ export class AuthService {
         existingUser = { id: userId, email, username, has_completed_onboarding: false };
       }
 
-      // 6. Generate tokens
+      // 6. Update last_active_at on Apple login
+      await this.admin
+        .from('user_profiles')
+        .update({ last_active_at: new Date().toISOString() })
+        .eq('id', existingUser.id);
+
+      // 7. Generate tokens
       const tokens = this.generateTokens(existingUser.id, existingUser.email || email);
 
       logger.info('Apple Sign-In successful', { userId: existingUser.id });
@@ -715,6 +727,12 @@ export class AuthService {
 
         existingUser = { id: userId, email };
       }
+
+      // Update last_active_at on Google login
+      await this.admin
+        .from('user_profiles')
+        .update({ last_active_at: new Date().toISOString() })
+        .eq('id', existingUser.id);
 
       // Generate app tokens
       const tokens = this.generateTokens(
@@ -1128,10 +1146,13 @@ export class AuthService {
       throw new UnauthorizedException(MSG.AUTH.USER_NOT_FOUND);
     }
 
-    // Mark email as confirmed
+    // Mark email as confirmed and update last_active_at
     await this.admin
       .from('user_profiles')
-      .update({ email_confirmed_at: new Date().toISOString() })
+      .update({
+        email_confirmed_at: new Date().toISOString(),
+        last_active_at: new Date().toISOString(),
+      })
       .eq('id', profile.id);
 
     return this.generateTokens(profile.id, email);
@@ -1463,6 +1484,9 @@ export class AuthService {
           uniqueUsername,
           email,
           avatar,
+          authProvider,
+          googleId,
+          appleId,
         );
       }
 
@@ -1484,12 +1508,18 @@ export class AuthService {
     username: string,
     email: string,
     avatar?: string,
+    authProvider: string = 'email',
+    googleId?: string,
+    appleId?: string,
   ): Promise<boolean> {
     const { error } = await this.admin.from('user_profiles').insert({
       id: userId,
       username,
       email,
       avatar: avatar || AvatarGenerator.generate(userId).emoji,
+      auth_provider: authProvider,
+      google_id: googleId || null,
+      apple_id: appleId || null,
       privacy_level: 'anonymous',
       has_completed_onboarding: false,
       is_willing_to_mentor: false,

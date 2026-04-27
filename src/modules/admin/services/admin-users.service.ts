@@ -58,7 +58,7 @@ export class AdminUsersService {
       let q = this.admin
         .from('user_profiles')
         .select(
-          'id, username, email, role, avatar, job_title, is_suspended, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments',
+          'id, username, email, role, avatar, job_title, auth_provider, is_suspended, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments',
           { count: 'exact' },
         )
         .order(sortBy === 'reports_against' ? 'created_at' : sortBy, {
@@ -72,6 +72,7 @@ export class AdminUsersService {
         );
       }
       if (query.role) q = q.eq('role', query.role);
+      if (query.provider) q = q.eq('auth_provider', query.provider);
 
       if (query.status === 'suspended') q = q.eq('is_suspended', true);
       else if (query.status === 'deactivated')
@@ -142,7 +143,7 @@ export class AdminUsersService {
     const { data: profile, error } = await this.admin
       .from('user_profiles')
       .select(
-        'id, username, email, role, avatar, job_title, company_type, location, is_suspended, suspension_reason, suspended_at, suspension_expires_at, suspended_by, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments, mentorship_sessions_completed',
+        'id, username, email, role, avatar, job_title, auth_provider, google_id, apple_id, company_type, location, is_suspended, suspension_reason, suspended_at, suspension_expires_at, suspended_by, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments, mentorship_sessions_completed',
       )
       .eq('id', userId)
       .single();
@@ -551,7 +552,7 @@ export class AdminUsersService {
       let q = this.admin
         .from('user_profiles')
         .select(
-          'id, username, email, role, avatar, job_title, is_suspended, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments',
+          'id, username, email, role, avatar, job_title, auth_provider, is_suspended, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments',
         )
         .order(sortBy === 'reports_against' ? 'created_at' : sortBy, {
           ascending,

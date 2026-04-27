@@ -27,6 +27,8 @@ import { getBullConfig } from './config/bull.config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NookCronJobs } from './jobs/nook-cron.jobs';
 import { DigestCronJobs } from './jobs/digest-cron.jobs';
+import { HealthCronJobs } from './jobs/health-cron.jobs';
+import { AdminHealthService } from './modules/admin/services/admin-health.service';
 import { EmailService } from './common/utils/email/email.service';
 import { OkestraModule } from './modules/okestra/okestra.module';
 
@@ -73,6 +75,8 @@ import { OkestraModule } from './modules/okestra/okestra.module';
     EncryptionUtil,
     NookCronJobs,
     DigestCronJobs,
+    HealthCronJobs,
+    AdminHealthService,
     EmailService,
     {
       provide: APP_GUARD,

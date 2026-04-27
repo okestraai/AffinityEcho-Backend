@@ -50,6 +50,8 @@ export const VALID_PERMISSIONS = [
   'notifications:export',
   'logs:view',
   'logs:export',
+  'analytics:view',
+  'health:view',
 ] as const;
 
 export type AdminPermission = (typeof VALID_PERMISSIONS)[number];

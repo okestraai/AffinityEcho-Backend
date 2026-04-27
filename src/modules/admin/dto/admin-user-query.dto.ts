@@ -39,6 +39,15 @@ export class AdminUserQueryDto {
   status?: string;
 
   @ApiPropertyOptional({
+    description: 'Filter by auth provider',
+    enum: ['email', 'google', 'apple'],
+    example: 'google',
+  })
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @ApiPropertyOptional({
     description: 'Sort field',
     enum: ['created_at', 'username', 'last_active_at'],
     example: 'created_at',

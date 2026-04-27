@@ -11,7 +11,10 @@ import { AdminNotificationsService } from './services/admin-notifications.servic
 import { AdminLogsService } from './services/admin-logs.service';
 import { AdminSettingsService } from './services/admin-settings.service';
 import { AdminPermissionsService } from './services/admin-permissions.service';
+import { AdminAnalyticsService } from './services/admin-analytics.service';
+import { AdminHealthService } from './services/admin-health.service';
 import { PermissionGuard } from '../../common/guards/permission.guard';
+import { EncryptionUtil } from '../../common/utils/encryption.util';
 
 @Module({
   imports: [AuthModule],
@@ -27,7 +30,11 @@ import { PermissionGuard } from '../../common/guards/permission.guard';
     AdminLogsService,
     AdminSettingsService,
     AdminPermissionsService,
+    AdminAnalyticsService,
+    AdminHealthService,
     PermissionGuard,
+    EncryptionUtil,
   ],
+  exports: [AdminHealthService],
 })
 export class AdminModule {}

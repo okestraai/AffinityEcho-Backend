@@ -54,6 +54,8 @@ import {
 } from './dto/admin-moderation-query.dto';
 import { AdminForumQueryDto } from './dto/admin-forum-query.dto';
 import { AdminLogQueryDto } from './dto/admin-log-query.dto';
+import { AdminAnalyticsService } from './services/admin-analytics.service';
+import { AdminHealthService } from './services/admin-health.service';
 import { Response } from 'express';
 
 function ip(req: any): string | undefined {
@@ -78,6 +80,8 @@ export class AdminController {
     private logs: AdminLogsService,
     private settings: AdminSettingsService,
     private permissions: AdminPermissionsService,
+    private analytics: AdminAnalyticsService,
+    private health: AdminHealthService,
   ) {}
 
   // ─── 1. STATIC ROUTES FIRST ─────────────────────────────────────────────────
@@ -2049,5 +2053,108 @@ export class AdminController {
   })
   getLogs(@Query() query: AdminLogQueryDto) {
     return this.logs.getLogs(query);
+  }
+
+  // ─── ANALYTICS ──────────────────────────────────────────────────────────────
+
+  @Get('analytics')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('analytics:view')
+  @ApiOperation({
+    summary:
+      'Full analytics dashboard — signups, engagement, retention, moderation',
+  })
+  @ApiResponse({ status: 200, description: 'Analytics data returned' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires analytics:view permission',
+  })
+  getAnalytics() {
+    return this.analytics.getAnalytics();
+  }
+
+  @Get('analytics/funnel')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('analytics:view')
+  @ApiOperation({ summary: 'User funnel — signup to engagement milestones' })
+  @ApiResponse({ status: 200, description: 'Funnel data returned' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires analytics:view permission',
+  })
+  getFunnel() {
+    return this.analytics.getFunnel();
+  }
+
+  @Get('analytics/growth')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('analytics:view')
+  @ApiOperation({ summary: 'Growth charts — 30/60/90 day trends' })
+  @ApiQuery({
+    name: 'period',
+    required: false,
+    enum: ['30', '60', '90'],
+    description: 'Chart period in days',
+  })
+  @ApiResponse({ status: 200, description: 'Growth data returned' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires analytics:view permission',
+  })
+  getGrowth(@Query('period') period?: '30' | '60' | '90') {
+    return this.analytics.getGrowth(period || '30');
+  }
+
+  @Get('analytics/top-content')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('analytics:view')
+  @ApiOperation({
+    summary:
+      'Top content — most liked posts, most discussed topics, power users',
+  })
+  @ApiResponse({ status: 200, description: 'Top content data returned' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires analytics:view permission',
+  })
+  getTopContent() {
+    return this.analytics.getTopContent();
+  }
+
+  // ─── HEALTH MONITORING ──────────────────────────────────────────────────────
+
+  @Get('health')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('health:view')
+  @ApiOperation({
+    summary:
+      'Live module health check — database, auth, feeds, messaging, etc. Shows resolution steps for down modules.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Health status returned with resolution guidance for any down modules',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires health:view permission',
+  })
+  getHealth() {
+    return this.health.getHealth();
+  }
+
+  @Get('health/history')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('health:view')
+  @ApiOperation({
+    summary: 'Health check history — last 24 hours with uptime percentages',
+  })
+  @ApiResponse({ status: 200, description: 'Health history returned' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires health:view permission',
+  })
+  getHealthHistory() {
+    return this.health.getHistory();
   }
 }
