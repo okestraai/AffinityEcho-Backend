@@ -372,7 +372,7 @@ export class ConversationsService {
 
       // Fetch last messages for ALL conversations in one query using DISTINCT ON
       // Supabase doesn't support DISTINCT ON, so we fetch recent messages and deduplicate
-      const [lastMessagesResult, unreadCountsResult] = await Promise.all([
+      const [lastMessagesResult] = await Promise.all([
         this.admin
           .from('messages')
           .select(
@@ -380,12 +380,6 @@ export class ConversationsService {
           )
           .in('conversation_id', conversationIds)
           .order('created_at', { ascending: false }),
-        this.admin
-          .from('messages')
-          .select('conversation_id', { count: 'exact' })
-          .in('conversation_id', conversationIds)
-          .eq('is_read', false)
-          .not('sender_id', 'eq', userId),
       ]);
 
       // Build last-message map (keep only the most recent per conversation)

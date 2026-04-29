@@ -149,23 +149,17 @@ describe('ConversationsService', () => {
         data: otherUsers,
         error: null,
       });
-      // 3. Promise.all: lastMessages query
+      // 3. lastMessages query
       const lastMsgChain = createMockQueryChain({
         data: lastMessages,
         error: null,
       });
-      // 4. Promise.all: unread counts query
-      const unreadCountsChain = createMockQueryChain({
-        data: null,
-        error: null,
-        count: 2,
-      });
-      // 5. unread messages re-query
+      // 4. unread messages query (per-conversation counting)
       const unreadMsgChain = createMockQueryChain({
         data: unreadMessages,
         error: null,
       });
-      // 6. count query for pagination
+      // 5. count query for pagination
       const countChain = createMockQueryChain({
         data: null,
         error: null,
@@ -176,8 +170,7 @@ describe('ConversationsService', () => {
         .mockReturnValueOnce(convsChain) // conversations
         .mockReturnValueOnce(usersChain) // user_profiles
         .mockReturnValueOnce(lastMsgChain) // messages (last messages)
-        .mockReturnValueOnce(unreadCountsChain) // messages (unread counts)
-        .mockReturnValueOnce(unreadMsgChain) // messages (unread re-query)
+        .mockReturnValueOnce(unreadMsgChain) // messages (unread per-conv)
         .mockReturnValueOnce(countChain); // conversations (count)
 
       const result = await service.getConversations(userId, {
@@ -305,11 +298,6 @@ describe('ConversationsService', () => {
         error: null,
       });
       const lastMsgChain = createMockQueryChain({ data: [], error: null });
-      const unreadCountsChain = createMockQueryChain({
-        data: null,
-        error: null,
-        count: 0,
-      });
       const unreadMsgChain = createMockQueryChain({ data: [], error: null });
       const mentorshipChain = createMockQueryChain({
         data: mentorshipRelationships,
@@ -325,7 +313,6 @@ describe('ConversationsService', () => {
         .mockReturnValueOnce(convsChain)
         .mockReturnValueOnce(usersChain)
         .mockReturnValueOnce(lastMsgChain)
-        .mockReturnValueOnce(unreadCountsChain)
         .mockReturnValueOnce(unreadMsgChain)
         .mockReturnValueOnce(mentorshipChain)
         .mockReturnValueOnce(countChain);

@@ -210,7 +210,7 @@ export class MessagingService {
 
       // Mark all unread messages sent by the other user up to (and including) this message as read
       const now = new Date().toISOString();
-      const { error } = await this.admin
+      const { error, count } = await this.admin
         .from('messages')
         .update({ is_read: true, read_at: now })
         .eq('conversation_id', conversationId)
@@ -220,12 +220,22 @@ export class MessagingService {
 
       if (error) throw error;
 
+      // Return remaining unread count for this conversation
+      const { count: remainingUnread } = await this.admin
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+        .eq('is_read', false)
+        .neq('sender_id', userId);
+
       return {
         success: true,
         data: {
           message_id: messageId,
           conversation_id: conversationId,
           read_at: now,
+          marked_count: count ?? 0,
+          unread_count: remainingUnread ?? 0,
         },
       };
     } catch (error) {
