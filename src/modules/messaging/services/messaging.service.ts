@@ -111,7 +111,10 @@ export class MessagingService {
         .eq('id', userId)
         .single();
 
-      const senderName = await this.identityReveal.resolveNotificationName(userId, recipientId);
+      const senderName = await this.identityReveal.resolveNotificationName(
+        userId,
+        recipientId,
+      );
 
       // Notify recipient of new message
       try {
@@ -233,7 +236,14 @@ export class MessagingService {
       }
       const errObj = error as any;
       const errMsg = errObj?.message || JSON.stringify(error);
-      logger.error('Failed to mark message as read', { error: errMsg, code: errObj?.code, hint: errObj?.hint, userId, messageId, conversationId });
+      logger.error('Failed to mark message as read', {
+        error: errMsg,
+        code: errObj?.code,
+        hint: errObj?.hint,
+        userId,
+        messageId,
+        conversationId,
+      });
       throw new BadRequestException('Failed to mark message as read');
     }
   }

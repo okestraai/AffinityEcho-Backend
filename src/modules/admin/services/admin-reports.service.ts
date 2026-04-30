@@ -39,9 +39,8 @@ export class AdminReportsService {
     let q = this.admin.from('harassment_reports').select(
       `id, reference_number, incident_type, status, immediate_risk, description,
          created_at, updated_at, assigned_to, reported_user_id, location, witnesses, evidence,
-         reporter:user_profiles!reporter_id(id, username, avatar, email),
-         assigned_admin:user_profiles!assigned_to(id, username, avatar),
-         reported_user:user_profiles!reported_user_id(id, username, avatar, email)`,
+         reporter:user_profiles!harassment_reports_reporter_id_fkey(id, username, avatar, email),
+         reported_user:user_profiles!harassment_reports_reported_user_id_fkey(id, username, avatar, email)`,
       { count: 'exact' },
     );
 
@@ -136,6 +135,12 @@ export class AdminReportsService {
       }
     }
 
+    // Batch-fetch assigned admin usernames
+    const assignedIds = (data ?? [])
+      .map((r: any) => r.assigned_to)
+      .filter((id: string | null) => id != null);
+    const assignedMap = await this.fetchUsernames(assignedIds);
+
     const items = (data ?? []).map((r: any) => {
       // Determine priority
       let priority = 'low';
@@ -149,6 +154,12 @@ export class AdminReportsService {
 
       return {
         ...r,
+        assigned_admin: r.assigned_to
+          ? {
+              id: r.assigned_to,
+              username: assignedMap.get(r.assigned_to) || 'Unknown',
+            }
+          : null,
         priority,
         preview: r.description ? r.description.slice(0, 200) : null,
       };
@@ -178,6 +189,12 @@ export class AdminReportsService {
     const { data, error } = await q;
     if (error) throw new BadRequestException(error.message);
 
+    // Batch-fetch assigned admin usernames for export
+    const assignedIds = (data ?? [])
+      .map((r: any) => r.assigned_to)
+      .filter((id: string | null) => id != null);
+    const assignedMap = await this.fetchUsernames(assignedIds);
+
     const reports = (data ?? []).map((r: any) => {
       let priority = 'low';
       if (r.immediate_risk) {
@@ -193,7 +210,9 @@ export class AdminReportsService {
         priority,
         reporter_name: r.reporter?.username || 'Anonymous',
         reporter_email: r.reporter?.email || 'N/A',
-        assigned_to_name: r.assigned_admin?.username || 'Unassigned',
+        assigned_to_name: r.assigned_to
+          ? assignedMap.get(r.assigned_to) || 'Unknown'
+          : 'Unassigned',
         reported_user_name: r.reported_user?.username || 'Unknown',
       };
     });
@@ -542,9 +561,8 @@ export class AdminReportsService {
       .select(
         `
       *,
-      reporter:user_profiles!reporter_id(id, username, avatar, email),
-      assigned_admin:user_profiles!assigned_to(id, username, avatar),
-      reported_user:user_profiles!reported_user_id(id, username, avatar, email, role)
+      reporter:user_profiles!harassment_reports_reporter_id_fkey(id, username, avatar, email),
+      reported_user:user_profiles!harassment_reports_reported_user_id_fkey(id, username, avatar, email, role)
     `,
       )
       .eq('id', reportId)
@@ -570,10 +588,22 @@ export class AdminReportsService {
       .eq('report_id', reportId)
       .order('created_at', { ascending: true });
 
+    // Fetch assigned admin separately to avoid Supabase FK alias issue
+    let assignedAdmin = null;
+    if (report.assigned_to) {
+      const { data: admin } = await this.admin
+        .from('user_profiles')
+        .select('id, username, avatar')
+        .eq('id', report.assigned_to)
+        .single();
+      assignedAdmin = admin;
+    }
+
     return {
       success: true,
       data: {
         ...report,
+        assigned_admin: assignedAdmin,
         priority,
         timeline: timeline ?? [],
       },
@@ -773,5 +803,17 @@ export class AdminReportsService {
         assigned_admin: { id: adminId, username: adminUsername },
       },
     };
+  }
+
+  private async fetchUsernames(ids: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (ids.length === 0) return map;
+    const unique = [...new Set(ids)];
+    const { data } = await this.admin
+      .from('user_profiles')
+      .select('id, username')
+      .in('id', unique);
+    (data || []).forEach((u: any) => map.set(u.id, u.username));
+    return map;
   }
 }
