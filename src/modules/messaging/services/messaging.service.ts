@@ -196,27 +196,14 @@ export class MessagingService {
         throw new ForbiddenException('Not authorized');
       }
 
-      // Get the timestamp of the anchor message to mark up to
-      const { data: anchorMessage } = await this.admin
-        .from('messages')
-        .select('created_at')
-        .eq('id', messageId)
-        .eq('conversation_id', conversationId)
-        .single();
-
-      if (!anchorMessage) {
-        throw new NotFoundException('Message not found');
-      }
-
-      // Mark all unread messages sent by the other user up to (and including) this message as read
+      // Mark all unread messages in this conversation (sent by the other user) as read
       const now = new Date().toISOString();
-      const { error, count } = await this.admin
+      const { error } = await this.admin
         .from('messages')
         .update({ is_read: true, read_at: now })
         .eq('conversation_id', conversationId)
         .eq('is_read', false)
-        .neq('sender_id', userId)
-        .lte('created_at', anchorMessage.created_at);
+        .neq('sender_id', userId);
 
       if (error) throw error;
 
@@ -234,7 +221,6 @@ export class MessagingService {
           message_id: messageId,
           conversation_id: conversationId,
           read_at: now,
-          marked_count: count ?? 0,
           unread_count: remainingUnread ?? 0,
         },
       };
@@ -245,7 +231,9 @@ export class MessagingService {
       ) {
         throw error;
       }
-      logger.error('Failed to mark message as read', { error, userId });
+      const errObj = error as any;
+      const errMsg = errObj?.message || JSON.stringify(error);
+      logger.error('Failed to mark message as read', { error: errMsg, code: errObj?.code, hint: errObj?.hint, userId, messageId, conversationId });
       throw new BadRequestException('Failed to mark message as read');
     }
   }
