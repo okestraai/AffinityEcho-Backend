@@ -43,13 +43,15 @@ export class OkestraService {
       this.redis.get<CachedInsights>(cacheKey),
     ]);
 
+    console.error(`[OKESTRA-SVC] hash=${currentHash}, cached=${!!cached}, cachedHash=${cached?.contentHash}, match=${cached?.contentHash === currentHash}`);
+
     if (cached && currentHash && cached.contentHash === currentHash) {
-      this.logger.debug(`Cache HIT for ${contentType}:${contentId}`);
+      console.error(`[OKESTRA-SVC] Cache HIT — returning cached insights`);
       return { insights: cached.insights, status: 'cached', cached: true };
     }
 
     if (cached && currentHash && cached.contentHash !== currentHash) {
-      this.logger.debug(`Cache STALE for ${contentType}:${contentId}`);
+      console.error(`[OKESTRA-SVC] Cache STALE — returning stale + enqueue`);
       this.enqueueGeneration(contentType, contentId, currentHash).catch(
         () => {},
       );
@@ -61,9 +63,7 @@ export class OkestraService {
     }
 
     // Cache MISS — generate inline, pass hash to avoid recomputing
-    this.logger.debug(
-      `Cache MISS for ${contentType}:${contentId}, generating inline`,
-    );
+    console.error(`[OKESTRA-SVC] Cache MISS — generating inline`);
     const insights = await this.generateInline(
       contentType,
       contentId,

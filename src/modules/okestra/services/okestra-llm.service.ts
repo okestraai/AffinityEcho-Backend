@@ -20,7 +20,9 @@ Affinity Echo serves professionals facing underrepresentation, bias, limited net
 
 ## TASK
 
-Analyze the thread and generate: (1) concise summary, (2) key themes from discussion content, (3) consensus and disagreements, (4) unresolved open questions, (5) actionable suggestions tailored to userType.
+Analyze the FULL thread content—the topic/nook post AND all comments/messages—then generate: (1) concise summary of what is being discussed, (2) key themes extracted from the actual content, (3) consensus and disagreements among participants, (4) unresolved open questions, (5) actionable suggestions tailored to userType.
+
+CRITICAL: Always base your analysis on the topic content and comments provided in the thread. The threadEngagement object gives you aggregate stats. Even if the requesting user has not personally commented, you MUST still fully analyze the post and all comments to produce meaningful insights. Never respond with generic messages about user participation—always analyze the actual discussion content.
 
 ## KEY THEMES
 
@@ -124,7 +126,7 @@ export class OkestraLlmService {
       userId || 'anonymous',
     );
 
-    this.logger.log(
+    console.error('[OKESTRA]',
       `Generating insights for ${contentType}:${contentId} — ` +
         `topic="${topic.title}", comments=${comments.length}, ` +
         `userType=${threadPayload.userContext.userType}`,
@@ -172,7 +174,7 @@ export class OkestraLlmService {
     try {
       return this.parseJsonResponse(data.choices[0].message.content);
     } catch {
-      this.logger.warn('Failed to parse LLM response, returning fallback');
+      console.error('[OKESTRA]','Failed to parse LLM response, returning fallback');
       return this.getFallbackResponse();
     }
   }
@@ -187,33 +189,27 @@ export class OkestraLlmService {
   private async fetchTopicData(topicId: string) {
     const { data: topicData, error: topicError } = await this.admin
       .from('forum_topics')
-      .select(
-        'id, title, content, tags, user_id, is_anonymous, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, comments_count, user_profiles(username)',
-      )
+      .select('id, title, content, tags, user_id, is_anonymous, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, comments_count')
       .eq('id', topicId)
       .single();
 
     if (topicError) {
-      this.logger.error(
-        `Failed to fetch topic ${topicId}: ${topicError.message}`,
-      );
+      console.error(`[OKESTRA] Topic fetch error: ${topicError.message}`);
     }
 
     const { data: commentsData, error: commentsError } = await this.admin
       .from('forum_comments')
-      .select(
-        'id, content, user_id, helpful_count, supportive_count, user_profiles(username)',
-      )
+      .select('id, content, user_id, helpful_count, supportive_count')
       .eq('topic_id', topicId)
       .eq('is_removed', false)
       .order('created_at', { ascending: true })
       .limit(100);
 
     if (commentsError) {
-      this.logger.error(
-        `Failed to fetch comments for topic ${topicId}: ${commentsError.message}`,
-      );
+      console.error(`[OKESTRA] Comments fetch error: ${commentsError.message}`);
     }
+
+    console.error(`[OKESTRA] Topic="${topicData?.title?.slice(0, 50)}", comments=${commentsData?.length ?? 0}`);
 
     const topic = {
       title: topicData?.title || '',
@@ -231,10 +227,6 @@ export class OkestraLlmService {
       authorUsername: c.user_profiles?.username || 'Anonymous',
       reactions: (c.helpful_count || 0) + (c.supportive_count || 0),
     }));
-
-    this.logger.debug(
-      `Fetched topic "${topic.title}" with ${comments.length} comments`,
-    );
 
     return { topic, comments };
   }
@@ -267,6 +259,10 @@ export class OkestraLlmService {
         `Failed to fetch messages for nook ${nookId}: ${messagesError.message}`,
       );
     }
+
+    console.error('[OKESTRA]',
+      `Nook fetch: id=${nookId}, found=${!!nookData}, title="${nookData?.title?.slice(0, 50)}", messages=${messagesData?.length ?? 0}`,
+    );
 
     const topic = {
       title: nookData?.title || '',
@@ -357,6 +353,15 @@ export class OkestraLlmService {
       };
     }
 
+    // Thread-level engagement summary so the LLM always has content context
+    const totalReactions = comments.reduce((sum, c) => sum + c.reactions, 0);
+    const threadEngagement = {
+      totalComments: comments.length,
+      totalReactions,
+      hasActiveDiscussion: comments.length >= 2,
+      questionsAsked: comments.filter((c) => c.content.includes('?')).length,
+    };
+
     return {
       userContext,
       topic: {
@@ -369,6 +374,7 @@ export class OkestraLlmService {
         tags: topic.tags,
         commentCount: comments.length,
       },
+      threadEngagement,
       thread: {
         comments: commentsPayload,
       },

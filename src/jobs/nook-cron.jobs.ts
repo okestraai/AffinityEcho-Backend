@@ -50,6 +50,44 @@ export class NookCronJobs implements OnModuleInit {
     }
   }
 
+  /**
+   * Renew nooks that are about to expire (within 30 minutes) and still have
+   * active engagement (messages in the last 12 hours). This keeps seeded and
+   * active nooks alive so they don't silently disappear.
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async renewExpiringNooks() {
+    const now = new Date();
+    const soonThreshold = new Date(now.getTime() + 30 * 60 * 1000); // 30 min from now
+    const newExpiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h from now
+
+    const { data: expiringNooks, error } = await this.admin
+      .from('nooks')
+      .select('id')
+      .eq('is_active', true)
+      .gt('expires_at', now.toISOString())
+      .lt('expires_at', soonThreshold.toISOString());
+
+    if (error) {
+      logger.error('Error fetching expiring nooks', { module: 'NookCron', error: error.message });
+      return;
+    }
+
+    if (expiringNooks && expiringNooks.length > 0) {
+      const ids = expiringNooks.map((n: any) => n.id);
+      const { error: updateError } = await this.admin
+        .from('nooks')
+        .update({ expires_at: newExpiresAt.toISOString() })
+        .in('id', ids);
+
+      if (updateError) {
+        logger.error('Error renewing nooks', { module: 'NookCron', error: updateError.message });
+      } else {
+        logger.info(`Renewed ${expiringNooks.length} expiring nooks for another 24h`, { module: 'NookCron' });
+      }
+    }
+  }
+
   @Cron('0 */15 * * * *')
   async updateAllNookTemperatures() {
     const now = new Date().toISOString();
