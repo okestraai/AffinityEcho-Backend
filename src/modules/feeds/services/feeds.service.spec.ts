@@ -73,12 +73,18 @@ describe('FeedsService', () => {
       getOrSet: jest.fn(),
     };
 
+    const mockContentSafety = {
+      getBlockedUserIds: jest.fn().mockResolvedValue([]),
+      getHiddenContentIds: jest.fn().mockResolvedValue([]),
+    };
+
     service = new FeedsService(
       mockConfig,
       mockFeedRanking,
       mockEncryption,
       mockIdentityReveal,
       mockRedis,
+      mockContentSafety as any,
     );
   });
 

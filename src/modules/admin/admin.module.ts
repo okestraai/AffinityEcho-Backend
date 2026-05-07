@@ -13,6 +13,7 @@ import { AdminSettingsService } from './services/admin-settings.service';
 import { AdminPermissionsService } from './services/admin-permissions.service';
 import { AdminAnalyticsService } from './services/admin-analytics.service';
 import { AdminHealthService } from './services/admin-health.service';
+import { ContentSafetyService } from '../content-safety/content-safety.service';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 
@@ -32,6 +33,7 @@ import { EncryptionUtil } from '../../common/utils/encryption.util';
     AdminPermissionsService,
     AdminAnalyticsService,
     AdminHealthService,
+    ContentSafetyService,
     PermissionGuard,
     EncryptionUtil,
   ],

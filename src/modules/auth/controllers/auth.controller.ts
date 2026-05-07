@@ -448,7 +448,7 @@ export class AuthController {
         currentData: {
           careerLevel: 'Mid-level',
           company: 'Tech Corp',
-          affinityTags: ['black-women-tech', 'women-leadership'],
+          affinityTags: ['black-professionals', 'women-leadership'],
           isWillingToMentor: true,
           race: 'Black/African American',
           gender: 'Woman',

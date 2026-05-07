@@ -518,6 +518,7 @@ import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MentionService } from '../../mentions/mention.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { MSG } from '../../../common/constants/messages';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 
 interface UserReactionMap {
   [commentId: string]: { helpful: boolean; supportive: boolean };
@@ -534,6 +535,7 @@ export class CommentService {
     private identityReveal: IdentityRevealUtil,
     private mentionService: MentionService,
     private okestraService: OkestraService,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -770,16 +772,30 @@ export class CommentService {
       throw new BadRequestException(MSG.FORUM.FETCH_COMMENTS_FAILED);
     }
 
+    // Filter out blocked users' comments and user-hidden comments
+    let filteredComments = allComments;
+    if (userId) {
+      const [blockedIds, hiddenIds] = await Promise.all([
+        this.contentSafety.getBlockedUserIds(userId),
+        this.contentSafety.getHiddenContentIds(userId, 'comment'),
+      ]);
+      const blockedSet = new Set(blockedIds);
+      const hiddenSet = new Set(hiddenIds);
+      filteredComments = allComments.filter(
+        (c: any) => !blockedSet.has(c.user_id) && !hiddenSet.has(c.id),
+      );
+    }
+
     // User reactions (single query)
     const userReactions: UserReactionMap = {};
-    if (userId && allComments.length > 0) {
+    if (userId && filteredComments.length > 0) {
       const { data: reactions } = await this.admin
         .from('comment_reactions')
         .select('comment_id, reaction_type')
         .eq('user_id', userId)
         .in(
           'comment_id',
-          allComments.map((c: any) => c.id),
+          filteredComments.map((c: any) => c.id),
         );
 
       (reactions || []).forEach((r: any) => {
@@ -797,7 +813,7 @@ export class CommentService {
     const commentMap = new Map<string, any>();
     const rootComments: any[] = [];
 
-    allComments.forEach((comment: any) => {
+    filteredComments.forEach((comment: any) => {
       const enriched = {
         ...comment,
         replies: [],
@@ -810,7 +826,7 @@ export class CommentService {
       if (!comment.parent_comment_id) rootComments.push(enriched);
     });
 
-    allComments.forEach((comment: any) => {
+    filteredComments.forEach((comment: any) => {
       if (comment.parent_comment_id) {
         const parent = commentMap.get(comment.parent_comment_id);
         if (parent) parent.replies.push(commentMap.get(comment.id));

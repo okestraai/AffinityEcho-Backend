@@ -58,12 +58,18 @@ describe('NookMessagesService', () => {
       invalidateCache: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockContentSafety = {
+      getBlockedUserIds: jest.fn().mockResolvedValue([]),
+      getHiddenContentIds: jest.fn().mockResolvedValue([]),
+    };
+
     service = new NookMessagesService(
       mockConfigService,
       mockIdentityReveal,
       mockMentionService,
       mockNotificationsService,
       mockOkestraService as any,
+      mockContentSafety as any,
     );
   });
 

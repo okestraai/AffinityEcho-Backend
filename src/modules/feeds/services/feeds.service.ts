@@ -13,6 +13,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { RedisService } from '../../../common/services/redis.service';
 import { MSG } from '../../../common/constants/messages';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 
 interface FeedItem {
   id: string;
@@ -49,6 +50,7 @@ export class FeedsService {
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
     private redis: RedisService,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -215,7 +217,34 @@ export class FeedsService {
           this.getUserContentTypePreference(userId),
         ]);
 
-        const feedItems: FeedItem[] = contentResults.flat();
+        let feedItems: FeedItem[] = contentResults.flat();
+
+        // Filter out blocked users' content and user-hidden content
+        const [blockedIds, hiddenPostIds, hiddenTopicIds, hiddenNookIds] =
+          await Promise.all([
+            this.contentSafety.getBlockedUserIds(userId),
+            this.contentSafety.getHiddenContentIds(userId, 'post'),
+            this.contentSafety.getHiddenContentIds(userId, 'topic'),
+            this.contentSafety.getHiddenContentIds(userId, 'nook'),
+          ]);
+
+        if (blockedIds.length > 0) {
+          const blockedSet = new Set(blockedIds);
+          feedItems = feedItems.filter(
+            (item) => !blockedSet.has(item.user_id),
+          );
+        }
+
+        const hiddenSet = new Set([
+          ...hiddenPostIds,
+          ...hiddenTopicIds,
+          ...hiddenNookIds,
+        ]);
+        if (hiddenSet.size > 0) {
+          feedItems = feedItems.filter(
+            (item) => !hiddenSet.has(item.content_id),
+          );
+        }
 
         const context: RankingContext = {
           userId,

@@ -2,6 +2,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import logger from '../../../common/utils/logger.util';
 import { MSG } from '../../../common/constants/messages';
 
@@ -9,7 +10,10 @@ import { MSG } from '../../../common/constants/messages';
 export class UserDiscoveryService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private encryption: EncryptionUtil,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -163,8 +167,24 @@ export class UserDiscoveryService {
       const { data: users, error } = await query;
       if (error) throw error;
 
+      // Get blocked user IDs (bidirectional)
+      const { data: blocks } = await this.admin
+        .from('user_blocks')
+        .select('blocker_id, blocked_id')
+        .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
+      const blockedIds = new Set<string>();
+      (blocks || []).forEach((b: any) => {
+        if (b.blocker_id === userId) blockedIds.add(b.blocked_id);
+        if (b.blocked_id === userId) blockedIds.add(b.blocker_id);
+      });
+
+      // Filter out blocked users
+      let filteredUsers = (users || []).filter(
+        (u: any) => !blockedIds.has(u.id),
+      );
+
       // If excluding existing conversations, filter them out
-      let filteredUsers = users;
       if (exclude_existing) {
         // Get all existing conversations for this user
         const { data: existingConversations, error: convError } =
@@ -181,7 +201,7 @@ export class UserDiscoveryService {
             if (conv.user2_id !== userId) existingUserIds.add(conv.user2_id);
           });
 
-          filteredUsers = users.filter(
+          filteredUsers = filteredUsers.filter(
             (user: any) => !existingUserIds.has(user.id),
           );
         }
@@ -200,11 +220,29 @@ export class UserDiscoveryService {
           // Get common skills (if needed)
           const commonSkills = user.skills || [];
 
+          // Decrypt encrypted fields
+          let company = null;
+          let careerLevel = null;
+          try {
+            if (user.company_encrypted)
+              company = this.encryption.decrypt(user.company_encrypted);
+            if (user.career_level_encrypted)
+              careerLevel = this.encryption.decrypt(
+                user.career_level_encrypted,
+              );
+          } catch {
+            // ignore decryption errors
+          }
+
+          const { company_encrypted, career_level_encrypted, ...rest } = user;
+
           return {
-            ...user,
+            ...rest,
+            company,
+            career_level: careerLevel,
             mutual_connections: mutualConnections || 0,
             common_skills: commonSkills,
-            can_message: true, // All public profiles can be messaged
+            can_message: true,
           };
         }),
       );

@@ -8,6 +8,7 @@ import { FeedRankingService } from './services/feed-ranking.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
+import { ContentSafetyModule } from '../content-safety/content-safety.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { MentionsModule } from '../mentions/mentions.module';
     NotificationsModule,
     EncryptionModule,
     MentionsModule,
+    ContentSafetyModule,
   ],
   controllers: [FeedsController],
   providers: [

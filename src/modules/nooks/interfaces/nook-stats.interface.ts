@@ -1,9 +1,11 @@
 export interface NookStats {
   activeNooks: number;
-  anonymousUsers: number;
+  inANookNow: number;
+  allTimeNooksCreated: number;
+  allTimeNookInteractions: number;
   messagesToday: number;
-  totalNooks: number;
   hotNooks: number;
+  totalMessageParticipants: number;
 }
 
 export interface NookStatsResponse {

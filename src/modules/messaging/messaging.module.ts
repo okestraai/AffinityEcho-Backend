@@ -23,6 +23,7 @@ import { MentorshipChatGuard } from './guards/mentorship-chat.guard';
 
 // Common Utils
 import { EmailService } from '../../common/utils/email/email.service';
+import { ContentSafetyService } from '../content-safety/content-safety.service';
 import { UserDiscoveryService } from './services/user-discovery.service';
 import { UserDiscoveryController } from './controllers/user-discovery.controller';
 
@@ -55,6 +56,7 @@ import { UserDiscoveryController } from './controllers/user-discovery.controller
 
     // Utils
     EmailService,
+    ContentSafetyService,
   ],
   exports: [
     MessagingService,

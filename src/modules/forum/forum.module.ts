@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
 import { OkestraModule } from '../okestra/okestra.module';
+import { ContentSafetyModule } from '../content-safety/content-safety.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { OkestraModule } from '../okestra/okestra.module';
     EncryptionModule,
     MentionsModule,
     OkestraModule,
+    ContentSafetyModule,
   ],
   controllers: [ForumController],
   providers: [ForumService, TopicService, CommentService],

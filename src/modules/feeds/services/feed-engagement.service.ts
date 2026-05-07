@@ -13,6 +13,7 @@ import { RedisService } from '../../../common/services/redis.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MSG } from '../../../common/constants/messages';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 
 type ContentType = 'post' | 'topic' | 'nook_message';
 
@@ -26,6 +27,7 @@ export class FeedEngagementService {
     private redis: RedisService,
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -307,7 +309,20 @@ export class FeedEngagementService {
         throw new BadRequestException(MSG.FEED.COMMENTS_FAILED);
       }
 
-      const comments = allComments || [];
+      let comments = allComments || [];
+
+      // Filter out blocked users' comments and user-hidden comments
+      const [blockedIds, hiddenIds] = await Promise.all([
+        this.contentSafety.getBlockedUserIds(userId),
+        this.contentSafety.getHiddenContentIds(userId, 'comment'),
+      ]);
+      if (blockedIds.length > 0 || hiddenIds.length > 0) {
+        const blockedSet = new Set(blockedIds);
+        const hiddenSet = new Set(hiddenIds);
+        comments = comments.filter(
+          (c: any) => !blockedSet.has(c.user_id) && !hiddenSet.has(c.id),
+        );
+      }
 
       // Step 4: Apply identity reveal to all comment authors
       const authorIds = comments

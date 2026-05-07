@@ -224,6 +224,10 @@ export class AuthService {
             emailLower,
             dto.avatar,
             passwordHash,
+            'email',
+            undefined,
+            undefined,
+            dto.termsAccepted,
           ),
           this.emailService.sendOtpEmail(dto.email, otp, dto.username),
         ]);
@@ -1443,6 +1447,7 @@ export class AuthService {
     authProvider: string = 'email',
     googleId?: string,
     appleId?: string,
+    termsAccepted?: boolean,
   ): Promise<boolean> {
     logger.info('Creating user profile', { userId, username });
 
@@ -1463,6 +1468,8 @@ export class AuthService {
       career_level_encrypted: null,
       company_encrypted: null,
       affinity_tags_encrypted: null,
+      terms_accepted: termsAccepted || false,
+      terms_accepted_at: termsAccepted ? new Date().toISOString() : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       last_active_at: new Date().toISOString(),

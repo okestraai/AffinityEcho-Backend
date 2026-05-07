@@ -558,7 +558,7 @@ export class MentorshipDiscoverService {
             'E-commerce',
           ],
           affinityTags: [
-            'Black Women in Tech',
+            'Black Professionals',
             'Latino Leaders',
             'Women in Leadership',
             'LGBTQ+ in Finance',

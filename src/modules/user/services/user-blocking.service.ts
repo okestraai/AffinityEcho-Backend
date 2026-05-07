@@ -87,7 +87,7 @@ export class UserBlockingService {
 
       return {
         success: true,
-        message: `${blockedUser.username} has been blocked`,
+        message: MSG.USER.BLOCKED,
       };
     } catch (error) {
       if (
@@ -155,46 +155,49 @@ export class UserBlockingService {
     const offset = (page - 1) * limit;
 
     try {
+      // Fetch blocks
       const {
         data: blocks,
         error,
         count,
       } = await this.admin
         .from('user_blocks')
-        .select(
-          `
-          id,
-          blocked_id,
-          reason,
-          created_at,
-          blocked_user:blocked_id(
-            id,
-            username,
-            avatar,
-            bio
-          )
-        `,
-          { count: 'exact' },
-        )
+        .select('id, blocked_id, reason, created_at', { count: 'exact' })
         .eq('blocker_id', userId)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (error) {
+        logger.error('Failed to fetch blocked users', { error: error.message });
         throw new BadRequestException(MSG.USER.BLOCK_STATUS_FAILED);
       }
 
-      const formattedBlocks = (blocks || []).map((block: any) => ({
-        id: block.id,
-        blockedAt: block.created_at,
-        reason: block.reason,
-        user: {
-          id: block.blocked_user?.id,
-          username: block.blocked_user?.username,
-          avatar: block.blocked_user?.avatar,
-          bio: block.blocked_user?.bio,
-        },
-      }));
+      // Batch fetch blocked user profiles
+      const blockedUserIds = (blocks || []).map((b: any) => b.blocked_id);
+      const userMap: Record<string, any> = {};
+
+      if (blockedUserIds.length > 0) {
+        const { data: users } = await this.admin
+          .from('user_profiles')
+          .select('id, username, avatar, bio')
+          .in('id', blockedUserIds);
+
+        (users || []).forEach((u: any) => {
+          userMap[u.id] = u;
+        });
+      }
+
+      const formattedBlocks = (blocks || []).map((block: any) => {
+        const bu = userMap[block.blocked_id];
+        return {
+          id: block.id,
+          userId: block.blocked_id,
+          username: bu?.username || 'Unknown',
+          display_name: bu?.username || 'Anonymous User',
+          avatar: bu?.avatar || null,
+          blocked_at: block.created_at,
+        };
+      });
 
       return {
         success: true,
@@ -236,12 +239,27 @@ export class UserBlockingService {
     logger.info('Checking block status', { userId, targetUserId });
 
     try {
-      const isBlocked = await this.isBlocked(userId, targetUserId);
+      // Check if current user blocked target
+      const { data: blockedByMe } = await this.admin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', userId)
+        .eq('blocked_id', targetUserId)
+        .maybeSingle();
+
+      // Check if target blocked current user
+      const { data: blockedByThem } = await this.admin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', targetUserId)
+        .eq('blocked_id', userId)
+        .maybeSingle();
 
       return {
         success: true,
         data: {
-          isBlocked,
+          isBlocked: !!blockedByMe,
+          isBlockedBy: !!blockedByThem,
         },
       };
     } catch (error) {

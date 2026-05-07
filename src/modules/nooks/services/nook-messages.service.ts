@@ -14,6 +14,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import logger from '../../../common/utils/logger.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { MSG } from '../../../common/constants/messages';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 
 @Injectable()
 export class NookMessagesService {
@@ -25,6 +26,7 @@ export class NookMessagesService {
     private mentionService: MentionService,
     private notificationsService: NotificationsService,
     private okestraService: OkestraService,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -73,8 +75,20 @@ export class NookMessagesService {
 
     if (error) throw new BadRequestException(error.message);
 
+    // Filter out blocked users' messages and user-hidden messages
+    const [blockedIds, hiddenIds] = await Promise.all([
+      this.contentSafety.getBlockedUserIds(userId),
+      this.contentSafety.getHiddenContentIds(userId, 'nook_message'),
+    ]);
+    const blockedSet = new Set(blockedIds);
+    const hiddenSet = new Set(hiddenIds);
+    const filterMsg = (m: any) =>
+      !blockedSet.has(m.user_id) && !hiddenSet.has(m.id);
+
+    const filteredMessages = (messages || []).filter(filterMsg);
+
     // Fetch ALL replies in this nook (all descendants, not just direct children)
-    const messageIds = (messages || []).map((m: any) => m.id);
+    const messageIds = filteredMessages.map((m: any) => m.id);
     let allReplyMessages: any[] = [];
 
     if (messageIds.length > 0) {
@@ -85,12 +99,12 @@ export class NookMessagesService {
         .not('parent_message_id', 'is', null)
         .order('created_at', { ascending: true });
 
-      allReplyMessages = allReplies || [];
+      allReplyMessages = (allReplies || []).filter(filterMsg);
     }
 
     // Build a map of all messages (top-level + replies) for tree building
     const messageMap = new Map<string, any>();
-    for (const msg of messages || []) {
+    for (const msg of filteredMessages) {
       messageMap.set(msg.id, { ...msg, replies: [] });
     }
     for (const reply of allReplyMessages) {
@@ -99,7 +113,7 @@ export class NookMessagesService {
 
     // Build tree: attach each reply to its parent
     const rootMessages: any[] = [];
-    for (const msg of messages || []) {
+    for (const msg of filteredMessages) {
       rootMessages.push(messageMap.get(msg.id));
     }
     for (const reply of allReplyMessages) {

@@ -31,6 +31,7 @@ import { HealthCronJobs } from './jobs/health-cron.jobs';
 import { AdminHealthService } from './modules/admin/services/admin-health.service';
 import { EmailService } from './common/utils/email/email.service';
 import { OkestraModule } from './modules/okestra/okestra.module';
+import { ContentSafetyModule } from './modules/content-safety/content-safety.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { OkestraModule } from './modules/okestra/okestra.module';
     FeedsModule,
     AdminModule,
     OkestraModule,
+    ContentSafetyModule,
   ],
   controllers: [AppController],
   providers: [

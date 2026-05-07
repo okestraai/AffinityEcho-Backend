@@ -67,7 +67,8 @@ export const MSG = {
     BADGES_FAILED: 'Unable to load your badges, please try again',
     ACTIVITY_FAILED: 'Unable to load activity, please try again',
     CANNOT_BLOCK_SELF: 'You cannot block yourself',
-    ALREADY_BLOCKED: 'You have already blocked this user',
+    ALREADY_BLOCKED:
+      'You have already restricted this user. Go to Settings to manage your restricted list.',
     BLOCK_FAILED: 'Unable to block this user, please try again',
     BLOCK_NOT_FOUND: 'This user is not in your blocked list',
     UNBLOCK_FAILED: 'Unable to unblock this user, please try again',
@@ -92,7 +93,10 @@ export const MSG = {
     ACCOUNT_DELETED: "Your account has been deleted. We're sorry to see you go",
     PROFILE_UPDATED: 'Your profile has been updated',
     PASSWORD_CHANGED: 'Your password has been updated',
-    UNBLOCKED: 'This user has been unblocked',
+    BLOCKED:
+      "User restricted. Their content will be hidden from your feeds and they won't be able to message you.",
+    UNBLOCKED:
+      'User unrestricted. You can now see their content and they can message you again.',
     PRIVACY_UPDATED: 'Your privacy settings have been updated',
     NOTIFICATIONS_UPDATED: 'Your notification settings have been updated',
     PRIVACY_FAILED: 'Unable to update your privacy settings, please try again',
@@ -240,6 +244,8 @@ export const MSG = {
       'Please turn on messages to continue sending and receiving messages',
     CANNOT_MESSAGE:
       'This user has turned off messages, you cannot message them right now',
+    USER_BLOCKED:
+      'This user is not available for messaging. They may have restricted interactions or you may have restricted them.',
     USER_NOT_FOUND: 'This user could not be found',
     CREATE_FAILED: 'Unable to start the conversation, please try again',
     FETCH_FAILED: 'Unable to load your conversations, please try again',

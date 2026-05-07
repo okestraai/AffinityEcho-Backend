@@ -5,6 +5,7 @@ import {
   IsArray,
   IsEnum,
   IsNotEmpty,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -75,10 +76,15 @@ export class OnboardingDataDto {
 
   @ApiPropertyOptional({
     description: 'Affinity groups for community connection',
-    example: ['black-women-tech', 'lgbtq-leaders'],
+    example: ['black-professionals', 'lgbtq-leaders'],
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   affinityTags?: string[];
+
+  @ApiPropertyOptional({ example: true, description: 'User confirmed age 17+' })
+  @IsOptional()
+  @IsBoolean()
+  ageConfirmed?: boolean;
 }

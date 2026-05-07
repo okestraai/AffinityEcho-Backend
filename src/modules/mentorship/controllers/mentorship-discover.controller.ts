@@ -133,7 +133,7 @@ export class MentorshipDiscoverController {
         ],
         industries: ['Technology', 'Finance', 'Healthcare'],
         affinityTags: [
-          'Black Women in Tech',
+          'Black Professionals',
           'Latino in Tech',
           'Women in Leadership',
         ],

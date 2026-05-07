@@ -65,7 +65,7 @@ export class ConversationsService {
         .maybeSingle();
 
       if (block) {
-        throw new ForbiddenException(MSG.MESSAGING.CANNOT_MESSAGE);
+        throw new ForbiddenException(MSG.MESSAGING.USER_BLOCKED);
       }
 
       // Enforce allow_messages_from preference
@@ -316,8 +316,29 @@ export class ConversationsService {
         );
       });
 
+      // Filter out conversations with blocked users (both directions)
+      const { data: blocks } = await this.admin
+        .from('user_blocks')
+        .select('blocker_id, blocked_id')
+        .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
+      const blockedIds = new Set<string>();
+      (blocks || []).forEach((b: any) => {
+        if (b.blocker_id === userId) blockedIds.add(b.blocked_id);
+        if (b.blocked_id === userId) blockedIds.add(b.blocker_id);
+      });
+
+      const unblocked =
+        blockedIds.size > 0
+          ? visibleConversations.filter((conv: any) => {
+              const otherId =
+                conv.user1_id === userId ? conv.user2_id : conv.user1_id;
+              return !blockedIds.has(otherId);
+            })
+          : visibleConversations;
+
       // If no conversations, return empty array
-      if (!visibleConversations || visibleConversations.length === 0) {
+      if (!unblocked || unblocked.length === 0) {
         return {
           success: true,
           data: {
@@ -331,7 +352,7 @@ export class ConversationsService {
       }
 
       // Get all other user IDs first
-      const otherUserIds = visibleConversations.map((conv: any) =>
+      const otherUserIds = unblocked.map((conv: any) =>
         conv.user1_id === userId ? conv.user2_id : conv.user1_id,
       );
 
@@ -368,7 +389,7 @@ export class ConversationsService {
 
       // Batch-fetch last messages, unread counts, and mentorship contexts
       // instead of querying per-conversation in a loop (eliminates 3N queries)
-      const conversationIds = visibleConversations.map((c: any) => c.id);
+      const conversationIds = unblocked.map((c: any) => c.id);
 
       // Fetch last messages for ALL conversations in one query using DISTINCT ON
       // Supabase doesn't support DISTINCT ON, so we fetch recent messages and deduplicate
@@ -409,7 +430,7 @@ export class ConversationsService {
       });
 
       // Batch-fetch mentorship relationships for mentorship conversations
-      const mentorshipConvs = visibleConversations.filter(
+      const mentorshipConvs = unblocked.filter(
         (c: any) => c.context_type === 'mentorship' && c.context_id,
       );
       const mentorshipContextIds = mentorshipConvs.map(
@@ -429,7 +450,7 @@ export class ConversationsService {
       }
 
       // Now build enhanced conversations without any per-conversation queries
-      const enhancedConversations = visibleConversations.map((conv: any) => {
+      const enhancedConversations = unblocked.map((conv: any) => {
         const otherUserId =
           conv.user1_id === userId ? conv.user2_id : conv.user1_id;
 

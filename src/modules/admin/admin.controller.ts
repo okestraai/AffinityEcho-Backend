@@ -56,6 +56,7 @@ import { AdminForumQueryDto } from './dto/admin-forum-query.dto';
 import { AdminLogQueryDto } from './dto/admin-log-query.dto';
 import { AdminAnalyticsService } from './services/admin-analytics.service';
 import { AdminHealthService } from './services/admin-health.service';
+import { ContentSafetyService } from '../content-safety/content-safety.service';
 import { Response } from 'express';
 
 function ip(req: any): string | undefined {
@@ -82,6 +83,7 @@ export class AdminController {
     private permissions: AdminPermissionsService,
     private analytics: AdminAnalyticsService,
     private health: AdminHealthService,
+    private contentSafety: ContentSafetyService,
   ) {}
 
   // ─── 1. STATIC ROUTES FIRST ─────────────────────────────────────────────────
@@ -2156,5 +2158,60 @@ export class AdminController {
   })
   getHealthHistory() {
     return this.health.getHistory();
+  }
+
+  // ─── CONTENT FLAGS ──────────────────────────────────────────────────────────
+
+  @Get('flags')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('moderation:view')
+  @ApiOperation({
+    summary: 'List content flags — user-reported content for review',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['pending', 'reviewed', 'dismissed', 'actioned'],
+  })
+  @ApiQuery({
+    name: 'content_type',
+    required: false,
+    enum: ['post', 'comment', 'topic', 'nook', 'nook_message'],
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getContentFlags(
+    @Query('status') status?: string,
+    @Query('content_type') contentType?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.contentSafety.getFlags({
+      status,
+      contentType,
+      page: page || 1,
+      limit: limit || 20,
+    });
+  }
+
+  @Patch('flags/:flagId')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('moderation:manage')
+  @ApiOperation({ summary: 'Review a content flag — update status' })
+  @ApiParam({ name: 'flagId', description: 'Flag ID to review' })
+  @ApiBody({
+    schema: {
+      properties: {
+        status: { type: 'string', enum: ['reviewed', 'dismissed', 'actioned'] },
+      },
+    },
+  })
+  async reviewFlag(
+    @Req() req: any,
+    @Param('flagId') flagId: string,
+    @Body('status') status: string,
+  ) {
+    const adminId = req.user.sub;
+    return this.contentSafety.reviewFlag(flagId, status, adminId);
   }
 }

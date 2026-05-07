@@ -595,15 +595,21 @@ export class QueryChain {
       valueSets.push(`(${vals.join(', ')})`);
     }
 
-    const conflictCol = this.upsertOpts.onConflict || 'id';
+    const conflictCols = (this.upsertOpts.onConflict || 'id')
+      .split(',')
+      .map((c) => c.trim());
+    const conflictColSet = new Set(conflictCols);
     const updateSet = keys
-      .filter((k) => k !== conflictCol)
+      .filter((k) => !conflictColSet.has(k))
       .map((k) => `${escapeIdentifier(k)} = EXCLUDED.${escapeIdentifier(k)}`)
       .join(', ');
 
-    const conflictAction = this.upsertOpts.ignoreDuplicates
+    const conflictTarget = conflictCols
+      .map((c) => escapeIdentifier(c))
+      .join(', ');
+    const conflictAction = this.upsertOpts.ignoreDuplicates || !updateSet
       ? 'ON CONFLICT DO NOTHING'
-      : `ON CONFLICT (${escapeIdentifier(conflictCol)}) DO UPDATE SET ${updateSet}`;
+      : `ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateSet}`;
 
     const sql = `INSERT INTO ${escapeIdentifier(this.table)} (${colNames}) VALUES ${valueSets.join(', ')} ${conflictAction} RETURNING *`;
     const result = await this.pool.query(sql);

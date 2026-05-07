@@ -1,11 +1,12 @@
 // src/auth/dto/signup.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsString,
   MinLength,
   Matches,
   IsOptional,
+  IsBoolean,
 } from 'class-validator';
 
 export class SignupDto {
@@ -34,4 +35,9 @@ export class SignupDto {
   @IsOptional()
   @IsString()
   avatar?: string;
+
+  @ApiPropertyOptional({ example: true, description: 'User accepted terms' })
+  @IsOptional()
+  @IsBoolean()
+  termsAccepted?: boolean;
 }

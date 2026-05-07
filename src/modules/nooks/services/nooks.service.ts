@@ -301,20 +301,23 @@ export class NooksService {
     // Step 2: Parallel queries - all lightweight
     const [
       activeNooksResult,
-      totalNooksResult,
+      allTimeNooksResult,
       messagesTodayResult,
-      anonymousInActiveResult,
+      inANookNowResult,
       hotNooksResult,
-      messageSendersResult, // only user_id column
+      allTimeMessagesResult,
+      allTimeReactionsResult,
+      allTimeMembersResult,
+      messageSendersResult,
     ] = await Promise.all([
-      // Active Nooks count (head: true = no data returned, only count)
+      // Active Nooks count
       this.admin
         .from('nooks')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true)
         .gt('expires_at', now),
 
-      // Total Nooks count
+      // All Time Nooks Created
       this.admin.from('nooks').select('*', { count: 'exact', head: true }),
 
       // Messages today count
@@ -323,14 +326,13 @@ export class NooksService {
         .select('*', { count: 'exact', head: true })
         .gte('created_at', startOfDay.toISOString()),
 
-      // Anonymous members in active nooks only
+      // In a Nook Now — distinct users in active nooks
       activeNookIds.length > 0
         ? this.admin
             .from('nook_members')
-            .select('id', { count: 'exact', head: true })
-            .eq('is_anonymous', true)
+            .select('user_id')
             .in('nook_id', activeNookIds)
-        : Promise.resolve({ count: 0 }), // ← optimization: skip query if no active nooks
+        : Promise.resolve({ data: [] }),
 
       // Hot Nooks count
       this.admin
@@ -338,14 +340,42 @@ export class NooksService {
         .select('*', { count: 'exact', head: true })
         .eq('temperature', 'hot'),
 
-      // Fetch only user_id column for unique senders (minimal data transfer)
+      // All time nook messages count
       this.admin
         .from('nook_messages')
-        .select('user_id') // ← only one column
+        .select('*', { count: 'exact', head: true }),
+
+      // All time nook reactions count
+      this.admin
+        .from('nook_reactions')
+        .select('*', { count: 'exact', head: true }),
+
+      // All time nook member joins count
+      this.admin
+        .from('nook_members')
+        .select('*', { count: 'exact', head: true }),
+
+      // Unique message senders (for totalMessageParticipants)
+      this.admin
+        .from('nook_messages')
+        .select('user_id')
         .not('user_id', 'is', null),
     ]);
 
-    // Compute unique senders using Set (very fast even with thousands of rows)
+    // Distinct users currently in active nooks
+    const inANookNow = new Set(
+      inANookNowResult?.data?.map(
+        (row: { user_id: string }) => row.user_id,
+      ) || [],
+    ).size;
+
+    // All time interactions = messages + reactions + member joins
+    const allTimeNookInteractions =
+      (allTimeMessagesResult.count || 0) +
+      (allTimeReactionsResult.count || 0) +
+      (allTimeMembersResult.count || 0);
+
+    // Unique message senders
     const uniqueMessageSenders = new Set(
       messageSendersResult?.data?.map(
         (row: { user_id: string }) => row.user_id,
@@ -356,8 +386,9 @@ export class NooksService {
       success: true,
       data: {
         activeNooks: activeNooksResult.count || 0,
-        totalNooks: totalNooksResult.count || 0,
-        anonymousUsers: anonymousInActiveResult.count || 0,
+        inANookNow: inANookNow,
+        allTimeNooksCreated: allTimeNooksResult.count || 0,
+        allTimeNookInteractions: allTimeNookInteractions,
         messagesToday: messagesTodayResult.count || 0,
         hotNooks: hotNooksResult.count || 0,
         totalMessageParticipants: uniqueMessageSenders,

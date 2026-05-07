@@ -71,6 +71,10 @@ export class OnboardingService {
           JSON.stringify(data.affinityTags),
         );
       }
+      if (data.ageConfirmed) {
+        encryptedData.age_confirmed = true;
+        encryptedData.age_confirmed_at = new Date().toISOString();
+      }
 
       const { data: updatedUser, error } = await this.admin
         .from('user_profiles')

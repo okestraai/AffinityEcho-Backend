@@ -166,8 +166,12 @@ describe('ConversationsService', () => {
         count: 2,
       });
 
+      // user_blocks check (no blocks)
+      const blocksChain = createMockQueryChain({ data: [], error: null });
+
       mockClient.from
         .mockReturnValueOnce(convsChain) // conversations
+        .mockReturnValueOnce(blocksChain) // user_blocks
         .mockReturnValueOnce(usersChain) // user_profiles
         .mockReturnValueOnce(lastMsgChain) // messages (last messages)
         .mockReturnValueOnce(unreadMsgChain) // messages (unread per-conv)
@@ -309,8 +313,11 @@ describe('ConversationsService', () => {
         count: 1,
       });
 
+      const blocksChain2 = createMockQueryChain({ data: [], error: null });
+
       mockClient.from
         .mockReturnValueOnce(convsChain)
+        .mockReturnValueOnce(blocksChain2)
         .mockReturnValueOnce(usersChain)
         .mockReturnValueOnce(lastMsgChain)
         .mockReturnValueOnce(unreadMsgChain)
