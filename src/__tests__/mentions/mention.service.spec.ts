@@ -1,9 +1,24 @@
-jest.mock('../../database/supabase.client', () => ({ supabaseAdmin: jest.fn(), supabaseClient: jest.fn() }));
-jest.mock('../../common/utils/logger.util', () => ({ __esModule: true, default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
+jest.mock('../../database/supabase.client', () => ({
+  supabaseAdmin: jest.fn(),
+  supabaseClient: jest.fn(),
+}));
+jest.mock('../../common/utils/logger.util', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
 
 import { MentionService } from '../../modules/mentions/mention.service';
 import { supabaseAdmin } from '../../database/supabase.client';
-import { createMockSupabaseClient, createMockQueryChain, createMockConfigService } from '../helpers/mock-supabase';
+import {
+  createMockSupabaseClient,
+  createMockQueryChain,
+  createMockConfigService,
+} from '../helpers/mock-supabase';
 
 describe('MentionService', () => {
   let service: MentionService;
@@ -15,8 +30,12 @@ describe('MentionService', () => {
     mockClient = client;
     (supabaseAdmin as jest.Mock).mockReturnValue(mockClient);
 
-    const mockIdentityReveal = { resolveNotificationName: jest.fn().mockResolvedValue('TestUser') };
-    const mockNotifications = { createNotification: jest.fn().mockResolvedValue({}) };
+    const mockIdentityReveal = {
+      resolveNotificationName: jest.fn().mockResolvedValue('TestUser'),
+    };
+    const mockNotifications = {
+      createNotification: jest.fn().mockResolvedValue({}),
+    };
 
     service = new MentionService(
       createMockConfigService() as any,
@@ -80,7 +99,10 @@ describe('MentionService', () => {
     });
 
     it('should resolve usernames and create notifications', async () => {
-      const usersChain = createMockQueryChain({ data: [{ id: 'u2', username: 'bob' }], error: null });
+      const usersChain = createMockQueryChain({
+        data: [{ id: 'u2', username: 'bob' }],
+        error: null,
+      });
       const upsertChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
@@ -92,7 +114,10 @@ describe('MentionService', () => {
     });
 
     it('should not crash on DB error', async () => {
-      const errorChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      const errorChain = createMockQueryChain({
+        data: null,
+        error: { message: 'fail' },
+      });
       mockClient.from.mockReturnValue(errorChain);
 
       // Should not throw
@@ -100,7 +125,10 @@ describe('MentionService', () => {
     });
 
     it('should skip mentioning yourself', async () => {
-      const usersChain = createMockQueryChain({ data: [{ id: 'u1', username: 'self' }], error: null });
+      const usersChain = createMockQueryChain({
+        data: [{ id: 'u1', username: 'self' }],
+        error: null,
+      });
       mockClient.from.mockReturnValue(usersChain);
 
       await service.processMentions('u1', ['self'], 'post', 'p1');

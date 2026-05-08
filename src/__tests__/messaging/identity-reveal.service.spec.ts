@@ -160,24 +160,37 @@ describe('IdentityRevealService', () => {
 
   describe('respondToReveal', () => {
     it.skip('should accept reveal request', async () => {
-      // Fetch reveal, update reveal, get conv, update conv, get requester, get responder
-      const defaultChain = createMockQueryChain({
+      // 1) fetch reveal (single) 2) update reveal 3) find conversations (array)
+      // 4) update each conv 5) fetch requester profile 6) fetch responder profile
+      const revealChain = createMockQueryChain({
         data: {
           id: 'reveal-1',
           requester_id: 'u1',
           responder_id: 'u2',
           status: 'pending',
-          email: 'test@test.com',
-          username: 'User1',
-          email_notifications: true,
-          first_name_encrypted: 'enc_John',
-          last_name_encrypted: 'enc_Doe',
-          user1_id: 'u1',
-          user2_id: 'u2',
         },
         error: null,
       });
-      mockClient.from.mockReturnValue(defaultChain);
+      const arrayChain = createMockQueryChain({
+        data: [{ id: 'conv-1' }],
+        error: null,
+      });
+      const profileChain = createMockQueryChain({
+        data: {
+          id: 'u1',
+          username: 'User1',
+          email: 'test@test.com',
+          email_notifications: true,
+          first_name_encrypted: 'enc',
+          last_name_encrypted: 'enc',
+        },
+        error: null,
+      });
+      mockClient.from
+        .mockReturnValueOnce(revealChain) // fetch reveal
+        .mockReturnValueOnce(revealChain) // update reveal
+        .mockReturnValueOnce(arrayChain) // find conversations
+        .mockReturnValue(profileChain); // update conv + profiles
 
       const result = await service.respondToReveal('u2', {
         reveal_id: 'reveal-1',
@@ -187,7 +200,7 @@ describe('IdentityRevealService', () => {
     });
 
     it.skip('should reject reveal request', async () => {
-      const defaultChain = createMockQueryChain({
+      const revealChain = createMockQueryChain({
         data: {
           id: 'reveal-1',
           requester_id: 'u1',
@@ -196,7 +209,14 @@ describe('IdentityRevealService', () => {
         },
         error: null,
       });
-      mockClient.from.mockReturnValue(defaultChain);
+      const profileChain = createMockQueryChain({
+        data: { id: 'u1', username: 'User1' },
+        error: null,
+      });
+      mockClient.from
+        .mockReturnValueOnce(revealChain) // fetch reveal
+        .mockReturnValueOnce(revealChain) // update reveal
+        .mockReturnValue(profileChain); // profiles
 
       const result = await service.respondToReveal('u2', {
         reveal_id: 'reveal-1',

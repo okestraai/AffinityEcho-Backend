@@ -30,21 +30,29 @@ describe('UserResourcesService', () => {
 
     it('should include mental health category', () => {
       const result = service.getCrisisResources();
-      const mentalHealth = result.data.categories.find((c: any) => c.id === 'mental-health');
+      const mentalHealth = result.data.categories.find(
+        (c: any) => c.id === 'mental-health',
+      );
       expect(mentalHealth).toBeDefined();
       expect(mentalHealth.resources.length).toBeGreaterThan(0);
     });
 
     it('should include workplace category', () => {
       const result = service.getCrisisResources();
-      const workplace = result.data.categories.find((c: any) => c.id === 'workplace');
+      const workplace = result.data.categories.find(
+        (c: any) => c.id === 'workplace',
+      );
       expect(workplace).toBeDefined();
     });
 
     it('should include 988 lifeline', () => {
       const result = service.getCrisisResources();
-      const mentalHealth = result.data.categories.find((c: any) => c.id === 'mental-health');
-      const lifeline = mentalHealth.resources.find((r: any) => r.phone === '988');
+      const mentalHealth = result.data.categories.find(
+        (c: any) => c.id === 'mental-health',
+      );
+      const lifeline = mentalHealth.resources.find(
+        (r: any) => r.phone === '988',
+      );
       expect(lifeline).toBeDefined();
       expect(lifeline.available).toBe('24/7');
     });
@@ -59,7 +67,9 @@ describe('UserResourcesService', () => {
 
     it('should include self-care category', () => {
       const result = service.getCrisisResources();
-      const selfCare = result.data.categories.find((c: any) => c.id === 'self-care');
+      const selfCare = result.data.categories.find(
+        (c: any) => c.id === 'self-care',
+      );
       expect(selfCare).toBeDefined();
     });
   });

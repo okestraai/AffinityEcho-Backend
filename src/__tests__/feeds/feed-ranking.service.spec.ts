@@ -16,7 +16,8 @@ describe('FeedRankingService', () => {
       shares: overrides.shares ?? 0,
       seen: overrides.seen ?? 10,
     },
-    created_at: overrides.created_at || new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+    created_at:
+      overrides.created_at || new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
     ...overrides,
   });
 
@@ -49,8 +50,18 @@ describe('FeedRankingService', () => {
 
     it('should rank newer content higher when engagement is equal', () => {
       const items = [
-        makeItem({ id: 'old', likes: 5, comments: 2, created_at: new Date(Date.now() - 86400000).toISOString() }), // 24h ago
-        makeItem({ id: 'new', likes: 5, comments: 2, created_at: new Date(Date.now() - 3600000).toISOString() }),  // 1h ago
+        makeItem({
+          id: 'old',
+          likes: 5,
+          comments: 2,
+          created_at: new Date(Date.now() - 86400000).toISOString(),
+        }), // 24h ago
+        makeItem({
+          id: 'new',
+          likes: 5,
+          comments: 2,
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+        }), // 1h ago
       ];
 
       const ranked = service.rankByEngagement(items);
@@ -59,12 +70,22 @@ describe('FeedRankingService', () => {
 
     it('should boost content matching user tag affinity', () => {
       const items = [
-        makeItem({ id: 'no-match', likes: 5, content: { text: 'Hello', tags: ['sports'] } }),
-        makeItem({ id: 'match', likes: 5, content: { text: 'Hello', tags: ['tech'] } }),
+        makeItem({
+          id: 'no-match',
+          likes: 5,
+          content: { text: 'Hello', tags: ['sports'] },
+        }),
+        makeItem({
+          id: 'match',
+          likes: 5,
+          content: { text: 'Hello', tags: ['tech'] },
+        }),
       ];
 
       const affinities = new Map([['tech', 0.9]]);
-      const ranked = service.rankByEngagement(items, { userAffinities: affinities });
+      const ranked = service.rankByEngagement(items, {
+        userAffinities: affinities,
+      });
 
       // Both have same base engagement, but 'match' should get a boost
       expect(ranked.length).toBe(2);
@@ -101,18 +122,23 @@ describe('FeedRankingService', () => {
       ];
 
       const prefs = new Map([['topic', 0.9]]);
-      const ranked = service.rankByEngagement(items, { contentTypePrefs: prefs });
+      const ranked = service.rankByEngagement(items, {
+        contentTypePrefs: prefs,
+      });
       expect(ranked).toHaveLength(2);
     });
 
     it('should produce deterministic jitter per user', () => {
-      const items = [makeItem({ id: 'a', likes: 5 }), makeItem({ id: 'b', likes: 5 })];
+      const items = [
+        makeItem({ id: 'a', likes: 5 }),
+        makeItem({ id: 'b', likes: 5 }),
+      ];
 
       const ranked1 = service.rankByEngagement(items, { userId: 'user-1' });
       const ranked2 = service.rankByEngagement(items, { userId: 'user-1' });
 
       // Same user should get same ordering
-      expect(ranked1.map(i => i.id)).toEqual(ranked2.map(i => i.id));
+      expect(ranked1.map((i) => i.id)).toEqual(ranked2.map((i) => i.id));
     });
   });
 
@@ -123,8 +149,14 @@ describe('FeedRankingService', () => {
 
     it('should filter out items older than 7 days', () => {
       const items = [
-        makeItem({ id: 'recent', created_at: new Date(Date.now() - 3600000).toISOString() }),
-        makeItem({ id: 'old', created_at: new Date(Date.now() - 8 * 86400000).toISOString() }),
+        makeItem({
+          id: 'recent',
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+        }),
+        makeItem({
+          id: 'old',
+          created_at: new Date(Date.now() - 8 * 86400000).toISOString(),
+        }),
       ];
 
       const ranked = service.rankByTrending(items);
@@ -134,8 +166,20 @@ describe('FeedRankingService', () => {
 
     it('should rank by trending score', () => {
       const items = [
-        makeItem({ id: 'viral', likes: 50, comments: 20, shares: 10, created_at: new Date(Date.now() - 3600000).toISOString() }),
-        makeItem({ id: 'quiet', likes: 1, comments: 0, shares: 0, created_at: new Date(Date.now() - 3600000).toISOString() }),
+        makeItem({
+          id: 'viral',
+          likes: 50,
+          comments: 20,
+          shares: 10,
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+        }),
+        makeItem({
+          id: 'quiet',
+          likes: 1,
+          comments: 0,
+          shares: 0,
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+        }),
       ];
 
       const ranked = service.rankByTrending(items);
@@ -144,7 +188,9 @@ describe('FeedRankingService', () => {
 
     it('should return empty when all items are older than 7 days', () => {
       const items = [
-        makeItem({ created_at: new Date(Date.now() - 10 * 86400000).toISOString() }),
+        makeItem({
+          created_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+        }),
       ];
 
       expect(service.rankByTrending(items)).toEqual([]);
@@ -152,8 +198,18 @@ describe('FeedRankingService', () => {
 
     it('should give higher score to rapidly engaging new posts', () => {
       const items = [
-        makeItem({ id: 'fast-new', likes: 10, comments: 5, created_at: new Date(Date.now() - 1800000).toISOString() }), // 30min ago
-        makeItem({ id: 'slow-old', likes: 10, comments: 5, created_at: new Date(Date.now() - 3 * 86400000).toISOString() }), // 3 days ago
+        makeItem({
+          id: 'fast-new',
+          likes: 10,
+          comments: 5,
+          created_at: new Date(Date.now() - 1800000).toISOString(),
+        }), // 30min ago
+        makeItem({
+          id: 'slow-old',
+          likes: 10,
+          comments: 5,
+          created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+        }), // 3 days ago
       ];
 
       const ranked = service.rankByTrending(items);
@@ -167,8 +223,8 @@ describe('FeedRankingService', () => {
     });
   });
 
-  describe('applyDiversityCaps', () => {
-    it.skip('should limit items per author', () => {
+  describe('applyDiversityConstraints', () => {
+    it('should limit items per author', () => {
       const items = [
         makeItem({ id: '1', user_id: 'u1', likes: 10 }),
         makeItem({ id: '2', user_id: 'u1', likes: 9 }),
@@ -177,32 +233,32 @@ describe('FeedRankingService', () => {
       ];
 
       const ranked = service.rankByEngagement(items);
-      const diversified = service.applySuppression(ranked, 10);
-      const u1Count = diversified.filter(i => i.user_id === 'u1').length;
+      const diversified = service.applyDiversityConstraints(ranked, 10);
+      const u1Count = diversified.filter((i) => i.user_id === 'u1').length;
       expect(u1Count).toBeLessThanOrEqual(2); // MAX_ITEMS_PER_AUTHOR = 2
     });
 
-    it.skip('should maintain content type diversity', () => {
+    it('should maintain content type diversity', () => {
       const items = Array.from({ length: 20 }, (_, i) =>
         makeItem({ id: `p${i}`, content_type: 'post', likes: 20 - i }),
       );
 
       const ranked = service.rankByEngagement(items);
-      const diversified = service.applySuppression(ranked, 10);
+      const diversified = service.applyDiversityConstraints(ranked, 10);
       expect(diversified.length).toBeLessThanOrEqual(10);
     });
 
     it('should handle empty input', () => {
-      expect(service.applySuppression([], 10)).toEqual([]);
+      expect(service.applyDiversityConstraints([], 10)).toEqual([]);
     });
 
-    it.skip('should respect page size', () => {
+    it('should respect page size', () => {
       const items = Array.from({ length: 20 }, (_, i) =>
         makeItem({ id: `${i}`, user_id: `u${i}`, likes: 20 - i }),
       );
 
       const ranked = service.rankByEngagement(items);
-      const diversified = service.applySuppression(ranked, 5);
+      const diversified = service.applyDiversityConstraints(ranked, 5);
       expect(diversified.length).toBeLessThanOrEqual(5);
     });
   });

@@ -1,4 +1,12 @@
-jest.mock('../../common/utils/logger.util', () => ({ __esModule: true, default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
+jest.mock('../../common/utils/logger.util', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
 jest.mock('nodemailer', () => ({
   createTransport: jest.fn().mockReturnValue({
     verify: jest.fn().mockResolvedValue(true),
@@ -35,7 +43,10 @@ describe('EmailService', () => {
 
   describe('sendWelcomeEmail', () => {
     it('should send welcome email', async () => {
-      const result = await service.sendWelcomeEmail('user@test.com', 'TestUser');
+      const result = await service.sendWelcomeEmail(
+        'user@test.com',
+        'TestUser',
+      );
       // May succeed or fail depending on transporter init — just shouldn't crash
       expect(true).toBe(true);
     });
@@ -58,36 +69,56 @@ describe('EmailService', () => {
   });
 
   describe('sendVerificationEmail', () => {
-    it.skip('should send company verification email', async () => {
-      await service.sendVerificationEmail('user@google.com', 'TestUser', 'verify-token-123');
+    it('should send company verification email', async () => {
+      await service.sendCompanyVerificationEmail(
+        'user@google.com',
+        'TestUser',
+        'verify-token-123',
+      );
       expect(true).toBe(true);
     });
   });
 
   describe('sendIdentityRevealRequestEmail', () => {
     it('should send identity reveal request email', async () => {
-      await service.sendIdentityRevealRequestEmail('user@test.com', 'TestUser', 'conv-1');
+      await service.sendIdentityRevealRequestEmail(
+        'user@test.com',
+        'TestUser',
+        'conv-1',
+      );
       expect(true).toBe(true);
     });
   });
 
   describe('sendIdentityRevealAcceptedEmail', () => {
     it('should send identity reveal accepted email', async () => {
-      await service.sendIdentityRevealAcceptedEmail('user@test.com', 'TestUser', 'conv-1');
+      await service.sendIdentityRevealAcceptedEmail(
+        'user@test.com',
+        'TestUser',
+        'conv-1',
+      );
       expect(true).toBe(true);
     });
   });
 
   describe('sendConnectionRequestEmail', () => {
     it('should send connection request email', async () => {
-      await service.sendConnectionRequestEmail('user@test.com', 'TestUser', 'ref-1');
+      await service.sendConnectionRequestEmail(
+        'user@test.com',
+        'TestUser',
+        'ref-1',
+      );
       expect(true).toBe(true);
     });
   });
 
   describe('sendConnectionAcceptedEmail', () => {
     it('should send connection accepted email', async () => {
-      await service.sendConnectionAcceptedEmail('user@test.com', 'TestUser', 'ref-1');
+      await service.sendConnectionAcceptedEmail(
+        'user@test.com',
+        'TestUser',
+        'ref-1',
+      );
       expect(true).toBe(true);
     });
   });

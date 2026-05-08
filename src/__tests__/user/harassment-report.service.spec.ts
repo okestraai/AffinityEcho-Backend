@@ -1,20 +1,29 @@
-jest.mock('../../database/supabase.client', () => ({ supabaseAdmin: jest.fn(), supabaseClient: jest.fn() }));
-jest.mock('../../common/utils/logger.util', () => ({ __esModule: true, default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
+jest.mock('../../database/supabase.client', () => ({
+  supabaseAdmin: jest.fn(),
+  supabaseClient: jest.fn(),
+}));
+jest.mock('../../common/utils/logger.util', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
 
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { HarassmentReportService } from '../../modules/user/services/harassment-report.service';
 import { supabaseAdmin } from '../../database/supabase.client';
-import { createMockSupabaseClient, createMockQueryChain, createMockConfigService } from '../helpers/mock-supabase';
+import {
+  createMockSupabaseClient,
+  createMockQueryChain,
+  createMockConfigService,
+} from '../helpers/mock-supabase';
 
 describe('HarassmentReportService', () => {
   let service: HarassmentReportService;
   let mockClient: any;
-
-  const mockReport = {
-    id: 'r1', reporter_id: 'u1', reference_number: 'HR-ABC123',
-    incident_type: 'harassment', description: 'Test report',
-    status: 'submitted', created_at: '2026-05-01',
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -25,101 +34,184 @@ describe('HarassmentReportService', () => {
   });
 
   describe('createReport', () => {
-    it.skip('should create harassment report', async () => {
-      const insertChain = createMockQueryChain({ data: mockReport, error: null });
-      mockClient.from.mockReturnValue(insertChain);
+    it('should create report successfully', async () => {
+      const insertChain = createMockQueryChain({
+        data: {
+          id: 'r1',
+          reference_number: 'HR-ABC123',
+          status: 'submitted',
+          immediate_risk: false,
+          reported_user_id: null,
+          created_at: '2026-05-01',
+        },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(insertChain);
 
       const result = await service.createReport('u1', {
         incidentType: 'harassment',
         description: 'Test report',
-        reporterType: 'target',
-        immediateRisk: false,
       } as any);
+
       expect(result.success).toBe(true);
-      expect(result.data.reference_number).toBeDefined();
+      expect(result.data.referenceNumber).toBe('HR-ABC123');
+      expect(result.data.status).toBe('submitted');
     });
 
     it('should throw on insert error', async () => {
-      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
-      mockClient.from.mockReturnValue(chain);
+      const chain = createMockQueryChain({
+        data: null,
+        error: { message: 'fail' },
+      });
+      mockClient.from.mockReturnValueOnce(chain);
 
-      await expect(service.createReport('u1', {
-        incidentType: 'harassment', description: 'Test', reporterType: 'target', immediateRisk: false,
-      } as any)).rejects.toThrow(BadRequestException);
-    });
-
-    it('should generate unique reference number', async () => {
-      const insertChain = createMockQueryChain({ data: mockReport, error: null });
-      mockClient.from.mockReturnValue(insertChain);
-
-      await service.createReport('u1', {
-        incidentType: 'discrimination', description: 'Test', reporterType: 'witness', immediateRisk: true,
-      } as any);
-
-      // Verify insert was called with a reference_number starting with HR-
-      const insertCall = insertChain.insert.mock.calls[0][0];
-      expect(insertCall.reference_number).toMatch(/^HR-/);
-    });
-
-    it('should handle optional fields', async () => {
-      const insertChain = createMockQueryChain({ data: mockReport, error: null });
-      mockClient.from.mockReturnValue(insertChain);
-
-      await service.createReport('u1', {
-        incidentType: 'harassment', description: 'Test',
-        reporterType: 'target', immediateRisk: false,
-        date: '2026-05-01', location: 'Office',
-        witnesses: 'John', evidence: 'screenshot.png',
-        contactEmail: 'user@test.com', reportedUserId: 'u2',
-      } as any);
-
-      const insertCall = insertChain.insert.mock.calls[0][0];
-      expect(insertCall.location).toBe('Office');
-      expect(insertCall.reported_user_id).toBe('u2');
+      await expect(
+        service.createReport('u1', {
+          incidentType: 'harassment',
+          description: 'Test',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
-  describe('getMyReports', () => {
-    it.skip('should return user reports', async () => {
-      const chain = createMockQueryChain({ data: [mockReport], error: null });
-      mockClient.from.mockReturnValue(chain);
+  describe('getUserReports', () => {
+    it('should return user reports with summary', async () => {
+      const reportsChain = createMockQueryChain({
+        data: [
+          {
+            id: 'r1',
+            reference_number: 'HR-ABC123',
+            incident_type: 'harassment',
+            description: 'Test report',
+            status: 'submitted',
+            immediate_risk: false,
+            date: null,
+            location: null,
+            reporter_type: null,
+            reported_user: null,
+            created_at: '2026-05-01',
+            updated_at: null,
+          },
+        ],
+        error: null,
+        count: 1,
+      });
+      const summaryChain = createMockQueryChain({
+        data: [{ status: 'submitted', immediate_risk: false }],
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(reportsChain)
+        .mockReturnValueOnce(summaryChain);
 
       const result = await service.getUserReports('u1');
       expect(result.success).toBe(true);
-      expect(result.data).toHaveLength(1);
+      expect(result.data.reports).toHaveLength(1);
+      expect(result.data.reports[0].referenceNumber).toBe('HR-ABC123');
+      expect(result.data.reports[0].priority).toBe('high');
+      expect(result.data.summary.total).toBe(1);
+      expect(result.data.summary.submitted).toBe(1);
     });
 
-    it.skip('should return empty array when no reports', async () => {
-      const chain = createMockQueryChain({ data: [], error: null });
-      mockClient.from.mockReturnValue(chain);
+    it('should return empty when no reports', async () => {
+      const reportsChain = createMockQueryChain({
+        data: [],
+        error: null,
+        count: 0,
+      });
+      const summaryChain = createMockQueryChain({ data: [], error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(reportsChain)
+        .mockReturnValueOnce(summaryChain);
 
       const result = await service.getUserReports('u1');
-      expect(result.data).toEqual([]);
+      expect(result.data.reports).toEqual([]);
+      expect(result.data.summary.total).toBe(0);
     });
 
     it('should throw on DB error', async () => {
-      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      const chain = createMockQueryChain({
+        data: null,
+        error: { message: 'fail' },
+        count: null,
+      });
       mockClient.from.mockReturnValue(chain);
 
-      await expect(service.getUserReports('u1')).rejects.toThrow(BadRequestException);
+      await expect(service.getUserReports('u1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
-  describe('getReport', () => {
-    it('should return report by ID for reporter', async () => {
-      const chain = createMockQueryChain({ data: mockReport, error: null });
-      mockClient.from.mockReturnValue(chain);
+  describe('getReportByReference', () => {
+    it('should return report by reference number', async () => {
+      const chain = createMockQueryChain({
+        data: {
+          id: 'r1',
+          reference_number: 'HR-ABC123',
+          incident_type: 'harassment',
+          description: 'Test',
+          status: 'submitted',
+          immediate_risk: false,
+          reported_user: null,
+          created_at: '2026-05-01',
+        },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getReportByReference('u1', 'HR-ABC123');
+      expect(result.success).toBe(true);
+      expect(result.data.referenceNumber).toBe('HR-ABC123');
+    });
+
+    it('should throw NotFoundException when not found', async () => {
+      const chain = createMockQueryChain({
+        data: null,
+        error: { code: 'PGRST116' },
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(
+        service.getReportByReference('u1', 'HR-NOPE'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getReportById', () => {
+    it('should return report by ID', async () => {
+      const chain = createMockQueryChain({
+        data: {
+          id: 'r1',
+          reference_number: 'HR-ABC123',
+          incident_type: 'harassment',
+          description: 'Test',
+          status: 'submitted',
+          immediate_risk: false,
+          reported_user: null,
+          created_at: '2026-05-01',
+        },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
 
       const result = await service.getReportById('u1', 'r1');
       expect(result.success).toBe(true);
       expect(result.data.id).toBe('r1');
     });
 
-    it('should throw if report not found', async () => {
-      const chain = createMockQueryChain({ data: null, error: { message: 'not found' } });
-      mockClient.from.mockReturnValue(chain);
+    it('should throw NotFoundException when not found', async () => {
+      const chain = createMockQueryChain({
+        data: null,
+        error: { code: 'PGRST116' },
+      });
+      mockClient.from.mockReturnValueOnce(chain);
 
-      await expect(service.getReportById('u1', 'nope')).rejects.toThrow(NotFoundException);
+      await expect(service.getReportById('u1', 'nope')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

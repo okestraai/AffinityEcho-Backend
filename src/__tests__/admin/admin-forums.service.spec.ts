@@ -1,35 +1,79 @@
-jest.mock('../../database/supabase.client', () => ({ supabaseAdmin: jest.fn(), supabaseClient: jest.fn() }));
-jest.mock('../../common/utils/logger.util', () => ({ __esModule: true, default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
+jest.mock('../../database/supabase.client', () => ({
+  supabaseAdmin: jest.fn(),
+  supabaseClient: jest.fn(),
+}));
+jest.mock('../../common/utils/logger.util', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { AdminForumsService } from '../../modules/admin/services/admin-forums.service';
 import { supabaseAdmin } from '../../database/supabase.client';
-import { createMockSupabaseClient, createMockQueryChain, createMockConfigService } from '../helpers/mock-supabase';
+import {
+  createMockSupabaseClient,
+  createMockQueryChain,
+  createMockConfigService,
+} from '../helpers/mock-supabase';
 
 describe('AdminForumsService', () => {
   let service: AdminForumsService;
   let mockClient: any;
+  const mockAdminUsers = { logAction: jest.fn().mockResolvedValue({}) };
 
   beforeEach(() => {
     jest.clearAllMocks();
     const { client } = createMockSupabaseClient();
     mockClient = client;
     (supabaseAdmin as jest.Mock).mockReturnValue(mockClient);
-    const mockAdminUsers = { logAction: jest.fn().mockResolvedValue({}) };
-    service = new AdminForumsService(createMockConfigService() as any, mockAdminUsers as any);
+    service = new AdminForumsService(
+      createMockConfigService() as any,
+      mockAdminUsers as any,
+    );
   });
 
   describe('listForums', () => {
     it('should return paginated forums', async () => {
-      const chain = createMockQueryChain({
-        data: [{ id: 'f1', name: 'Tech Forum', description: 'desc', created_at: '2026-01-01' }],
-        error: null, count: 1,
+      // listForums: 1) from('forums').select(...)
+      // Then per forum: 2) from('forum_topics').select(...) for posts_this_week
+      // moderators is empty so no user_profiles query
+      const forumsChain = createMockQueryChain({
+        data: [
+          {
+            id: 'f1',
+            name: 'Tech Forum',
+            description: 'desc',
+            moderators: [],
+            topic_count: 5,
+            member_count: 10,
+            is_global: true,
+            created_at: '2026-01-01',
+          },
+        ],
+        error: null,
+        count: 1,
       });
-      mockClient.from.mockReturnValue(chain);
+      const postsWeekChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 3,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(forumsChain) // forums query
+        .mockReturnValueOnce(postsWeekChain); // forum_topics count
 
       const result = await service.listForums({} as any);
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe('Tech Forum');
+      expect(result.data[0].scope).toBe('global');
+      expect(result.data[0].posts_this_week).toBe(3);
     });
 
     it('should handle empty results', async () => {
@@ -41,61 +85,99 @@ describe('AdminForumsService', () => {
     });
 
     it('should throw on DB error', async () => {
-      const chain = createMockQueryChain({ data: null, error: { message: 'fail' }, count: null });
+      const chain = createMockQueryChain({
+        data: null,
+        error: { message: 'fail' },
+        count: null,
+      });
       mockClient.from.mockReturnValue(chain);
 
-      await expect(service.listForums({} as any)).rejects.toThrow(BadRequestException);
+      await expect(service.listForums({} as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
   describe('createForum', () => {
-    it.skip('should create forum', async () => {
+    it('should create forum', async () => {
+      // createForum: 1) check existing name 2) insert 3) logAction (mocked)
       const existsChain = createMockQueryChain({ data: null, error: null });
-      const insertChain = createMockQueryChain({ data: { id: 'f1', name: 'New Forum' }, error: null });
-      const logChain = createMockQueryChain({ data: null, error: null });
+      const insertChain = createMockQueryChain({
+        data: { id: 'f1', name: 'New Forum' },
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(existsChain)
         .mockReturnValueOnce(insertChain)
-        .mockReturnValueOnce(logChain);
+        .mockReturnValue(createMockQueryChain({ data: null, error: null }));
 
-      const result = await service.createForum('admin-1', { name: 'New Forum', description: 'desc' } as any);
+      const result = await service.createForum(
+        'admin-1',
+        'AdminUser',
+        { name: 'New Forum', description: 'desc', scope: 'global' },
+        '127.0.0.1',
+      );
       expect(result.success).toBe(true);
     });
 
+    it('should throw if name is missing', async () => {
+      await expect(
+        service.createForum('admin-1', 'AdminUser', {} as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should throw if name already exists', async () => {
-      const chain = createMockQueryChain({ data: { id: 'existing' }, error: null });
+      const chain = createMockQueryChain({
+        data: { id: 'existing' },
+        error: null,
+      });
       mockClient.from.mockReturnValue(chain);
 
-      await expect(service.createForum('admin-1', { name: 'Existing' } as any)).rejects.toThrow();
+      await expect(
+        service.createForum('admin-1', 'AdminUser', {
+          name: 'Existing',
+          scope: 'global',
+        }),
+      ).rejects.toThrow();
     });
   });
 
   describe('updateForum', () => {
-    it.skip('should update forum', async () => {
-      const updateChain = createMockQueryChain({ data: { id: 'f1', name: 'Updated' }, error: null });
-      const logChain = createMockQueryChain({ data: null, error: null });
+    it('should update forum', async () => {
+      // updateForum: 1) update forums 2) logAction (mocked)
+      const updateChain = createMockQueryChain({
+        data: { id: 'f1', name: 'Updated' },
+        error: null,
+      });
 
       mockClient.from
         .mockReturnValueOnce(updateChain)
-        .mockReturnValueOnce(logChain);
+        .mockReturnValue(createMockQueryChain({ data: null, error: null }));
 
-      const result = await service.updateForum('f1', 'admin-1', { name: 'Updated' } as any);
+      const result = await service.updateForum('admin-1', 'AdminUser', 'f1', {
+        name: 'Updated',
+      });
       expect(result.success).toBe(true);
     });
   });
 
   describe('deleteForum', () => {
-    it.skip('should delete forum', async () => {
+    it('should delete forum', async () => {
+      // deleteForum: 1) update forums (soft delete) 2) logAction (mocked)
       const deleteChain = createMockQueryChain({ data: null, error: null });
-      const logChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
         .mockReturnValueOnce(deleteChain)
-        .mockReturnValueOnce(logChain);
+        .mockReturnValue(createMockQueryChain({ data: null, error: null }));
 
-      const result = await service.deleteForum('f1', 'admin-1');
-      expect(result.success).toBe(true);
+      const result = await service.deleteForum(
+        'admin-1',
+        'AdminUser',
+        'f1',
+        'Not needed anymore',
+      );
+      expect(result).toBeNull();
     });
   });
 });

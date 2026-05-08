@@ -30,7 +30,14 @@ describe('ReferralBookmarksService', () => {
     const { client } = createMockSupabaseClient();
     mockClient = client;
     (supabaseAdmin as jest.Mock).mockReturnValue(mockClient);
-    service = new ReferralBookmarksService(createMockConfigService() as any);
+    const mockContentSafety = {
+      getBlockedUserIds: jest.fn().mockResolvedValue([]),
+      getHiddenContentIds: jest.fn().mockResolvedValue([]),
+    };
+    service = new ReferralBookmarksService(
+      createMockConfigService() as any,
+      mockContentSafety as any,
+    );
   });
 
   describe('bookmarkReferral', () => {

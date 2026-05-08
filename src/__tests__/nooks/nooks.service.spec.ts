@@ -66,12 +66,18 @@ describe('NooksService', () => {
       invalidateCache: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockContentSafety = {
+      getBlockedUserIds: jest.fn().mockResolvedValue([]),
+      getHiddenContentIds: jest.fn().mockResolvedValue([]),
+    };
+
     service = new NooksService(
       createMockConfigService() as any,
       mockRedis,
       mockIdentityReveal,
       mockEncryption,
       mockOkestra,
+      mockContentSafety as any,
     );
   });
 
