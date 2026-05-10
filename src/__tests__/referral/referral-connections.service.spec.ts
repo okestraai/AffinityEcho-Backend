@@ -62,16 +62,32 @@ describe('ReferralConnectionsService', () => {
   });
 
   describe('getUserConnections', () => {
-    it.skip('should return user connections', async () => {
+    it('should return user connections', async () => {
       const sentChain = createMockQueryChain({
         data: [
-          { id: 'c1', status: 'accepted', sender_id: 'u1', receiver_id: 'u2' },
+          {
+            id: 'c1',
+            status: 'accepted',
+            sender_id: 'u1',
+            receiver_id: 'u2',
+            receiver: { id: 'u2', username: 'Receiver', avatar: '📚' },
+            referral_posts: null,
+            identity_revealed: false,
+          },
         ],
         error: null,
       });
       const receivedChain = createMockQueryChain({
         data: [
-          { id: 'c2', status: 'pending', sender_id: 'u3', receiver_id: 'u1' },
+          {
+            id: 'c2',
+            status: 'pending',
+            sender_id: 'u3',
+            receiver_id: 'u1',
+            sender: { id: 'u3', username: 'Sender', avatar: '🔥' },
+            referral_posts: null,
+            identity_revealed: false,
+          },
         ],
         error: null,
       });
@@ -85,7 +101,7 @@ describe('ReferralConnectionsService', () => {
       expect(result.data).toBeDefined();
     });
 
-    it.skip('should filter by status', async () => {
+    it('should filter by status', async () => {
       const sentChain = createMockQueryChain({ data: [], error: null });
       const receivedChain = createMockQueryChain({ data: [], error: null });
 
@@ -97,7 +113,7 @@ describe('ReferralConnectionsService', () => {
       expect(sentChain.eq).toHaveBeenCalledWith('status', 'pending');
     });
 
-    it.skip('should handle empty connections', async () => {
+    it('should handle empty connections', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -107,7 +123,7 @@ describe('ReferralConnectionsService', () => {
   });
 
   describe('sendConnectionRequest', () => {
-    it.skip('should send connection request', async () => {
+    it('should send connection request', async () => {
       const postChain = createMockQueryChain({
         data: { id: 'r1', user_id: 'u2', status: 'open' },
         error: null,
@@ -137,15 +153,14 @@ describe('ReferralConnectionsService', () => {
         .mockReturnValueOnce(receiverChain)
         .mockReturnValueOnce(senderChain);
 
-      const result = await service.sendConnectionRequest('u1', {
-        referral_post_id: 'r1',
+      const result = await service.sendConnectionRequest('u1', 'r1', {
         message: 'Interested',
       } as any);
       expect(result.success).toBe(true);
       expect(result.message).toBe(MSG.REFERRAL.CONNECTION_SENT);
     });
 
-    it.skip('should throw if referral not found', async () => {
+    it('should throw if referral not found', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },
@@ -153,13 +168,11 @@ describe('ReferralConnectionsService', () => {
       mockClient.from.mockReturnValue(chain);
 
       await expect(
-        service.sendConnectionRequest('u1', {
-          referral_post_id: 'nope',
-        } as any),
+        service.sendConnectionRequest('u1', 'nope', {} as any),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it.skip('should throw if sending to own post', async () => {
+    it('should throw if sending to own post', async () => {
       const chain = createMockQueryChain({
         data: { id: 'r1', user_id: 'u1', status: 'open' },
         error: null,
@@ -167,11 +180,11 @@ describe('ReferralConnectionsService', () => {
       mockClient.from.mockReturnValue(chain);
 
       await expect(
-        service.sendConnectionRequest('u1', { referral_post_id: 'r1' } as any),
+        service.sendConnectionRequest('u1', 'r1', {} as any),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it.skip('should throw if post is not open', async () => {
+    it('should throw if post is not open', async () => {
       const chain = createMockQueryChain({
         data: { id: 'r1', user_id: 'u2', status: 'closed' },
         error: null,
@@ -179,11 +192,11 @@ describe('ReferralConnectionsService', () => {
       mockClient.from.mockReturnValue(chain);
 
       await expect(
-        service.sendConnectionRequest('u1', { referral_post_id: 'r1' } as any),
+        service.sendConnectionRequest('u1', 'r1', {} as any),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it.skip('should throw if already connected', async () => {
+    it('should throw if already connected', async () => {
       const postChain = createMockQueryChain({
         data: { id: 'r1', user_id: 'u2', status: 'open' },
         error: null,
@@ -198,13 +211,13 @@ describe('ReferralConnectionsService', () => {
         .mockReturnValueOnce(existChain);
 
       await expect(
-        service.sendConnectionRequest('u1', { referral_post_id: 'r1' } as any),
+        service.sendConnectionRequest('u1', 'r1', {} as any),
       ).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('acceptConnection', () => {
-    it.skip('should accept connection', async () => {
+    it('should accept connection', async () => {
       const connChain = createMockQueryChain({
         data: {
           id: 'c1',
@@ -212,6 +225,7 @@ describe('ReferralConnectionsService', () => {
           receiver_id: 'u2',
           referral_post_id: 'r1',
           status: 'pending',
+          referral_posts: { type: 'request', available_slots: null },
         },
         error: null,
       });
@@ -243,7 +257,7 @@ describe('ReferralConnectionsService', () => {
       expect(result.message).toBe(MSG.REFERRAL.CONNECTION_ACCEPTED);
     });
 
-    it.skip('should throw if not the receiver', async () => {
+    it('should throw if not the receiver', async () => {
       const chain = createMockQueryChain({
         data: {
           id: 'c1',
@@ -260,7 +274,7 @@ describe('ReferralConnectionsService', () => {
       );
     });
 
-    it.skip('should throw if not pending', async () => {
+    it('should throw if not pending', async () => {
       const chain = createMockQueryChain({
         data: {
           id: 'c1',
@@ -277,7 +291,7 @@ describe('ReferralConnectionsService', () => {
       );
     });
 
-    it.skip('should throw if connection not found', async () => {
+    it('should throw if connection not found', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },
@@ -291,7 +305,7 @@ describe('ReferralConnectionsService', () => {
   });
 
   describe('rejectConnection', () => {
-    it.skip('should reject connection', async () => {
+    it('should reject connection', async () => {
       const connChain = createMockQueryChain({
         data: {
           id: 'c1',
@@ -317,13 +331,22 @@ describe('ReferralConnectionsService', () => {
   });
 
   describe('getConnectionById', () => {
-    it.skip('should return connection by ID', async () => {
+    it('should return connection by ID', async () => {
       const chain = createMockQueryChain({
         data: {
           id: 'c1',
           sender_id: 'u1',
           receiver_id: 'u2',
           status: 'accepted',
+          identity_revealed: false,
+          sender: { id: 'u1', username: 'Sender', avatar: '🔥' },
+          receiver: { id: 'u2', username: 'Receiver', avatar: '📚' },
+          referral_posts: {
+            id: 'r1',
+            title_encrypted: 'enc_title',
+            company_encrypted: 'enc_company',
+            job_title_encrypted: null,
+          },
         },
         error: null,
       });
@@ -333,7 +356,7 @@ describe('ReferralConnectionsService', () => {
       expect(result.success).toBe(true);
     });
 
-    it.skip('should throw if not participant', async () => {
+    it('should throw if not participant', async () => {
       const chain = createMockQueryChain({
         data: {
           id: 'c1',
@@ -350,7 +373,7 @@ describe('ReferralConnectionsService', () => {
       );
     });
 
-    it.skip('should throw if not found', async () => {
+    it('should throw if not found', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },

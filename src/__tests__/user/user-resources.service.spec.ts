@@ -73,4 +73,44 @@ describe('UserResourcesService', () => {
       expect(selfCare).toBeDefined();
     });
   });
+
+  describe('getCommunityGuidelines', () => {
+    it('should return success with data', () => {
+      const result = service.getCommunityGuidelines();
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+
+    it('should include title and sections', () => {
+      const result = service.getCommunityGuidelines();
+      expect(result.data.title).toBe('Community Guidelines');
+      expect(Array.isArray(result.data.sections)).toBe(true);
+      expect(result.data.sections.length).toBeGreaterThan(0);
+    });
+
+    it('should include respect section', () => {
+      const result = service.getCommunityGuidelines();
+      const respect = result.data.sections.find((s: any) => s.id === 'respect');
+      expect(respect).toBeDefined();
+      expect(respect.guidelines.length).toBeGreaterThan(0);
+    });
+
+    it('should include prohibited section', () => {
+      const result = service.getCommunityGuidelines();
+      const prohibited = result.data.sections.find((s: any) => s.id === 'prohibited');
+      expect(prohibited).toBeDefined();
+    });
+
+    it('should include reporting info', () => {
+      const result = service.getCommunityGuidelines();
+      expect(result.data.reportingInfo).toBeDefined();
+      expect(Array.isArray(result.data.reportingInfo.methods)).toBe(true);
+    });
+
+    it('should include acknowledgment text', () => {
+      const result = service.getCommunityGuidelines();
+      expect(result.data.acknowledgment).toBeDefined();
+      expect(typeof result.data.acknowledgment).toBe('string');
+    });
+  });
 });

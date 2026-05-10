@@ -2,13 +2,17 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import logger from '../../../common/utils/logger.util';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
 export class ReferralBookmarksService {
   private admin;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private contentSafety: ContentSafetyService,
+  ) {
     this.admin = supabaseAdmin(config);
   }
 
@@ -86,7 +90,35 @@ export class ReferralBookmarksService {
 
       if (error) throw error;
 
-      return { success: true, data };
+      // Filter out hidden and blocked content
+      const [hiddenIds, blockedIds] = await Promise.all([
+        this.contentSafety.getHiddenContentIds(userId, 'referral'),
+        this.contentSafety.getBlockedUserIds(userId),
+      ]);
+
+      let filtered = data || [];
+      if (hiddenIds.length > 0) {
+        const hiddenSet = new Set(hiddenIds);
+        filtered = filtered.filter((b: any) => !hiddenSet.has(b.referral_post_id));
+      }
+
+      if (blockedIds.length > 0 && filtered.length > 0) {
+        const postIds = filtered.map((b: any) => b.referral_post_id);
+        const { data: posts } = await this.admin
+          .from('referral_posts')
+          .select('id, user_id')
+          .in('id', postIds);
+
+        if (posts) {
+          const blockedSet = new Set(blockedIds);
+          const blockedPostIds = new Set(
+            posts.filter((p: any) => blockedSet.has(p.user_id)).map((p: any) => p.id),
+          );
+          filtered = filtered.filter((b: any) => !blockedPostIds.has(b.referral_post_id));
+        }
+      }
+
+      return { success: true, data: filtered };
     } catch (error) {
       logger.error(MSG.REFERRAL.BOOKMARKS_FAILED, { error });
       throw new BadRequestException(MSG.REFERRAL.BOOKMARKS_FAILED);

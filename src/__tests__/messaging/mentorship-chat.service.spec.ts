@@ -72,19 +72,22 @@ describe('MentorshipChatService', () => {
   });
 
   describe('getMentorshipProfile', () => {
-    it.skip('should return mentorship profile', async () => {
+    it('should return mentorship profile', async () => {
       const profileChain = createMockQueryChain({
         data: mockProfile,
         error: null,
       });
-      mockClient.from.mockReturnValue(profileChain);
+      const sessionsChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from
+        .mockReturnValueOnce(profileChain)
+        .mockReturnValueOnce(sessionsChain);
 
       const result = await service.getMentorshipProfile('u1', 'u2');
       expect(result.success).toBe(true);
-      expect(result.data.username).toBe('Mentor1');
+      expect(result.data.profile.username).toBe('Mentor1');
     });
 
-    it.skip('should throw if profile not found', async () => {
+    it('should throw if profile not found', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },
@@ -96,106 +99,105 @@ describe('MentorshipChatService', () => {
       );
     });
 
-    it.skip('should decrypt company and career level', async () => {
-      const chain = createMockQueryChain({ data: mockProfile, error: null });
-      mockClient.from.mockReturnValue(chain);
+    it('should decrypt company and career level', async () => {
+      const profileChain = createMockQueryChain({ data: mockProfile, error: null });
+      const sessionsChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from
+        .mockReturnValueOnce(profileChain)
+        .mockReturnValueOnce(sessionsChain);
 
       const result = await service.getMentorshipProfile('u1', 'u2');
-      expect(result.data.company).toBe('dec_enc_Google');
-      expect(result.data.careerLevel).toBe('dec_enc_senior');
+      expect(result.data.profile.company).toBe('dec_enc_Google');
+      expect(result.data.profile.career_level).toBe('dec_enc_senior');
     });
   });
 
-  describe('getMentorshipConversations', () => {
-    it.skip('should return mentorship conversations', async () => {
-      const convsChain = createMockQueryChain({
-        data: [
-          {
-            id: 'conv-1',
-            user1_id: 'u1',
-            user2_id: 'u2',
-            context_type: 'mentorship',
-          },
-        ],
+  describe('scheduleSession', () => {
+    it('should schedule a session for active relationship', async () => {
+      const relChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', status: 'active' },
         error: null,
       });
-      const profilesChain = createMockQueryChain({
-        data: [mockProfile],
+      const insertChain = createMockQueryChain({
+        data: { id: 's1', scheduled_at: '2026-06-01', duration_minutes: 60, status: 'scheduled' },
         error: null,
       });
+      const updateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(convsChain)
-        .mockReturnValueOnce(profilesChain);
+        .mockReturnValueOnce(relChain)
+        .mockReturnValueOnce(insertChain)
+        .mockReturnValueOnce(updateChain);
 
-      const result = await service.getMentorshipConversations('u1');
+      const result = await service.scheduleSession('u1', 'rel-1', {
+        scheduled_at: '2026-06-01',
+        duration_minutes: 60,
+      });
       expect(result.success).toBe(true);
-      expect(result.data).toBeDefined();
     });
 
-    it.skip('should handle empty conversations', async () => {
-      const chain = createMockQueryChain({ data: [], error: null });
+    it('should throw if relationship not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
       mockClient.from.mockReturnValue(chain);
 
-      const result = await service.getMentorshipConversations('u1');
-      expect(result.success).toBe(true);
+      await expect(
+        service.scheduleSession('u1', 'nope', { scheduled_at: '2026-06-01' }),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it.skip('should throw on DB error', async () => {
+    it('should throw if not authorized for relationship', async () => {
       const chain = createMockQueryChain({
-        data: null,
-        error: { message: 'fail' },
+        data: { mentor_id: 'other', mentee_id: 'another', status: 'active' },
+        error: null,
       });
       mockClient.from.mockReturnValue(chain);
 
-      await expect(service.getMentorshipConversations('u1')).rejects.toThrow();
+      await expect(
+        service.scheduleSession('u1', 'rel-1', { scheduled_at: '2026-06-01' }),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('startMentorshipChat', () => {
-    it.skip('should create mentorship conversation', async () => {
-      // Check existing conv
-      const existChain = createMockQueryChain({ data: null, error: null });
-      // Check relationship
-      const relChain = createMockQueryChain({
-        data: {
-          id: 'rel-1',
-          mentor_id: 'u2',
-          mentee_id: 'u1',
-          status: 'active',
-        },
-        error: null,
-      });
-      // Create conversation
-      const insertChain = createMockQueryChain({
-        data: {
-          id: 'conv-1',
-          user1_id: 'u1',
-          user2_id: 'u2',
-          context_type: 'mentorship',
-        },
-        error: null,
-      });
+    const mockAcceptedRequest = {
+      requester_id: 'u1',
+      target_user_id: 'u2',
+      request_type: 'mentor_request',
+      status: 'accepted',
+    };
+
+    it('should create mentorship conversation when none exists', async () => {
+      const requestChain = createMockQueryChain({ data: mockAcceptedRequest, error: null });
+      const existingRelChain = createMockQueryChain({ data: null, error: null });
+      const newRelChain = createMockQueryChain({ data: { id: 'rel-1' }, error: null });
+      const existingConvChain = createMockQueryChain({ data: null, error: null });
+      const convInsertChain = createMockQueryChain({ data: { id: 'conv-1' }, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(existChain)
-        .mockReturnValueOnce(relChain)
-        .mockReturnValueOnce(insertChain);
+        .mockReturnValueOnce(requestChain)
+        .mockReturnValueOnce(existingRelChain)
+        .mockReturnValueOnce(newRelChain)
+        .mockReturnValueOnce(existingConvChain)
+        .mockReturnValueOnce(convInsertChain);
 
-      const result = await service.startMentorshipChat('u1', 'u2', 'rel-1');
+      const result = await service.startMentorshipChat('u1', 'req-1');
       expect(result.success).toBe(true);
+      expect(result.data.conversation_id).toBe('conv-1');
     });
 
-    it.skip('should return existing conversation if already exists', async () => {
-      const existChain = createMockQueryChain({
-        data: { id: 'conv-existing', user1_id: 'u1', user2_id: 'u2' },
-        error: null,
-      });
-      mockClient.from.mockReturnValue(existChain);
+    it('should return existing conversation if already exists', async () => {
+      const requestChain = createMockQueryChain({ data: mockAcceptedRequest, error: null });
+      const existingRelChain = createMockQueryChain({ data: { id: 'rel-existing' }, error: null });
+      const existingConvChain = createMockQueryChain({ data: { id: 'conv-existing' }, error: null });
 
-      const result = await service.startMentorshipChat('u1', 'u2');
+      mockClient.from
+        .mockReturnValueOnce(requestChain)
+        .mockReturnValueOnce(existingRelChain)
+        .mockReturnValueOnce(existingConvChain);
+
+      const result = await service.startMentorshipChat('u1', 'req-1');
       expect(result.success).toBe(true);
-      expect(result.data.id).toBe('conv-existing');
+      expect(result.data.conversation_id).toBe('conv-existing');
     });
   });
 });

@@ -332,4 +332,153 @@ describe('MentorshipProfileService', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe('deactivateProfileSection', () => {
+    it('should deactivate mentor section', async () => {
+      const profileChain = createMockQueryChain({
+        data: { is_active_mentor: true, is_active_mentee: false },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: { id: 'u1', is_active_mentor: false, is_active_mentee: false, mentoring_as: null },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(profileChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.deactivateProfileSection('u1', 'mentor');
+      expect(result.success).toBe(true);
+    });
+
+    it('should deactivate mentee section', async () => {
+      const profileChain = createMockQueryChain({
+        data: { is_active_mentor: false, is_active_mentee: true },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: { id: 'u1', is_active_mentor: false, is_active_mentee: false, mentoring_as: null },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(profileChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.deactivateProfileSection('u1', 'mentee');
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('checkProfileExists', () => {
+    it('should return profile info when profile exists', async () => {
+      const chain = createMockQueryChain({
+        data: { id: 'u1', is_active_mentor: true, is_active_mentee: false, mentoring_as: 'mentor' },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.checkProfileExists('u1');
+      expect(result.hasProfile).toBe(true);
+      expect(result.hasMentorProfile).toBe(true);
+    });
+
+    it('should return hasProfile false when not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.checkProfileExists('nope');
+      expect(result.hasProfile).toBe(false);
+    });
+  });
+
+  describe('isProfileActive', () => {
+    it('should return true when mentor is active', async () => {
+      const chain = createMockQueryChain({
+        data: { is_active_mentor: true, is_active_mentee: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.isProfileActive('u1');
+      expect(result).toBe(true);
+    });
+
+    it('should return false when profile not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.isProfileActive('u1');
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('checkProfileRequirement', () => {
+    it('should return all fields complete when profile is full', async () => {
+      const chain = createMockQueryChain({
+        data: {
+          is_active_mentor: true,
+          is_active_mentee: false,
+          mentor_bio: 'Expert',
+          mentor_expertise: ['leadership'],
+          mentee_goals: null,
+          job_title: 'CTO',
+          location: 'NYC',
+          bio: 'Hi',
+          career_level_encrypted: 'enc_senior',
+          company_encrypted: 'enc_Google',
+        },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.checkProfileRequirement('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.canCreateRequest).toBe(true);
+    });
+
+    it('should return missing fields when profile incomplete', async () => {
+      const chain = createMockQueryChain({
+        data: {
+          is_active_mentor: true,
+          is_active_mentee: false,
+          mentor_bio: null,
+          mentor_expertise: [],
+          job_title: null,
+          location: null,
+          bio: null,
+          career_level_encrypted: null,
+          company_encrypted: null,
+        },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.checkProfileRequirement('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.canCreateRequest).toBe(false);
+      expect(result.data.missingSharedFields.length).toBeGreaterThan(0);
+    });
+
+    it('should return hasProfile false when user not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.checkProfileRequirement('nope');
+      expect(result.success).toBe(true);
+      expect(result.data.hasProfile).toBe(false);
+    });
+  });
+
+  describe('submitFeedback', () => {
+    it('should submit feedback successfully', async () => {
+      const result = await service.submitFeedback('u1', {
+        rating: 5,
+        comment: 'Great service!',
+      });
+      expect(result.success).toBe(true);
+      expect(result.data.rating).toBe(5);
+    });
+  });
 });

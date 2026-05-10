@@ -1,12 +1,3 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { UserAccountService } from '../../modules/user/services/user-account.service';
-import { supabaseAdmin } from '../../database/supabase.client';
-import {
-  createMockSupabaseClient,
-  createMockQueryChain,
-  createMockConfigService,
-} from '../helpers/mock-supabase';
-
 jest.mock('../../database/supabase.client', () => ({
   supabaseAdmin: jest.fn(),
   supabaseClient: jest.fn(),
@@ -20,6 +11,20 @@ jest.mock('../../common/utils/logger.util', () => ({
     debug: jest.fn(),
   },
 }));
+jest.mock('bcrypt', () => ({
+  compare: jest.fn().mockResolvedValue(true),
+  hash: jest.fn().mockResolvedValue('hashed_new_password'),
+}));
+
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { UserAccountService } from '../../modules/user/services/user-account.service';
+import { supabaseAdmin } from '../../database/supabase.client';
+import * as bcrypt from 'bcrypt';
+import {
+  createMockSupabaseClient,
+  createMockQueryChain,
+  createMockConfigService,
+} from '../helpers/mock-supabase';
 
 describe('UserAccountService', () => {
   let service: UserAccountService;
@@ -180,6 +185,63 @@ describe('UserAccountService', () => {
       await expect(
         service.deleteAccount('u1', { confirmDeletion: true }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('changePassword', () => {
+    it('should change password successfully', async () => {
+      const profileChain = createMockQueryChain({
+        data: { email: 'user@test.com', password_hash: 'hashed_current' },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({ data: null, error: null });
+      mockClient.from
+        .mockReturnValueOnce(profileChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.changePassword('u1', 'currentPass', 'newPass123');
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw if user not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.changePassword('u1', 'old', 'new')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw if account has no password (OAuth-only)', async () => {
+      const chain = createMockQueryChain({
+        data: { email: 'user@test.com', password_hash: null },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.changePassword('u1', 'old', 'new')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw if current password is incorrect', async () => {
+      const chain = createMockQueryChain({
+        data: { email: 'user@test.com', password_hash: 'hashed_current' },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+      (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
+
+      await expect(service.changePassword('u1', 'wrong', 'new')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw if update fails', async () => {
+      const profileChain = createMockQueryChain({
+        data: { email: 'user@test.com', password_hash: 'hashed' },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from
+        .mockReturnValueOnce(profileChain)
+        .mockReturnValueOnce(updateChain);
+
+      await expect(service.changePassword('u1', 'current', 'new')).rejects.toThrow(BadRequestException);
     });
   });
 

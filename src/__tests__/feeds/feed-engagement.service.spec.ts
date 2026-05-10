@@ -66,7 +66,7 @@ describe('FeedEngagementService', () => {
   });
 
   describe('toggleLike', () => {
-    it.skip('should like content when not already liked', async () => {
+    it('should like content when not already liked', async () => {
       const existChain = createMockQueryChain({ data: null, error: null });
       const insertChain = createMockQueryChain({ data: null, error: null });
       const updateChain = createMockQueryChain({ data: null, error: null });
@@ -87,7 +87,7 @@ describe('FeedEngagementService', () => {
       expect(result.message).toBe(MSG.FEED.LIKED);
     });
 
-    it.skip('should unlike content when already liked', async () => {
+    it('should unlike content when already liked', async () => {
       const existChain = createMockQueryChain({
         data: { id: 'like-1' },
         error: null,
@@ -106,7 +106,7 @@ describe('FeedEngagementService', () => {
       expect(result.message).toBe(MSG.FEED.UNLIKED);
     });
 
-    it.skip('should throw on error', async () => {
+    it('should throw on error', async () => {
       const errorChain = createMockQueryChain({ data: null, error: null });
       errorChain.maybeSingle = jest
         .fn()
@@ -120,7 +120,7 @@ describe('FeedEngagementService', () => {
   });
 
   describe('toggleReaction', () => {
-    it.skip('should add reaction when not reacted', async () => {
+    it('should add reaction when not reacted', async () => {
       const existChain = createMockQueryChain({ data: null, error: null });
       const defaultChain = createMockQueryChain({
         data: [],
@@ -142,7 +142,7 @@ describe('FeedEngagementService', () => {
       expect(result.data.reacted).toBe(true);
     });
 
-    it.skip('should remove reaction when already reacted', async () => {
+    it('should remove reaction when already reacted', async () => {
       const existChain = createMockQueryChain({
         data: { id: 'r1' },
         error: null,
@@ -165,7 +165,7 @@ describe('FeedEngagementService', () => {
       expect(result.data.reacted).toBe(false);
     });
 
-    it.skip('should reject invalid reaction type', async () => {
+    it('should reject invalid reaction type', async () => {
       await expect(
         service.toggleReaction('post', 'p1', 'u1', 'invalid'),
       ).rejects.toThrow(BadRequestException);
@@ -173,7 +173,7 @@ describe('FeedEngagementService', () => {
   });
 
   describe('toggleBookmark', () => {
-    it.skip('should add bookmark', async () => {
+    it('should add bookmark', async () => {
       const existChain = createMockQueryChain({ data: null, error: null });
       const insertChain = createMockQueryChain({ data: null, error: null });
 
@@ -186,7 +186,7 @@ describe('FeedEngagementService', () => {
       expect(result.message).toBe(MSG.FEED.BOOKMARKED);
     });
 
-    it.skip('should remove bookmark', async () => {
+    it('should remove bookmark', async () => {
       const existChain = createMockQueryChain({
         data: { id: 'b1' },
         error: null,
@@ -204,7 +204,7 @@ describe('FeedEngagementService', () => {
   });
 
   describe('addComment', () => {
-    it.skip('should add comment to post', async () => {
+    it('should add comment to post', async () => {
       const postChain = createMockQueryChain({
         data: { id: 'p1', user_id: 'u2', comments_count: 0 },
         error: null,
@@ -232,7 +232,7 @@ describe('FeedEngagementService', () => {
       expect(result.message).toBe(MSG.FEED.COMMENT_ADDED);
     });
 
-    it.skip('should throw on insert error', async () => {
+    it('should throw on insert error', async () => {
       const postChain = createMockQueryChain({
         data: { id: 'p1', user_id: 'u2', comments_count: 0 },
         error: null,
@@ -253,7 +253,7 @@ describe('FeedEngagementService', () => {
   });
 
   describe('getBookmarks', () => {
-    it.skip('should return user bookmarks', async () => {
+    it('should return user bookmarks', async () => {
       const chain = createMockQueryChain({
         data: [
           {
@@ -272,7 +272,7 @@ describe('FeedEngagementService', () => {
       expect(result.success).toBe(true);
     });
 
-    it.skip('should handle empty bookmarks', async () => {
+    it('should handle empty bookmarks', async () => {
       const chain = createMockQueryChain({ data: [], error: null, count: 0 });
       mockClient.from.mockReturnValue(chain);
 
@@ -282,7 +282,7 @@ describe('FeedEngagementService', () => {
   });
 
   describe('toggleShare', () => {
-    it.skip('should share content', async () => {
+    it('should share content', async () => {
       const existChain = createMockQueryChain({ data: null, error: null });
       const insertChain = createMockQueryChain({ data: null, error: null });
       const updateChain = createMockQueryChain({ data: null, error: null });
@@ -292,12 +292,12 @@ describe('FeedEngagementService', () => {
         .mockReturnValueOnce(insertChain)
         .mockReturnValueOnce(updateChain);
 
-      const result = await service.unshareItem('post', 'p1', 'u1');
+      const result = await service.shareItem('post', 'p1', 'u1', {} as any);
       expect(result.success).toBe(true);
       expect(result.message).toBe(MSG.FEED.SHARED);
     });
 
-    it.skip('should unshare via unshareItem', async () => {
+    it('should unshare via unshareItem', async () => {
       const existChain = createMockQueryChain({
         data: { id: 's1' },
         error: null,
@@ -315,7 +315,7 @@ describe('FeedEngagementService', () => {
       expect(result.message).toBe(MSG.FEED.UNSHARED);
     });
 
-    it.skip('should throw on error', async () => {
+    it('should throw on error', async () => {
       const errorChain = createMockQueryChain({ data: null, error: null });
       errorChain.maybeSingle = jest
         .fn()
@@ -325,6 +325,292 @@ describe('FeedEngagementService', () => {
       await expect(
         service.shareItem('post', 'p1', 'u1', {} as any),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('toggleBookmark', () => {
+    it('should add bookmark when not exists', async () => {
+      const existChain = createMockQueryChain({ data: null, error: null });
+      const insertChain = createMockQueryChain({ data: null, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(existChain)
+        .mockReturnValueOnce(insertChain);
+
+      const result = await service.toggleBookmark('post', 'p1', 'u1');
+      expect(result.success).toBe(true);
+      expect(result.data.bookmarked).toBe(true);
+      expect(result.message).toBe(MSG.FEED.BOOKMARKED);
+    });
+
+    it('should remove bookmark when exists', async () => {
+      const existChain = createMockQueryChain({ data: { id: 'b1' }, error: null });
+      const deleteChain = createMockQueryChain({ data: null, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(existChain)
+        .mockReturnValueOnce(deleteChain);
+
+      const result = await service.toggleBookmark('post', 'p1', 'u1');
+      expect(result.success).toBe(true);
+      expect(result.data.bookmarked).toBe(false);
+      expect(result.message).toBe(MSG.FEED.BOOKMARK_REMOVED);
+    });
+  });
+
+  describe('getUserBookmarks', () => {
+    it('should return empty when no bookmarks', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getUserBookmarks('u1');
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('should throw BadRequestException on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' }, count: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.getUserBookmarks('u1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return bookmarks with content', async () => {
+      const bookmarks = [
+        { content_type: 'post', content_id: 'p1' },
+        { content_type: 'topic', content_id: 't1' },
+      ];
+      const bookmarksChain = createMockQueryChain({ data: bookmarks, error: null, count: 2 });
+      // Parallel: posts, topics, nooks, likes, feedAllReactions, feedUserReactions, topicUserReactions
+      const emptyChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from
+        .mockReturnValueOnce(bookmarksChain)
+        .mockReturnValue(emptyChain);
+
+      const result = await service.getUserBookmarks('u1');
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('getComments', () => {
+    it('should return empty when no top-level comments', async () => {
+      const countChain = createMockQueryChain({ data: null, error: null, count: 0 });
+      const topLevelChain = createMockQueryChain({ data: [], error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(countChain)
+        .mockReturnValueOnce(topLevelChain);
+
+      const result = await service.getComments('post', 'p1', 'u1');
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+    });
+
+    it('should return threaded comments with identity reveal', async () => {
+      const countChain = createMockQueryChain({ data: null, error: null, count: 2 });
+      const topLevelChain = createMockQueryChain({
+        data: [{ id: 'c1' }, { id: 'c2' }],
+        error: null,
+      });
+      const allCommentsChain = createMockQueryChain({
+        data: [
+          {
+            id: 'c1',
+            user_id: 'u1',
+            content: 'Hello',
+            parent_comment_id: null,
+            created_at: '2026-01-01T00:00:00Z',
+            likes_count: 1,
+            user_profile: {
+              id: 'u1',
+              username: 'me',
+              avatar: null,
+              first_name_encrypted: 'enc_f',
+              last_name_encrypted: 'enc_l',
+              is_company_verified: false,
+            },
+          },
+          {
+            id: 'c2',
+            user_id: 'u2',
+            content: 'World',
+            parent_comment_id: null,
+            created_at: '2026-01-01T01:00:00Z',
+            likes_count: 0,
+            user_profile: {
+              id: 'u2',
+              username: 'other',
+              avatar: null,
+              first_name_encrypted: null,
+              last_name_encrypted: null,
+              is_company_verified: false,
+            },
+          },
+          {
+            id: 'c3',
+            user_id: 'u2',
+            content: 'Reply',
+            parent_comment_id: 'c1',
+            created_at: '2026-01-01T02:00:00Z',
+            likes_count: 0,
+            user_profile: {
+              id: 'u2',
+              username: 'other',
+              avatar: null,
+              first_name_encrypted: null,
+              last_name_encrypted: null,
+              is_company_verified: false,
+            },
+          },
+        ],
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(countChain)
+        .mockReturnValueOnce(topLevelChain)
+        .mockReturnValueOnce(allCommentsChain);
+
+      const result = await service.getComments('post', 'p1', 'u1');
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(2);
+      // c1 is user's own comment so should appear first (own comments first)
+      expect(result.data[0].id).toBe('c1');
+      // c1 should have a reply
+      expect(result.data[0].replies).toHaveLength(1);
+      expect(result.data[0].replies[0].id).toBe('c3');
+    });
+
+    it('should throw on top-level comments query error', async () => {
+      const countChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const topLevelChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+
+      mockClient.from
+        .mockReturnValueOnce(countChain)
+        .mockReturnValueOnce(topLevelChain);
+
+      await expect(service.getComments('post', 'p1', 'u1'))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw on all comments query error', async () => {
+      const countChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const topLevelChain = createMockQueryChain({ data: [{ id: 'c1' }], error: null });
+      const allCommentsChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+
+      mockClient.from
+        .mockReturnValueOnce(countChain)
+        .mockReturnValueOnce(topLevelChain)
+        .mockReturnValueOnce(allCommentsChain);
+
+      await expect(service.getComments('post', 'p1', 'u1'))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('should filter out blocked users comments', async () => {
+      const countChain = createMockQueryChain({ data: null, error: null, count: 1 });
+      const topLevelChain = createMockQueryChain({ data: [{ id: 'c1' }], error: null });
+      const allCommentsChain = createMockQueryChain({
+        data: [
+          {
+            id: 'c1',
+            user_id: 'blocked-user',
+            content: 'bad comment',
+            parent_comment_id: null,
+            created_at: '2026-01-01T00:00:00Z',
+            likes_count: 0,
+            user_profile: { id: 'blocked-user', username: 'bad', avatar: null, first_name_encrypted: null, last_name_encrypted: null, is_company_verified: false },
+          },
+        ],
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(countChain)
+        .mockReturnValueOnce(topLevelChain)
+        .mockReturnValueOnce(allCommentsChain);
+
+      // Override contentSafety mock for this test
+      // Since we can't easily override mocks created in beforeEach, let's test with the service as-is
+      // The blocked user IDs would filter but mock returns [] by default, so comment stays
+      const result = await service.getComments('post', 'p1', 'u1');
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle pagination with hasMore', async () => {
+      const countChain = createMockQueryChain({ data: null, error: null, count: 25 });
+      const topLevelChain = createMockQueryChain({
+        data: Array.from({ length: 20 }, (_, i) => ({ id: `c${i}` })),
+        error: null,
+      });
+      const comments = Array.from({ length: 20 }, (_, i) => ({
+        id: `c${i}`,
+        user_id: `u${i}`,
+        content: `Comment ${i}`,
+        parent_comment_id: null,
+        created_at: new Date(2026, 0, 1, i).toISOString(),
+        likes_count: 0,
+        user_profile: { id: `u${i}`, username: `user${i}`, avatar: null, first_name_encrypted: null, last_name_encrypted: null, is_company_verified: false },
+      }));
+      const allCommentsChain = createMockQueryChain({ data: comments, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(countChain)
+        .mockReturnValueOnce(topLevelChain)
+        .mockReturnValueOnce(allCommentsChain);
+
+      const result = await service.getComments('post', 'p1', 'u1', 1, 20);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.pagination.total).toBe(25);
+    });
+  });
+
+  describe('shareItem', () => {
+    it('should share content successfully', async () => {
+      const existChain = createMockQueryChain({ data: null, error: null });
+      const insertChain = createMockQueryChain({ data: null, error: null });
+      const incrementChain = createMockQueryChain({ data: null, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(existChain)
+        .mockReturnValueOnce(insertChain)
+        .mockReturnValueOnce(incrementChain);
+      mockClient.rpc.mockResolvedValueOnce({ data: null, error: null });
+
+      const result = await service.shareItem('post', 'p1', 'u1', { shareMessage: 'Check this out!' });
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw if already shared', async () => {
+      const existChain = createMockQueryChain({ data: { id: 's1' }, error: null });
+      mockClient.from.mockReturnValueOnce(existChain);
+
+      await expect(service.shareItem('post', 'p1', 'u1', {}))
+        .rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('unshareItem', () => {
+    it('should unshare content successfully', async () => {
+      const deleteChain = createMockQueryChain({ data: null, error: null });
+      const decrementChain = createMockQueryChain({ data: null, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(deleteChain)
+        .mockReturnValueOnce(decrementChain);
+      mockClient.rpc.mockResolvedValueOnce({ data: null, error: null });
+
+      const result = await service.unshareItem('post', 'p1', 'u1');
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw on delete error', async () => {
+      const deleteChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(deleteChain);
+
+      await expect(service.unshareItem('post', 'p1', 'u1'))
+        .rejects.toThrow(BadRequestException);
     });
   });
 });

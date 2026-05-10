@@ -62,7 +62,7 @@ describe('UserDiscoveryService', () => {
   });
 
   describe('getConnectableUsers', () => {
-    it.skip('should return connectable users', async () => {
+    it('should return connectable users', async () => {
       const usersChain = createMockQueryChain({
         data: [mockUser],
         error: null,
@@ -84,7 +84,7 @@ describe('UserDiscoveryService', () => {
       expect(result.data).toBeDefined();
     });
 
-    it.skip('should exclude self from results', async () => {
+    it('should exclude self from results', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -92,7 +92,7 @@ describe('UserDiscoveryService', () => {
       expect(chain.neq).toHaveBeenCalledWith('id', 'u1');
     });
 
-    it.skip('should filter by search term', async () => {
+    it('should filter by search term', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -100,7 +100,7 @@ describe('UserDiscoveryService', () => {
       expect(chain.or).toHaveBeenCalled();
     });
 
-    it.skip('should exclude existing conversations when requested', async () => {
+    it('should exclude existing conversations when requested', async () => {
       const usersChain = createMockQueryChain({
         data: [mockUser, { ...mockUser, id: 'u3' }],
         error: null,
@@ -120,7 +120,7 @@ describe('UserDiscoveryService', () => {
       expect(result.success).toBe(true);
     });
 
-    it.skip('should decrypt company and career_level', async () => {
+    it('should decrypt company and career_level', async () => {
       const usersChain = createMockQueryChain({
         data: [mockUser],
         error: null,
@@ -142,7 +142,7 @@ describe('UserDiscoveryService', () => {
       expect(result.data.users[0].company).toBeDefined();
     });
 
-    it.skip('should handle DB error', async () => {
+    it('should handle DB error', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'fail' },
@@ -154,7 +154,7 @@ describe('UserDiscoveryService', () => {
   });
 
   describe('searchUsers', () => {
-    it.skip('should search users by query', async () => {
+    it('should search users by query', async () => {
       const chain = createMockQueryChain({ data: [mockUser], error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -162,13 +162,68 @@ describe('UserDiscoveryService', () => {
       expect(result.success).toBe(true);
     });
 
-    it.skip('should return empty for no matches', async () => {
+    it('should return empty for no matches', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValue(chain);
 
       const result = await service.search('u1', 'nonexistent');
       expect(result.success).toBe(true);
-      expect(result.data).toEqual([]);
+      expect(result.data.users).toEqual([]);
+    });
+  });
+
+  describe('getUserSuggestions', () => {
+    it('should return user suggestions', async () => {
+      // 1) from('user_profiles') - current user
+      // 2) from('user_profiles') - query chain
+      // 3) from('conversations') - existing conversations
+      const currentUserChain = createMockQueryChain({
+        data: { skills: ['design'], mentoring_as: 'mentor', job_title: 'Designer', company_type: 'tech' },
+        error: null,
+      });
+      const suggestionsChain = createMockQueryChain({
+        data: [mockUser],
+        error: null,
+      });
+      const convsChain = createMockQueryChain({ data: [], error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(currentUserChain)
+        .mockReturnValueOnce(suggestionsChain)
+        .mockReturnValueOnce(convsChain);
+
+      const result = await service.getUserSuggestions('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.suggestions).toBeDefined();
+    });
+
+    it('should handle existing conversations and filter them out', async () => {
+      const currentUserChain = createMockQueryChain({
+        data: { skills: [], mentoring_as: 'mentee', job_title: null, company_type: null },
+        error: null,
+      });
+      const suggestionsChain = createMockQueryChain({ data: [], error: null });
+      const convsChain = createMockQueryChain({
+        data: [{ user1_id: 'u1', user2_id: 'u3' }],
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(currentUserChain)
+        .mockReturnValueOnce(suggestionsChain)
+        .mockReturnValueOnce(convsChain);
+
+      const result = await service.getUserSuggestions('u1');
+      expect(result.success).toBe(true);
+    });
+
+    it('should return empty suggestions on error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.getUserSuggestions('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.suggestions).toEqual([]);
     });
   });
 });

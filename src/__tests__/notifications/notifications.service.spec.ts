@@ -307,4 +307,142 @@ describe('NotificationsService', () => {
       expect(chain.eq).toHaveBeenCalledWith('user_id', 'user-1');
     });
   });
+
+  /* ================================================================ */
+  /*  getNotificationById                                              */
+  /* ================================================================ */
+  describe('getNotificationById', () => {
+    it('should return a notification by id', async () => {
+      const notif = { id: 'notif-1', type: 'forum_like', is_read: false };
+      const chain = createMockQueryChain({ data: notif, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getNotificationById('notif-1', 'user-1');
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(notif);
+    });
+
+    it('should throw NotFoundException when notification not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.getNotificationById('nope', 'user-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  /* ================================================================ */
+  /*  markGroupAsRead                                                  */
+  /* ================================================================ */
+  describe('markGroupAsRead', () => {
+    it('should mark a group of notifications as read', async () => {
+      const updated = [{ id: 'n1', is_read: true }, { id: 'n2', is_read: true }];
+      const chain = createMockQueryChain({ data: updated, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.markGroupAsRead('user-1', ['n1', 'n2']);
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(2);
+    });
+
+    it('should return 0 count when no notifications updated', async () => {
+      const chain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.markGroupAsRead('user-1', []);
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(0);
+    });
+  });
+
+  /* ================================================================ */
+  /*  updateNotification                                               */
+  /* ================================================================ */
+  describe('updateNotification', () => {
+    it('should update notification is_read flag', async () => {
+      const updated = { id: 'notif-1', is_read: true };
+      const chain = createMockQueryChain({ data: updated, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.updateNotification('notif-1', 'user-1', { is_read: true } as any);
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw NotFoundException when notification not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(
+        service.updateNotification('nope', 'user-1', { is_read: true } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  /* ================================================================ */
+  /*  deleteAll                                                        */
+  /* ================================================================ */
+  describe('deleteAll', () => {
+    it('should delete all notifications for a user', async () => {
+      const chain = createMockQueryChain({ data: null, error: null, count: 5 });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.deleteAll('user-1');
+      expect(result.success).toBe(true);
+      expect(result.data.deleted_count).toBe(5);
+    });
+
+    it('should throw BadRequestException on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' }, count: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.deleteAll('user-1')).rejects.toThrow();
+    });
+  });
+
+  /* ================================================================ */
+  /*  deleteAllRead                                                    */
+  /* ================================================================ */
+  describe('deleteAllRead', () => {
+    it('should delete all read notifications', async () => {
+      const deleted = [{ id: 'n1' }, { id: 'n2' }];
+      const chain = createMockQueryChain({ data: deleted, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.deleteAllRead('user-1');
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(2);
+    });
+  });
+
+  /* ================================================================ */
+  /*  markActionTakenByReference                                       */
+  /* ================================================================ */
+  describe('markActionTakenByReference', () => {
+    it('should mark action_taken on matching notifications', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await service.markActionTakenByReference('user-1', 'ref-1');
+      expect(chain.update).toHaveBeenCalledWith({ action_taken: true });
+    });
+  });
+
+  /* ================================================================ */
+  /*  createBulkNotifications                                          */
+  /* ================================================================ */
+  describe('createBulkNotifications', () => {
+    it('should create multiple notifications in bulk', async () => {
+      const notifs = [
+        { user_id: 'u1', type: 'forum_like', title: 'Like', message: 'msg', delivery_method: ['in_app'] },
+        { user_id: 'u2', type: 'forum_like', title: 'Like', message: 'msg', delivery_method: ['in_app'] },
+      ];
+
+      const insertedData = [{ id: 'n1', user_id: 'u1' }, { id: 'n2', user_id: 'u2' }];
+      const insertChain = createMockQueryChain({ data: insertedData, error: null });
+      mockClient.from.mockReturnValueOnce(insertChain);
+
+      const result = await service.createBulkNotifications(notifs as any);
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(2);
+    });
+  });
 });

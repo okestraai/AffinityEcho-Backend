@@ -146,6 +146,41 @@ describe('NooksService', () => {
         BadRequestException,
       );
     });
+
+    it('should apply urgency filter', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.findAll({ urgency: 'high' } as any, 'u2');
+      expect(result.success).toBe(true);
+      expect(chain.eq).toHaveBeenCalledWith('urgency', 'high');
+    });
+
+    it('should apply scope filter', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.findAll({ scope: 'local' } as any, 'u2');
+      expect(result.success).toBe(true);
+      expect(chain.eq).toHaveBeenCalledWith('scope', 'local');
+    });
+
+    it('should apply hashtag filter', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.findAll({ hashtag: 'tech' } as any, 'u2');
+      expect(result.success).toBe(true);
+      expect(chain.contains).toHaveBeenCalledWith('hashtags', ['tech']);
+    });
+
+    it('should apply trending sort', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.findAll({ sortBy: 'trending' } as any, 'u2');
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('findOne', () => {
@@ -241,6 +276,152 @@ describe('NooksService', () => {
       const result = await service.getGlobalStats();
       expect(result.success).toBe(true);
       expect(result.data.activeNooks).toBeDefined();
+    });
+
+    it('should return cached stats if available', async () => {
+      const cached = { success: true, data: { activeNooks: 10 } };
+      mockRedis.get.mockResolvedValueOnce(cached);
+
+      const result = await service.getGlobalStats();
+      expect(result).toEqual(cached);
+      expect(mockClient.from).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('flagMessage', () => {
+    it('should flag a message', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { flagged_count: 2 },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({ data: null, error: null });
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.flagMessage('nook-1', 'msg-1', 'spam', 'u1');
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw if message not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.flagMessage('nook-1', 'bad-msg', 'spam', 'u1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw on update error', async () => {
+      const fetchChain = createMockQueryChain({ data: { flagged_count: 0 }, error: null });
+      const updateChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain);
+
+      await expect(service.flagMessage('nook-1', 'msg-1', 'spam', 'u1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getMyNooks', () => {
+    it('should return nooks created by user', async () => {
+      const chain = createMockQueryChain({
+        data: [{ ...mockNook }],
+        error: null,
+        count: 1,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getMyNooks('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.nooks).toHaveLength(1);
+    });
+
+    it('should throw on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.getMyNooks('u1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle empty results', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getMyNooks('u1', 1, 8);
+      expect(result.data.pagination.total).toBe(0);
+    });
+  });
+
+  describe('getBookmarkedNooks', () => {
+    it('should return empty when no bookmarks', async () => {
+      const chain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getBookmarkedNooks('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.nooks).toHaveLength(0);
+    });
+
+    it('should return bookmarked nooks', async () => {
+      const bookmarksChain = createMockQueryChain({
+        data: [{ content_id: 'nook-1' }],
+        error: null,
+      });
+      const nooksChain = createMockQueryChain({
+        data: [{ ...mockNook }],
+        error: null,
+        count: 1,
+      });
+      mockClient.from
+        .mockReturnValueOnce(bookmarksChain)
+        .mockReturnValueOnce(nooksChain);
+
+      const result = await service.getBookmarkedNooks('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.nooks).toHaveLength(1);
+    });
+
+    it('should throw on bookmarks DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.getBookmarkedNooks('u1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('toggleNookBookmark', () => {
+    it('should add bookmark when not already bookmarked', async () => {
+      const nookChain = createMockQueryChain({ data: { id: 'nook-1' }, error: null });
+      const existingChain = createMockQueryChain({ data: null, error: null });
+      const insertChain = createMockQueryChain({ data: null, error: null });
+      mockClient.from
+        .mockReturnValueOnce(nookChain)
+        .mockReturnValueOnce(existingChain)
+        .mockReturnValueOnce(insertChain);
+
+      const result = await service.toggleNookBookmark('nook-1', 'u1');
+      expect(result.success).toBe(true);
+      expect(result.data.bookmarked).toBe(true);
+    });
+
+    it('should remove bookmark when already bookmarked', async () => {
+      const nookChain = createMockQueryChain({ data: { id: 'nook-1' }, error: null });
+      const existingChain = createMockQueryChain({ data: { id: 'bm-1' }, error: null });
+      const deleteChain = createMockQueryChain({ data: null, error: null });
+      mockClient.from
+        .mockReturnValueOnce(nookChain)
+        .mockReturnValueOnce(existingChain)
+        .mockReturnValueOnce(deleteChain);
+
+      const result = await service.toggleNookBookmark('nook-1', 'u1');
+      expect(result.success).toBe(true);
+      expect(result.data.bookmarked).toBe(false);
+    });
+
+    it('should throw if nook not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'not found' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.toggleNookBookmark('bad-nook', 'u1')).rejects.toThrow(NotFoundException);
     });
   });
 });

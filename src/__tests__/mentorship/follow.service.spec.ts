@@ -40,7 +40,8 @@ describe('FollowService', () => {
       encrypt: jest.fn((v: string) => v + '_enc'),
     };
     mockIdentityReveal = {
-      getRevealedUserIds: jest.fn().mockResolvedValue([]),
+      getRevealedUserIds: jest.fn().mockResolvedValue(new Set()),
+      decryptRealName: jest.fn().mockReturnValue(null),
     };
     service = new FollowService(
       createMockConfigService() as any,
@@ -250,6 +251,65 @@ describe('FollowService', () => {
       const result = await service.checkFollowStatus('u1', 'u2');
       expect(result.data.isFollowing).toBe(false);
       expect(result.data.isFollowedBy).toBe(false);
+    });
+  });
+
+  describe('getFollowing', () => {
+    it('should return list of users that userId is following', async () => {
+      const follows = [
+        {
+          id: 'f1',
+          created_at: '2026-01-01',
+          following: { id: 'u2', username: 'Mentor', avatar: '📚', job_title: 'CTO', company_type: null, mentoring_as: 'mentor', is_willing_to_mentor: true, mentor_bio: null, location: 'NYC', years_experience: 5, career_level_encrypted: null, affinity_tags_encrypted: null, first_name_encrypted: null, last_name_encrypted: null, has_completed_onboarding: true, is_deleted: false, is_deactivated: false },
+        },
+      ];
+      const chain = createMockQueryChain({ data: follows, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getFollowing('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.following).toHaveLength(1);
+    });
+
+    it('should return empty list when not following anyone', async () => {
+      const chain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getFollowing('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.following).toHaveLength(0);
+    });
+
+    it('should throw on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.getFollowing('u1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getFollowers', () => {
+    it('should return list of users following userId', async () => {
+      const followers = [
+        {
+          id: 'f1',
+          created_at: '2026-01-01',
+          follower: { id: 'u2', username: 'User2', avatar: '🔥', job_title: 'Dev', company_type: null, mentoring_as: 'mentee', is_willing_to_mentor: false, mentor_bio: null, location: 'NYC', years_experience: 2, career_level_encrypted: null, affinity_tags_encrypted: null, first_name_encrypted: null, last_name_encrypted: null, has_completed_onboarding: true, is_deleted: false, is_deactivated: false },
+        },
+      ];
+      const chain = createMockQueryChain({ data: followers, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.getFollowers('u1');
+      expect(result.success).toBe(true);
+      expect(result.data.followers).toHaveLength(1);
+    });
+
+    it('should throw on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.getFollowers('u1')).rejects.toThrow(BadRequestException);
     });
   });
 });

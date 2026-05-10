@@ -12,6 +12,7 @@ import { RedisService } from '../../../common/services/redis.service';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class NooksService {
     private identityReveal: IdentityRevealUtil,
     private encryption: EncryptionUtil,
     private okestraService: OkestraService,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -31,7 +33,15 @@ export class NooksService {
   async findAll(query: NookQueryDto, userId: string) {
     const cacheKey = `nooks:list:${JSON.stringify(query)}`;
     const cached = await this.redis.get<any>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      // Apply hidden content filter post-cache so hides take effect immediately
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'nook');
+      if (hiddenIds.length > 0) {
+        const hiddenSet = new Set(hiddenIds);
+        cached.data.nooks = cached.data.nooks.filter((n: any) => !hiddenSet.has(n.id));
+      }
+      return cached;
+    }
 
     const { page = 1, limit = 8, ...filters } = query;
     const from = (page - 1) * limit;
@@ -109,6 +119,13 @@ export class NooksService {
     };
 
     await this.redis.set(cacheKey, result, 120000);
+
+    // Apply hidden content filter post-cache so hides take effect immediately
+    const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'nook');
+    if (hiddenIds.length > 0) {
+      const hiddenSet = new Set(hiddenIds);
+      result.data.nooks = result.data.nooks.filter((n: any) => !hiddenSet.has(n.id));
+    }
 
     return result;
   }

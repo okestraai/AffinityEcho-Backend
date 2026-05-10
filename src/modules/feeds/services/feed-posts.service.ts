@@ -13,6 +13,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MentionService } from '../../mentions/mention.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class FeedPostsService {
     private identityReveal: IdentityRevealUtil,
     private mentionService: MentionService,
     private notificationsService: NotificationsService,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -285,10 +287,19 @@ export class FeedPostsService {
         throw new BadRequestException(MSG.FEED.POSTS_FAILED);
       }
 
-      const formatted = (posts || []).map((p: any) => this.formatPost(p));
+      let formatted = (posts || []).map((p: any) => this.formatPost(p));
+
+      // Filter out hidden posts when viewed by someone else
+      const viewerId = requestingUserId || userId;
+      if (viewerId !== userId) {
+        const hiddenIds = await this.contentSafety.getHiddenContentIds(viewerId, 'post');
+        if (hiddenIds.length > 0) {
+          const hiddenSet = new Set(hiddenIds);
+          formatted = formatted.filter((p: any) => !hiddenSet.has(p.id));
+        }
+      }
 
       // Apply identity reveal for the author
-      const viewerId = requestingUserId || userId;
       const isOwnPosts = viewerId === userId;
 
       if (formatted.length > 0) {

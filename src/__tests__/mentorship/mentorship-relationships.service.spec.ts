@@ -266,4 +266,144 @@ describe('MentorshipRelationshipsService', () => {
       );
     });
   });
+
+  describe('updateRelationshipDetails', () => {
+    it('should update relationship details for contact action', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', status: 'active' },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: { id: 'rel-1', status: 'active' },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.updateRelationshipDetails('rel-1', 'u1', { action: 'contact', notes: 'Great session' } as any);
+      expect(result.message).toBeDefined();
+    });
+
+    it('should throw NotFoundException when relationship not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(
+        service.updateRelationshipDetails('nope', 'u1', { action: 'contact' } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when not in relationship', async () => {
+      const chain = createMockQueryChain({
+        data: { mentor_id: 'other', mentee_id: 'another', status: 'active' },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(
+        service.updateRelationshipDetails('rel-1', 'u1', { action: 'contact' } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw BadRequestException for invalid action', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', status: 'active' },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateRelationshipDetails('rel-1', 'u1', { action: 'invalid_action' } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('completeRelationship', () => {
+    it('should complete an active relationship', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', status: 'active' },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({ data: { id: 'rel-1', status: 'completed' }, error: null });
+      const statsChain = createMockQueryChain({ data: null, error: null });
+      const notifChain = createMockQueryChain({ data: null, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain)
+        .mockReturnValueOnce(statsChain) // updateMentorStats
+        .mockReturnValueOnce(notifChain); // createNotification
+
+      const result = await service.completeRelationship('rel-1', 'u1', 5, 'Great mentorship');
+      expect(result.message).toBe('Relationship completed successfully');
+    });
+
+    it('should throw NotFoundException when relationship not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.completeRelationship('nope', 'u1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when relationship is pending', async () => {
+      const chain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', status: 'pending' },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.completeRelationship('rel-1', 'u1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getUserStats', () => {
+    it('should return mentor and mentee stats', async () => {
+      const mentorChain = createMockQueryChain({
+        data: [{ status: 'completed', mentor_rating: 5, total_sessions: 3, completed_sessions: 3 }],
+        error: null,
+      });
+      const menteeChain = createMockQueryChain({ data: [], error: null });
+      const profileChain = createMockQueryChain({
+        data: { mentor_response_time: '24 hours' },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(mentorChain)
+        .mockReturnValueOnce(menteeChain)
+        .mockReturnValueOnce(profileChain);
+
+      const result = await service.getUserStats('u1');
+      expect(result.asMentor).toBeDefined();
+      expect(result.asMentee).toBeDefined();
+    });
+  });
+
+  describe('cancelRelationship', () => {
+    it('should cancel a pending or active relationship', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', status: 'active' },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({ data: { id: 'rel-1', status: 'cancelled' }, error: null });
+      const notifChain = createMockQueryChain({ data: null, error: null });
+
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain)
+        .mockReturnValueOnce(notifChain);
+
+      const result = await service.cancelRelationship('rel-1', 'u1', 'Not a good fit');
+      expect(result.message).toBeDefined();
+    });
+
+    it('should throw NotFoundException when relationship not found', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.cancelRelationship('nope', 'u1')).rejects.toThrow(NotFoundException);
+    });
+  });
 });

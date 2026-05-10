@@ -60,6 +60,10 @@ export function createMockQueryChain(
     'limit',
     'single',
     'maybeSingle',
+    'overlaps',
+    'contains',
+    'filter',
+    'textSearch',
   ];
 
   chainMethods.forEach((method) => {

@@ -219,30 +219,14 @@ export class FeedsService {
 
         let feedItems: FeedItem[] = contentResults.flat();
 
-        // Filter out blocked users' content and user-hidden content
-        const [blockedIds, hiddenPostIds, hiddenTopicIds, hiddenNookIds] =
-          await Promise.all([
-            this.contentSafety.getBlockedUserIds(userId),
-            this.contentSafety.getHiddenContentIds(userId, 'post'),
-            this.contentSafety.getHiddenContentIds(userId, 'topic'),
-            this.contentSafety.getHiddenContentIds(userId, 'nook'),
-          ]);
+        // Filter out blocked users' content (only on fresh build — block list rarely changes)
+        const blockedIds =
+          await this.contentSafety.getBlockedUserIds(userId);
 
         if (blockedIds.length > 0) {
           const blockedSet = new Set(blockedIds);
           feedItems = feedItems.filter(
             (item) => !blockedSet.has(item.user_id),
-          );
-        }
-
-        const hiddenSet = new Set([
-          ...hiddenPostIds,
-          ...hiddenTopicIds,
-          ...hiddenNookIds,
-        ]);
-        if (hiddenSet.size > 0) {
-          feedItems = feedItems.filter(
-            (item) => !hiddenSet.has(item.content_id),
           );
         }
 
@@ -262,6 +246,24 @@ export class FeedsService {
         }
 
         await this.redis.set(baseCacheKey, sortedFeed, 120000);
+      }
+
+      // Filter out user-hidden content post-cache so hides take effect immediately
+      const [hiddenPostIds, hiddenTopicIds, hiddenNookIds] = await Promise.all([
+        this.contentSafety.getHiddenContentIds(userId, 'post'),
+        this.contentSafety.getHiddenContentIds(userId, 'topic'),
+        this.contentSafety.getHiddenContentIds(userId, 'nook'),
+      ]);
+
+      const hiddenSet = new Set([
+        ...hiddenPostIds,
+        ...hiddenTopicIds,
+        ...hiddenNookIds,
+      ]);
+      if (hiddenSet.size > 0) {
+        sortedFeed = sortedFeed.filter(
+          (item: any) => !hiddenSet.has(item.content_id),
+        );
       }
 
       // Apply seenIds suppression post-cache — seen items rank lower, not removed

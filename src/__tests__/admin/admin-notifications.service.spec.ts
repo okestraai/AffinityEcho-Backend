@@ -149,4 +149,115 @@ describe('AdminNotificationsService', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('listNotifications', () => {
+    it('should return paginated notifications with summary', async () => {
+      const listChain = createMockQueryChain({
+        data: [{ id: 'n1', status: 'sent', title: 'Hello', type: 'system', audience: 'all' }],
+        error: null,
+        count: 1,
+      });
+      const summaryChain = createMockQueryChain({
+        data: [{ status: 'sent', recipients_count: 100 }],
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(listChain)
+        .mockReturnValueOnce(summaryChain);
+
+      const result = await service.listNotifications({ page: '1', limit: '10' });
+      expect(result.success).toBe(true);
+      expect(result.data.items).toHaveLength(1);
+      expect(result.data.summary.sent).toBe(1);
+    });
+
+    it('should apply filters', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const summaryChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(chain).mockReturnValueOnce(summaryChain);
+
+      const result = await service.listNotifications({ status: 'sent', audience: 'all', type: 'system' });
+      expect(result.success).toBe(true);
+      expect(chain.eq).toHaveBeenCalledWith('status', 'sent');
+    });
+
+    it('should throw on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' }, count: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(service.listNotifications({})).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('notifyUser', () => {
+    it('should notify a user', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      const result = await service.notifyUser('admin-1', 'Admin', 'u1', 'Title', 'Msg', 'system');
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw on insert error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await expect(
+        service.notifyUser('admin-1', 'Admin', 'u1', 'Title', 'Msg', 'system'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('exportNotifications - CSV', () => {
+    it('should export notifications as CSV', async () => {
+      const chain = createMockQueryChain({
+        data: [{ id: 'n1', title: 'Test', type: 'system', audience: 'all', status: 'sent', recipients_count: 100, sent_at: '2026-01-01', scheduled_at: null, created_at: '2026-01-01' }],
+        error: null,
+      });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.exportNotifications({}, 'csv');
+      expect(result.buffer).toBeDefined();
+      expect(result.filename).toContain('.csv');
+      expect(result.contentType).toContain('text/csv');
+    });
+
+    it('should throw on DB error during export', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValue(chain);
+
+      await expect(service.exportNotifications({}, 'csv')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('createNotification - validation', () => {
+    it('should throw if title is missing', async () => {
+      await expect(
+        service.createNotification('admin-1', 'Admin', { title: '', message: 'msg', type: 'system', audience: 'all' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw if schedule action missing scheduled_at', async () => {
+      await expect(
+        service.createNotification('admin-1', 'Admin', { title: 'T', message: 'M', type: 'system', audience: 'all', action: 'schedule' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should create and send notification immediately', async () => {
+      const insertChain = createMockQueryChain({ data: { id: 'n1' }, error: null });
+      mockClient.from
+        .mockReturnValueOnce(insertChain)
+        .mockReturnValue(createMockQueryChain({ data: null, error: null }));
+
+      const result = await service.createNotification('admin-1', 'Admin', {
+        title: 'Alert',
+        message: 'Important message',
+        type: 'system',
+        audience: 'all',
+        action: 'send',
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });

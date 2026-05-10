@@ -54,7 +54,7 @@ describe('MentorshipSessionsService', () => {
   });
 
   describe('createSession', () => {
-    it.skip('should create session for active relationship', async () => {
+    it('should create session for active relationship', async () => {
       const relChain = createMockQueryChain({
         data: mockRelationship,
         error: null,
@@ -84,7 +84,7 @@ describe('MentorshipSessionsService', () => {
       expect(result.session).toBeDefined();
     });
 
-    it.skip('should throw if relationship not found', async () => {
+    it('should throw if relationship not found', async () => {
       const chain = createMockQueryChain({ data: null, error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -93,7 +93,7 @@ describe('MentorshipSessionsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it.skip('should throw if relationship not active', async () => {
+    it('should throw if relationship not active', async () => {
       const chain = createMockQueryChain({
         data: { ...mockRelationship, status: 'ended' },
         error: null,
@@ -105,7 +105,7 @@ describe('MentorshipSessionsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it.skip('should throw on insert error', async () => {
+    it('should throw on insert error', async () => {
       const relChain = createMockQueryChain({
         data: mockRelationship,
         error: null,
@@ -126,7 +126,7 @@ describe('MentorshipSessionsService', () => {
   });
 
   describe('getSessions', () => {
-    it.skip('should return sessions for relationship', async () => {
+    it('should return sessions for relationship', async () => {
       const chain = createMockQueryChain({ data: [mockSession], error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -135,7 +135,7 @@ describe('MentorshipSessionsService', () => {
       expect(result[0].id).toBe('s1');
     });
 
-    it.skip('should return empty array when no sessions', async () => {
+    it('should return empty array when no sessions', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -143,7 +143,7 @@ describe('MentorshipSessionsService', () => {
       expect(result).toEqual([]);
     });
 
-    it.skip('should throw on error', async () => {
+    it('should throw on error', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'fail' },
@@ -157,7 +157,7 @@ describe('MentorshipSessionsService', () => {
   });
 
   describe('getSession', () => {
-    it.skip('should return session by ID', async () => {
+    it('should return session by ID', async () => {
       const chain = createMockQueryChain({ data: mockSession, error: null });
       mockClient.from.mockReturnValue(chain);
 
@@ -165,7 +165,7 @@ describe('MentorshipSessionsService', () => {
       expect(result).toBeDefined();
     });
 
-    it.skip('should throw if not found', async () => {
+    it('should throw if not found', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },
@@ -179,9 +179,13 @@ describe('MentorshipSessionsService', () => {
   });
 
   describe('updateSessionStatus', () => {
-    it.skip('should update session status to completed', async () => {
+    it('should update session status to completed', async () => {
       const sessionChain = createMockQueryChain({
-        data: { ...mockSession, relationship: mockRelationship },
+        data: { ...mockSession, relationship_id: 'r1', status: 'scheduled' },
+        error: null,
+      });
+      const relChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2', completed_sessions: 0 },
         error: null,
       });
       const updateChain = createMockQueryChain({
@@ -192,16 +196,17 @@ describe('MentorshipSessionsService', () => {
 
       mockClient.from
         .mockReturnValueOnce(sessionChain)
+        .mockReturnValueOnce(relChain)
         .mockReturnValueOnce(updateChain)
         .mockReturnValueOnce(relUpdateChain);
 
       const result = await service.updateSessionStatus('s1', 'u1', {
-        status: 'completed',
+        action: 'complete',
       } as any);
       expect(result).toBeDefined();
     });
 
-    it.skip('should throw if session not found (updateSessionStatus)', async () => {
+    it('should throw if session not found (updateSessionStatus)', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },
@@ -210,36 +215,49 @@ describe('MentorshipSessionsService', () => {
 
       await expect(
         service.updateSessionStatus('nope', 'u1', {
-          status: 'completed',
+          action: 'complete',
         } as any),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it.skip('should cancel session', async () => {
+    it('should cancel session', async () => {
       const sessionChain = createMockQueryChain({
-        data: { ...mockSession, relationship: mockRelationship },
+        data: { ...mockSession, relationship_id: 'r1', status: 'scheduled' },
+        error: null,
+      });
+      const relChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2' },
         error: null,
       });
       const updateChain = createMockQueryChain({
         data: { ...mockSession, status: 'cancelled' },
         error: null,
       });
+      const relUpdateChain = createMockQueryChain({ data: null, error: null });
+      const notifChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
         .mockReturnValueOnce(sessionChain)
-        .mockReturnValueOnce(updateChain);
+        .mockReturnValueOnce(relChain)
+        .mockReturnValueOnce(updateChain)
+        .mockReturnValueOnce(relUpdateChain)
+        .mockReturnValueOnce(notifChain);
 
       const result = await service.updateSessionStatus('s1', 'u1', {
-        status: 'cancelled',
+        action: 'cancel',
       } as any);
       expect(result).toBeDefined();
     });
   });
 
   describe('rescheduleSession', () => {
-    it.skip('should reschedule session', async () => {
+    it('should reschedule session', async () => {
       const sessionChain = createMockQueryChain({
-        data: mockSession,
+        data: { ...mockSession, relationship_id: 'r1', status: 'scheduled' },
+        error: null,
+      });
+      const relChain = createMockQueryChain({
+        data: { mentor_id: 'u1', mentee_id: 'u2' },
         error: null,
       });
       const updateChain = createMockQueryChain({
@@ -251,17 +269,20 @@ describe('MentorshipSessionsService', () => {
 
       mockClient.from
         .mockReturnValueOnce(sessionChain)
+        .mockReturnValueOnce(relChain)
         .mockReturnValueOnce(updateChain)
         .mockReturnValueOnce(relUpdateChain)
         .mockReturnValueOnce(notifChain);
 
-      const result = await service.rescheduleSession('s1', 'u1', {
-        scheduledAt: '2026-06-15T10:00:00Z',
-      } as any);
+      const result = await (service as any).rescheduleSession(
+        's1',
+        'u1',
+        '2026-06-15T10:00:00Z',
+      );
       expect(result).toBeDefined();
     });
 
-    it.skip('should throw if session not found', async () => {
+    it('should throw if session not found', async () => {
       const chain = createMockQueryChain({
         data: null,
         error: { message: 'not found' },
@@ -269,9 +290,7 @@ describe('MentorshipSessionsService', () => {
       mockClient.from.mockReturnValue(chain);
 
       await expect(
-        service.rescheduleSession('nope', 'u1', {
-          scheduledAt: '2026-06-15',
-        } as any),
+        (service as any).rescheduleSession('nope', 'u1', '2026-06-15T10:00:00Z'),
       ).rejects.toThrow(NotFoundException);
     });
   });

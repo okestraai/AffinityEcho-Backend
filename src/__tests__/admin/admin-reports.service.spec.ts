@@ -164,5 +164,185 @@ describe('AdminReportsService', () => {
       const result = await service.assignToSelf('admin-1', 'Admin', 'r1');
       expect(result.success).toBe(true);
     });
+
+    it('should throw BadRequestException on DB error', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValueOnce(chain);
+      await expect(service.assignToSelf('admin-1', 'Admin', 'r1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('listReports - filters', () => {
+    it('should apply status filter', async () => {
+      const listChain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const summaryChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(listChain).mockReturnValueOnce(summaryChain);
+
+      const result = await service.listReports('admin-1', { status: 'submitted' } as any);
+      expect(result.success).toBe(true);
+      expect(listChain.eq).toHaveBeenCalledWith('status', 'submitted');
+    });
+
+    it('should throw for invalid incident type', async () => {
+      await expect(
+        service.listReports('admin-1', { type: 'invalid_type_xyz' } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should apply critical priority filter', async () => {
+      const listChain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const summaryChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(listChain).mockReturnValueOnce(summaryChain);
+
+      const result = await service.listReports('admin-1', { priority: 'critical' } as any);
+      expect(result.success).toBe(true);
+      expect(listChain.eq).toHaveBeenCalledWith('immediate_risk', true);
+    });
+
+    it('should apply assignedTo=me filter', async () => {
+      const listChain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const summaryChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(listChain).mockReturnValueOnce(summaryChain);
+
+      const result = await service.listReports('admin-1', { assignedTo: 'me' } as any);
+      expect(result.success).toBe(true);
+      expect(listChain.eq).toHaveBeenCalledWith('assigned_to', 'admin-1');
+    });
+
+    it('should apply assignedTo=unassigned filter', async () => {
+      const listChain = createMockQueryChain({ data: [], error: null, count: 0 });
+      const summaryChain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(listChain).mockReturnValueOnce(summaryChain);
+
+      await service.listReports('admin-1', { assignedTo: 'unassigned' } as any);
+      expect(listChain.is).toHaveBeenCalledWith('assigned_to', null);
+    });
+
+    it('should include summary counts in result', async () => {
+      const listChain = createMockQueryChain({
+        data: [{ id: 'r1', status: 'submitted', assigned_to: null, immediate_risk: true }],
+        error: null,
+        count: 1,
+      });
+      const summaryChain = createMockQueryChain({
+        data: [
+          { status: 'submitted', immediate_risk: true },
+          { status: 'under_review', immediate_risk: false },
+        ],
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(listChain).mockReturnValueOnce(summaryChain);
+
+      const result = await service.listReports('admin-1', {} as any);
+      expect(result.success).toBe(true);
+      expect(result.data.summary.submitted).toBe(1);
+      expect(result.data.summary.critical).toBe(1);
+    });
+  });
+
+  describe('exportReports', () => {
+    it('should export CSV with data', async () => {
+      const exportChain = createMockQueryChain({
+        data: [{
+          id: 'r1',
+          reference_number: 'REP-001',
+          incident_type: 'harassment',
+          status: 'submitted',
+          priority: 'high',
+          immediate_risk: false,
+          reporter: { username: 'User1', email: 'u1@test.com' },
+          reported_user: { username: 'User2' },
+          assigned_to: null,
+          created_at: '2026-01-01',
+          updated_at: '2026-01-01',
+          location: 'NYC',
+          witnesses: null,
+          evidence: null,
+          description: 'Test description',
+          resolution_action: null,
+          admin_notes: null,
+        }],
+        error: null,
+      });
+      mockClient.from.mockReturnValue(exportChain);
+
+      const result = await service.exportReports('admin-1', {} as any, 'csv');
+      expect(result.buffer).toBeDefined();
+      expect(result.filename).toContain('.csv');
+      expect(result.contentType).toContain('text/csv');
+    });
+
+    it('should export empty CSV when no reports', async () => {
+      const chain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValue(chain);
+
+      const result = await service.exportReports('admin-1', {} as any, 'csv');
+      expect(result.buffer).toBeDefined();
+      expect(result.filename).toContain('harassment-reports');
+    });
+
+    it('should throw BadRequestException on DB error during export', async () => {
+      const chain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      mockClient.from.mockReturnValue(chain);
+
+      await expect(service.exportReports('admin-1', {} as any, 'csv')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getReportDetail - with assigned admin', () => {
+    it('should fetch assigned admin when report has assigned_to', async () => {
+      const reportChain = createMockQueryChain({
+        data: {
+          id: 'r1',
+          reporter_id: 'u1',
+          status: 'submitted',
+          incident_type: 'harassment',
+          immediate_risk: true,
+          assigned_to: 'admin-2',
+        },
+        error: null,
+      });
+      const timelineChain = createMockQueryChain({ data: [], error: null });
+      const adminChain = createMockQueryChain({
+        data: { id: 'admin-2', username: 'Admin2', avatar: null },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(reportChain)
+        .mockReturnValueOnce(timelineChain)
+        .mockReturnValueOnce(adminChain);
+
+      const result = await service.getReportDetail('r1');
+      expect(result.success).toBe(true);
+      expect(result.data.priority).toBe('critical');
+      expect(result.data.assigned_admin).toBeDefined();
+    });
+  });
+
+  describe('updateReport - validation', () => {
+    it('should throw BadRequestException for invalid status', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'r1', status: 'submitted', reporter_id: 'u1', reference_number: 'REP-001', reported_user_id: null },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateReport('admin-1', 'Admin', 'r1', { status: 'invalid_status' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when resolved without resolution_action', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'r1', status: 'submitted', reporter_id: 'u1', reference_number: 'REP-001', reported_user_id: null },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateReport('admin-1', 'Admin', 'r1', { status: 'resolved' }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 });

@@ -15,6 +15,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { RedisService } from '../../../common/services/redis.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
+import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
 
 interface UserReaction {
@@ -51,6 +52,7 @@ export class TopicService {
     private identityReveal: IdentityRevealUtil,
     private redis: RedisService,
     private okestraService: OkestraService,
+    private contentSafety: ContentSafetyService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -209,7 +211,17 @@ export class TopicService {
   async findAllTopics(filters: ForumFiltersDto, userId?: string) {
     const cacheKey = `topics:list:${JSON.stringify(filters)}:${userId || 'anon'}`;
     const cached = await this.redis.get<any>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      // Apply hidden content filter post-cache so hides take effect immediately
+      if (userId) {
+        const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+        if (hiddenIds.length > 0) {
+          const hiddenSet = new Set(hiddenIds);
+          cached.data = cached.data.filter((t: any) => !hiddenSet.has(t.id));
+        }
+      }
+      return cached;
+    }
 
     let query = this.admin.from('forum_topics').select(
       `
@@ -349,6 +361,15 @@ export class TopicService {
 
     await this.redis.set(cacheKey, result, 180000);
 
+    // Apply hidden content filter post-cache so hides take effect immediately
+    if (userId) {
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+      if (hiddenIds.length > 0) {
+        const hiddenSet = new Set(hiddenIds);
+        result.data = result.data.filter((t: any) => !hiddenSet.has(t.id));
+      }
+    }
+
     return result;
   }
 
@@ -428,6 +449,21 @@ export class TopicService {
             userReactions[r.reaction_type as keyof UserReaction] = true;
           }
         });
+      }
+
+      // Filter out hidden comments and blocked users' comments
+      if (userId && topic.forum_comments?.length > 0) {
+        const [blockedIds, hiddenCommentIds] = await Promise.all([
+          this.contentSafety.getBlockedUserIds(userId),
+          this.contentSafety.getHiddenContentIds(userId, 'comment'),
+        ]);
+        if (blockedIds.length > 0 || hiddenCommentIds.length > 0) {
+          const blockedSet = new Set(blockedIds);
+          const hiddenSet = new Set(hiddenCommentIds);
+          topic.forum_comments = topic.forum_comments.filter(
+            (c: any) => !blockedSet.has(c.user_id) && !hiddenSet.has(c.id),
+          );
+        }
       }
 
       // Apply identity reveal to topic author and comment authors
@@ -649,7 +685,14 @@ export class TopicService {
   ) {
     const cacheKey = `topics:recent:${JSON.stringify(filters)}:${userId}:${companyName || 'all'}`;
     const cached = await this.redis.get<any>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+      if (hiddenIds.length > 0) {
+        const hiddenSet = new Set(hiddenIds);
+        cached.topics = cached.topics.filter((t: any) => !hiddenSet.has(t.id));
+      }
+      return cached;
+    }
 
     logger.info('Fetching recent discussions', {
       filters,
@@ -869,6 +912,13 @@ export class TopicService {
 
       await this.redis.set(cacheKey, result, 180000);
 
+      // Filter hidden topics post-cache
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+      if (hiddenIds.length > 0) {
+        const hiddenSet = new Set(hiddenIds);
+        result.topics = result.topics.filter((t: any) => !hiddenSet.has(t.id));
+      }
+
       return result;
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -949,7 +999,15 @@ export class TopicService {
       throw new BadRequestException(MSG.FORUM.BOOKMARKS_FAILED);
     }
 
-    const topicIds = (bookmarks || []).map((b: any) => b.content_id);
+    let topicIds = (bookmarks || []).map((b: any) => b.content_id);
+
+    // Filter out hidden topics
+    const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+    if (hiddenIds.length > 0) {
+      const hiddenSet = new Set(hiddenIds);
+      topicIds = topicIds.filter((id: string) => !hiddenSet.has(id));
+    }
+
     if (topicIds.length === 0) {
       return {
         success: true,

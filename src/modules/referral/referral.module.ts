@@ -9,9 +9,10 @@ import { IdentityRevealService } from './services/identity-reveal.service';
 import { EmailService } from '../../common/utils/email/email.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EncryptionModule } from '../encryption/encryption.module';
+import { ContentSafetyModule } from '../content-safety/content-safety.module';
 
 @Module({
-  imports: [NotificationsModule, EncryptionModule],
+  imports: [NotificationsModule, EncryptionModule, ContentSafetyModule],
   controllers: [ReferralController],
   providers: [
     ReferralService,
