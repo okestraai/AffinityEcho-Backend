@@ -15,6 +15,8 @@ import {
   GetReferralsQueryDto,
 } from '../dto/referral.dto';
 import { MSG } from '../../../common/constants/messages';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class ReferralService {
@@ -24,6 +26,7 @@ export class ReferralService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -481,6 +484,15 @@ export class ReferralService {
 
       // Update user stats
       await this.admin.rpc('increment_user_posts', { user_id: userId });
+
+      // Enqueue AI moderation (fire-and-forget — never blocks the user)
+      this.moderationQueue.add('moderate', {
+        contentType: 'referral_post',
+        contentId: data.id,
+        authorId: userId,
+      }, { jobId: `referral_post:${data.id}` }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { referralId: data.id, error: mqErr });
+      });
 
       return {
         success: true,

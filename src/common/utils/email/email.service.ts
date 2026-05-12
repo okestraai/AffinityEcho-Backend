@@ -331,4 +331,89 @@ export class EmailService {
       appUrl: this.config.get('FRONTEND_URL') || 'https://affinityecho.com',
     });
   }
+
+  async sendContentHiddenEmail(
+    email: string,
+    username: string,
+    contentType: string,
+    contentPreview: string | null,
+    reason: string,
+  ) {
+    const frontendUrl =
+      this.config.get('FRONTEND_URL') || 'https://affinityecho.com';
+
+    return this.sendEmail(
+      email,
+      'Your Content Is Under Review - AffinityEcho',
+      'content-hidden',
+      {
+        username,
+        contentType,
+        contentPreview,
+        reason,
+        appealUrl: `${frontendUrl}/settings/moderation`,
+        supportEmail:
+          this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
+      },
+    );
+  }
+
+  async sendContentRestoredEmail(
+    email: string,
+    username: string,
+    contentType: string,
+  ) {
+    const frontendUrl =
+      this.config.get('FRONTEND_URL') || 'https://affinityecho.com';
+
+    return this.sendEmail(
+      email,
+      'Your Content Has Been Restored - AffinityEcho',
+      'content-restored',
+      {
+        username,
+        contentType,
+        dashboardUrl: frontendUrl,
+        supportEmail:
+          this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
+      },
+    );
+  }
+
+  async sendContentRemovedEmail(
+    email: string,
+    username: string,
+    contentType: string,
+    reason: string,
+  ) {
+    const frontendUrl =
+      this.config.get('FRONTEND_URL') || 'https://affinityecho.com';
+
+    return this.sendEmail(
+      email,
+      'Content Removed - AffinityEcho',
+      'content-removed',
+      {
+        username,
+        contentType,
+        reason,
+        appealUrl: `${frontendUrl}/settings/moderation`,
+        supportEmail:
+          this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
+      },
+    );
+  }
+
+  async sendSafetyResourcesEmail(email: string, username: string) {
+    return this.sendEmail(
+      email,
+      'We Care About You - AffinityEcho',
+      'safety-resources',
+      {
+        username,
+        supportEmail:
+          this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
+      },
+    );
+  }
 }

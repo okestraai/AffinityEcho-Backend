@@ -14,6 +14,8 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MSG } from '../../../common/constants/messages';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 type ContentType = 'post' | 'topic' | 'nook_message';
 
@@ -28,6 +30,7 @@ export class FeedEngagementService {
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
     private contentSafety: ContentSafetyService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -205,6 +208,15 @@ export class FeedEngagementService {
       if (error) {
         throw new BadRequestException(MSG.FEED.COMMENT_FAILED);
       }
+
+      // Enqueue AI moderation (fire-and-forget — never blocks the user)
+      this.moderationQueue.add('moderate', {
+        contentType: 'feed_comment',
+        contentId: comment.id,
+        authorId: userId,
+      }, { jobId: `feed_comment:${comment.id}` }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { commentId: comment.id, error: mqErr });
+      });
 
       // Increment comment count
       await this.incrementCommentCount(contentType, contentId);

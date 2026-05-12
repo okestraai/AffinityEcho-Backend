@@ -52,8 +52,7 @@ import { ContentSafetyModule } from './modules/content-safety/content-safety.mod
         limit: 50, // 50 requests per 10 seconds for messaging endpoints
       },
     ]),
-    // BullModule requires Redis — uncomment when Redis is available
-    // BullModule.forRoot(getBullConfig()),
+    BullModule.forRoot(getBullConfig()),
     ScheduleModule.forRoot(),
     RedisModule,
     AuthModule,

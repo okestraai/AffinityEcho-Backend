@@ -17,6 +17,8 @@ import { RedisService } from '../../../common/services/redis.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 interface UserReaction {
   seen: boolean;
@@ -53,6 +55,7 @@ export class TopicService {
     private redis: RedisService,
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -190,6 +193,15 @@ export class TopicService {
             .eq('id', forumId);
         },
       );
+
+      // Enqueue AI moderation (fire-and-forget — never blocks the user)
+      this.moderationQueue.add('moderate', {
+        contentType: 'forum_topic',
+        contentId: topic.id,
+        authorId: userId,
+      }, { jobId: `forum_topic:${topic.id}` }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { topicId: topic.id, error: mqErr });
+      });
 
       await this.redis.delPattern('topics:*');
 

@@ -14,6 +14,9 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
+import logger from '../../../common/utils/logger.util';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class NooksService {
@@ -26,6 +29,7 @@ export class NooksService {
     private encryption: EncryptionUtil,
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -188,6 +192,15 @@ export class NooksService {
         is_anonymous: false,
       },
     ]);
+
+    // Enqueue AI moderation (fire-and-forget — never blocks the user)
+    this.moderationQueue.add('moderate', {
+      contentType: 'nook',
+      contentId: nook.id,
+      authorId: userId,
+    }, { jobId: `nook:${nook.id}` }).catch(mqErr => {
+      logger.warn('Failed to enqueue moderation', { nookId: nook.id, error: mqErr });
+    });
 
     await this.redis.delPattern('nooks:*');
 

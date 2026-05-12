@@ -55,6 +55,8 @@ describe('FeedEngagementService', () => {
       getHiddenContentIds: jest.fn().mockResolvedValue([]),
     };
 
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new FeedEngagementService(
       createMockConfigService() as any,
       mockNotifications,
@@ -62,6 +64,7 @@ describe('FeedEngagementService', () => {
       mockEncryption,
       mockIdentityReveal,
       mockContentSafety,
+      mockModerationQueue as any,
     );
   });
 

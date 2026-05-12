@@ -63,6 +63,8 @@ describe('NookMessagesService', () => {
       getHiddenContentIds: jest.fn().mockResolvedValue([]),
     };
 
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new NookMessagesService(
       mockConfigService,
       mockIdentityReveal,
@@ -70,6 +72,7 @@ describe('NookMessagesService', () => {
       mockNotificationsService,
       mockOkestraService as any,
       mockContentSafety as any,
+      mockModerationQueue as any,
     );
   });
 

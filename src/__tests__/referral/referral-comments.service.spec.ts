@@ -38,10 +38,13 @@ describe('ReferralCommentsService', () => {
       createNotification: jest.fn().mockResolvedValue({}),
     };
 
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new ReferralCommentsService(
       createMockConfigService() as any,
       mockIdentityReveal as any,
       mockNotifications as any,
+      mockModerationQueue as any,
     );
   });
 

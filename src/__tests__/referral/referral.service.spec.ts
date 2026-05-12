@@ -49,10 +49,13 @@ describe('ReferralService', () => {
       isRevealed: jest.fn().mockResolvedValue(false),
     };
 
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new ReferralService(
       mockConfig,
       mockEncryption,
       mockIdentityReveal,
+      mockModerationQueue as any,
     );
   });
 

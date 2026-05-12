@@ -15,6 +15,8 @@ import { MentionService } from '../../mentions/mention.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
 import { MSG } from '../../../common/constants/messages';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class FeedPostsService {
@@ -28,6 +30,7 @@ export class FeedPostsService {
     private mentionService: MentionService,
     private notificationsService: NotificationsService,
     private contentSafety: ContentSafetyService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -88,6 +91,15 @@ export class FeedPostsService {
       }
 
       logger.info('Post created successfully', { postId: post.id });
+
+      // Enqueue AI moderation (fire-and-forget — never blocks the user)
+      this.moderationQueue.add('moderate', {
+        contentType: 'feed_post',
+        contentId: post.id,
+        authorId: userId,
+      }, { jobId: `feed_post:${post.id}` }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { postId: post.id, error: mqErr });
+      });
 
       await this.redis.delPattern('feeds:*');
 

@@ -71,6 +71,8 @@ describe('NooksService', () => {
       getHiddenContentIds: jest.fn().mockResolvedValue([]),
     };
 
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new NooksService(
       createMockConfigService() as any,
       mockRedis,
@@ -78,6 +80,7 @@ describe('NooksService', () => {
       mockEncryption,
       mockOkestra,
       mockContentSafety as any,
+      mockModerationQueue as any,
     );
   });
 

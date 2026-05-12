@@ -11,6 +11,8 @@ import logger from '../../../common/utils/logger.util';
 import { CreateCommentDto } from '../dto/comment.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { MSG } from '../../../common/constants/messages';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class ReferralCommentsService {
@@ -20,6 +22,7 @@ export class ReferralCommentsService {
     private config: ConfigService,
     private identityReveal: IdentityRevealUtil,
     private notificationsService: NotificationsService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -116,6 +119,15 @@ export class ReferralCommentsService {
           logger.error('Failed to create comment notification:', notifError);
         }
       }
+
+      // Enqueue AI moderation (fire-and-forget — never blocks the user)
+      this.moderationQueue.add('moderate', {
+        contentType: 'referral_comment',
+        contentId: data.id,
+        authorId: userId,
+      }, { jobId: `referral_comment:${data.id}` }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { commentId: data.id, error: mqErr });
+      });
 
       return {
         success: true,

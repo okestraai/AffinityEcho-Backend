@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { FeedsController } from './controllers/feeds.controller';
 import { FeedsService } from './services/feeds.service';
 import { FeedPostsService } from './services/feed-posts.service';
@@ -13,6 +14,7 @@ import { ContentSafetyModule } from '../content-safety/content-safety.module';
 @Module({
   imports: [
     ConfigModule,
+    BullModule.registerQueue({ name: 'moderation' }),
     NotificationsModule,
     EncryptionModule,
     MentionsModule,

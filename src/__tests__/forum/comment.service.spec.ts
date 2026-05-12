@@ -71,6 +71,8 @@ describe('CommentService', () => {
       getHiddenContentIds: jest.fn().mockResolvedValue([]),
     };
 
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new CommentService(
       createMockConfigService() as any,
       mockNotifications,
@@ -79,6 +81,7 @@ describe('CommentService', () => {
       mockMentionService,
       mockOkestra,
       mockContentSafety,
+      mockModerationQueue as any,
     );
   });
 

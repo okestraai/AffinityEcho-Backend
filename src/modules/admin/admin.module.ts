@@ -14,8 +14,10 @@ import { AdminPermissionsService } from './services/admin-permissions.service';
 import { AdminAnalyticsService } from './services/admin-analytics.service';
 import { AdminHealthService } from './services/admin-health.service';
 import { ContentSafetyService } from '../content-safety/content-safety.service';
+import { ModerationReviewService } from './services/moderation-review.service';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
+import { EmailService } from '../../common/utils/email/email.service';
 
 @Module({
   imports: [AuthModule],
@@ -34,8 +36,10 @@ import { EncryptionUtil } from '../../common/utils/encryption.util';
     AdminAnalyticsService,
     AdminHealthService,
     ContentSafetyService,
+    ModerationReviewService,
     PermissionGuard,
     EncryptionUtil,
+    EmailService,
   ],
   exports: [AdminHealthService],
 })

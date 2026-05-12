@@ -75,6 +75,12 @@ describe('FeedPostsService', () => {
       createNotification: jest.fn().mockResolvedValue({}),
     };
 
+    const mockContentSafety = {
+      getBlockedUserIds: jest.fn().mockResolvedValue([]),
+      getHiddenContentIds: jest.fn().mockResolvedValue([]),
+    };
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new FeedPostsService(
       createMockConfigService() as any,
       mockRedis,
@@ -82,6 +88,8 @@ describe('FeedPostsService', () => {
       mockIdentityReveal,
       mockMentionService,
       mockNotifications,
+      mockContentSafety as any,
+      mockModerationQueue as any,
     );
   });
 

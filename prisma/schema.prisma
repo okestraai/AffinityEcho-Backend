@@ -172,7 +172,7 @@ model user_profiles {
   mentions_received     mentions[] @relation("mentions_received")
   admin_logs_performed  admin_logs[] @relation("admin_log_performer")
   report_timelines      report_timeline_events[] @relation("timeline_performer")
-  content_moderated     content_moderation[] @relation("content_moderator")
+  // content_moderation now uses text-based moderated_by ('ai:editorial' | 'human:<uuid>'), no FK relation
   admin_notifications   admin_notifications[] @relation("notification_creator")
   reports_against       harassment_reports[] @relation("harassment_reported_user")
 
@@ -369,6 +369,12 @@ model referral_posts {
   bookmarks_count        Int      @default(0)
   connection_requests_count Int   @default(0)
 
+  // Admin moderation
+  is_hidden              Boolean  @default(false)
+  hidden_by              String?  @db.Uuid
+  hidden_at              DateTime? @db.Timestamptz(3)
+  hidden_reason          String?  @db.Text
+
   created_at             DateTime @default(now()) @db.Timestamptz(3)
   updated_at             DateTime @updatedAt @db.Timestamptz(3)
   last_activity_at       DateTime @default(now()) @db.Timestamptz(3)
@@ -477,12 +483,19 @@ model referral_comments {
   referral_post_id  String   @db.Uuid
   user_id           String   @db.Uuid
   content           String   @db.Text
+
+  // Admin moderation
+  is_hidden         Boolean  @default(false)
+  hidden_by         String?  @db.Uuid
+  hidden_at         DateTime? @db.Timestamptz(3)
+  hidden_reason     String?  @db.Text
+
   created_at        DateTime @default(now()) @db.Timestamptz(3)
   updated_at        DateTime @updatedAt @db.Timestamptz(3)
-  
+
   referral_post     referral_posts @relation(fields: [referral_post_id], references: [id], onDelete: Cascade)
   user              user_profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  
+
   @@index([referral_post_id])
   @@index([user_id])
   @@map("referral_comments")
@@ -809,6 +822,9 @@ model nooks {
 
   // Admin moderation
   is_hidden           Boolean  @default(false)
+  hidden_by           String?  @db.Uuid
+  hidden_at           DateTime? @db.Timestamptz(3)
+  hidden_reason       String?  @db.Text
   deleted_at          DateTime? @db.Timestamptz(3)
 
   // Timestamps
@@ -816,7 +832,7 @@ model nooks {
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
   last_activity_at    DateTime @default(now()) @db.Timestamptz(3)
   expires_at          DateTime @db.Timestamptz(3) // Auto-delete after 24 hours
-  
+
   // Relations
   creator             user_profiles      @relation("nook_creator", fields: [creator_id], references: [id], onDelete: Cascade)
   messages            nook_messages[]
@@ -873,6 +889,7 @@ model nook_messages {
   is_hidden           Boolean  @default(false)
   hidden_by           String?  @db.Uuid
   hidden_at           DateTime? @db.Timestamptz(3)
+  hidden_reason       String?  @db.Text
 
   // Reaction counts
   heard_count         Int      @default(0)
@@ -1003,6 +1020,12 @@ model feed_comments {
 
   // For threaded comments
   parent_comment_id   String?  @db.Uuid
+
+  // Admin moderation
+  is_hidden           Boolean  @default(false)
+  hidden_by           String?  @db.Uuid
+  hidden_at           DateTime? @db.Timestamptz(3)
+  hidden_reason       String?  @db.Text
 
   created_at          DateTime @default(now()) @db.Timestamptz(3)
   updated_at          DateTime @updatedAt @db.Timestamptz(3)
@@ -1189,18 +1212,59 @@ model content_moderation {
   moderation_status String   @default("visible") @db.Text
   moderation_reason String?  @db.Text
   reports_count     Int      @default(0)
-  moderated_by      String?  @db.Uuid
+  moderated_by      String?  @db.Text    // 'ai:editorial' | 'human:<userId>' | UUID for legacy
   moderated_at      DateTime? @db.Timestamptz(3)
+
+  // AI audit fields
+  model_version     String?  @db.Text    // e.g. 'llama-3.1-8b-instruct-turbo'
+  policy_version    String?  @db.Text    // e.g. '2026-05-12.v1'
+  raw_response      Json?               // full LLM JSON response
+  ai_confidence     Float?              // 0.0-1.0 from AI verdict
+
   created_at        DateTime @default(now()) @db.Timestamptz(3)
   updated_at        DateTime @default(now()) @db.Timestamptz(3)
-
-  // Relations
-  moderator         user_profiles? @relation("content_moderator", fields: [moderated_by], references: [id], onDelete: SetNull)
 
   @@unique([content_type, content_id])
   @@index([content_type, content_id])
   @@index([moderation_status])
+  @@index([moderated_by])
   @@map("content_moderation")
+}
+
+model moderation_review_queue {
+  id              String   @id @default(uuid()) @db.Uuid
+  content_type    String   @db.Text
+  content_id      String   @db.Uuid
+  priority        String   @db.Text    // urgent, high, normal, low
+  reason          String   @db.Text    // e.g. 'low_confidence_hide', 'crisis_signal', 'system_error'
+  ai_verdict      Json                 // full LLM verdict for reviewer context
+  ai_payload      Json                 // §5 payload incl. parentChain
+  current_state   String   @db.Text    // 'visible' | 'hidden'
+  status          String   @default("pending") @db.Text  // pending, claimed, resolved
+  claimed_by      String?  @db.Uuid
+  resolved_by     String?  @db.Uuid
+  resolution      String?  @db.Text    // confirm, reverse, modify
+  resolution_reason String? @db.Text
+  resolved_at     DateTime? @db.Timestamptz(3)
+  created_at      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([content_type, content_id])
+  @@index([status, priority, created_at])
+  @@map("moderation_review_queue")
+}
+
+model moderation_disagreements {
+  id              String   @id @default(uuid()) @db.Uuid
+  content_type    String   @db.Text
+  content_id      String   @db.Uuid
+  ai_verdict      Json                 // original AI verdict
+  human_resolution String  @db.Text    // confirm, reverse, modify
+  human_reason    String?  @db.Text
+  resolved_by     String   @db.Uuid
+  created_at      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([created_at])
+  @@map("moderation_disagreements")
 }
 
 model admin_notifications {

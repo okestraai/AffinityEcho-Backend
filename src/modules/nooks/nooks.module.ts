@@ -10,6 +10,7 @@ import { NookReactionsService } from './services/nook-reactions.service';
 
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { NookMemberGuard } from './guards/nook-member.guard';
 import { NookCreatorGuard } from './guards/nook-creator.guard';
 import { NookActiveGuard } from './guards/nook-active.guard';
@@ -23,6 +24,7 @@ import { ContentSafetyModule } from '../content-safety/content-safety.module';
   imports: [
     JwtModule,
     ConfigModule,
+    BullModule.registerQueue({ name: 'moderation' }),
     NotificationsModule,
     EncryptionModule,
     MentionsModule,

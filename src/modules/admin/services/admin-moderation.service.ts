@@ -31,7 +31,7 @@ const CONTENT_CONFIG: Record<
     table: 'feed_comments',
     contentCol: 'content',
     authorCol: 'user_id',
-    hasHiddenCols: false,
+    hasHiddenCols: true,
   },
   forum_topic: {
     table: 'forum_topics',
@@ -53,6 +53,18 @@ const CONTENT_CONFIG: Record<
   },
   nook_message: {
     table: 'nook_messages',
+    contentCol: 'content',
+    authorCol: 'user_id',
+    hasHiddenCols: true,
+  },
+  referral_post: {
+    table: 'referral_posts',
+    contentCol: 'description_encrypted',
+    authorCol: 'user_id',
+    hasHiddenCols: true,
+  },
+  referral_comment: {
+    table: 'referral_comments',
     contentCol: 'content',
     authorCol: 'user_id',
     hasHiddenCols: true,

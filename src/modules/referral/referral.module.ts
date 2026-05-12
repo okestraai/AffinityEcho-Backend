@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { ReferralController } from './controllers/referral.controller';
 import { ReferralService } from './services/referral.service';
 import { ReferralLikesService } from './services/referral-likes.service';
@@ -12,7 +13,12 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { ContentSafetyModule } from '../content-safety/content-safety.module';
 
 @Module({
-  imports: [NotificationsModule, EncryptionModule, ContentSafetyModule],
+  imports: [
+    BullModule.registerQueue({ name: 'moderation' }),
+    NotificationsModule,
+    EncryptionModule,
+    ContentSafetyModule,
+  ],
   controllers: [ReferralController],
   providers: [
     ReferralService,

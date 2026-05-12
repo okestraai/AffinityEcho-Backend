@@ -77,6 +77,8 @@ describe('TopicService', () => {
       getBlockedUserIds: jest.fn().mockResolvedValue([]),
       getHiddenContentIds: jest.fn().mockResolvedValue([]),
     };
+    const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
+
     service = new TopicService(
       createMockConfigService() as any,
       mockNotifications,
@@ -85,6 +87,7 @@ describe('TopicService', () => {
       mockRedis,
       mockOkestra,
       mockContentSafety,
+      mockModerationQueue as any,
     );
   });
 

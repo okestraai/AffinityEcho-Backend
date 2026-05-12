@@ -24,4 +24,32 @@ export default () => ({
     password: process.env.REDIS_PASSWORD || undefined,
     db: parseInt(process.env.REDIS_DB || '0', 10),
   },
+  moderation: {
+    togetherApiKey: process.env.TOGETHER_API_KEY,
+    togetherBaseUrl:
+      process.env.TOGETHER_BASE_URL || 'https://api.together.xyz/v1',
+    togetherModel:
+      process.env.TOGETHER_MODEL ||
+      'meta-llama/Llama-3.1-8B-Instruct-Turbo',
+    togetherTimeoutMs: parseInt(
+      process.env.TOGETHER_TIMEOUT_MS || '15000',
+      10,
+    ),
+    togetherMaxRetries: parseInt(
+      process.env.TOGETHER_MAX_RETRIES || '3',
+      10,
+    ),
+    enabled: process.env.MODERATION_ENABLED === 'true',
+    mode: process.env.MODERATION_MODE || 'shadow',
+    concurrency: parseInt(
+      process.env.MODERATION_CONCURRENCY || '4',
+      10,
+    ),
+    autoRemoveConfidence: parseFloat(
+      process.env.MODERATION_AUTO_REMOVE_CONFIDENCE || '0.90',
+    ),
+    autoHideConfidence: parseFloat(
+      process.env.MODERATION_AUTO_HIDE_CONFIDENCE || '0.75',
+    ),
+  },
 });

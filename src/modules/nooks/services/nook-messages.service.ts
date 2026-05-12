@@ -15,6 +15,8 @@ import logger from '../../../common/utils/logger.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { MSG } from '../../../common/constants/messages';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class NookMessagesService {
@@ -27,6 +29,7 @@ export class NookMessagesService {
     private notificationsService: NotificationsService,
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -347,6 +350,15 @@ export class NookMessagesService {
 
     // Invalidate AI insights cache for this nook
     this.okestraService.invalidateCache('nook', nookId).catch(() => {});
+
+    // Enqueue AI moderation (fire-and-forget — never blocks the user)
+    this.moderationQueue.add('moderate', {
+      contentType: 'nook_message',
+      contentId: message.id,
+      authorId: userId,
+    }, { jobId: `nook_message:${message.id}` }).catch(mqErr => {
+      logger.warn('Failed to enqueue moderation', { messageId: message.id, error: mqErr });
+    });
 
     return {
       success: true,

@@ -57,6 +57,7 @@ import { AdminLogQueryDto } from './dto/admin-log-query.dto';
 import { AdminAnalyticsService } from './services/admin-analytics.service';
 import { AdminHealthService } from './services/admin-health.service';
 import { ContentSafetyService } from '../content-safety/content-safety.service';
+import { ModerationReviewService } from './services/moderation-review.service';
 import { Response } from 'express';
 
 function ip(req: any): string | undefined {
@@ -84,6 +85,7 @@ export class AdminController {
     private analytics: AdminAnalyticsService,
     private health: AdminHealthService,
     private contentSafety: ContentSafetyService,
+    private moderationReview: ModerationReviewService,
   ) {}
 
   // ─── 1. STATIC ROUTES FIRST ─────────────────────────────────────────────────
@@ -2213,5 +2215,134 @@ export class AdminController {
   ) {
     const adminId = req.user.sub;
     return this.contentSafety.reviewFlag(flagId, status, adminId);
+  }
+
+  // ─── AI MODERATION REVIEW QUEUE ───────────────────────────────────────────
+
+  @Get('moderation/review')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_review:view')
+  @ApiOperation({ summary: 'Get AI moderation review queue' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'priority', required: false })
+  @ApiQuery({ name: 'contentType', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async getModerationQueue(
+    @Query('status') status?: string,
+    @Query('priority') priority?: string,
+    @Query('contentType') contentType?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.moderationReview.getQueue({
+      status,
+      priority,
+      contentType,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Patch('moderation/review/:id/claim')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_review:claim')
+  @ApiOperation({ summary: 'Claim a review queue item' })
+  @ApiParam({ name: 'id', description: 'Review queue item ID' })
+  async claimReviewItem(
+    @Req() req: any,
+    @Param('id') id: string,
+  ) {
+    return this.moderationReview.claimItem(id, req.user.sub);
+  }
+
+  @Patch('moderation/review/:id/resolve')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_review:resolve')
+  @ApiOperation({ summary: 'Resolve a review queue item' })
+  @ApiParam({ name: 'id', description: 'Review queue item ID' })
+  @ApiBody({
+    schema: {
+      properties: {
+        resolution: {
+          type: 'string',
+          enum: ['confirm', 'reverse', 'modify'],
+        },
+        reason: { type: 'string' },
+      },
+      required: ['resolution'],
+    },
+  })
+  async resolveReviewItem(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body('resolution') resolution: 'confirm' | 'reverse' | 'modify',
+    @Body('reason') reason?: string,
+  ) {
+    return this.moderationReview.resolveItem(
+      id,
+      req.user.sub,
+      resolution,
+      reason,
+    );
+  }
+
+  @Get('moderation/review/stats')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_review:view')
+  @ApiOperation({ summary: 'Get moderation review queue statistics' })
+  async getModerationStats() {
+    return this.moderationReview.getStats();
+  }
+
+  @Get('moderation/audit')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_audit:view')
+  @ApiOperation({ summary: 'Get AI moderation audit trail' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'contentType', required: false })
+  async getModerationAudit(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('contentType') contentType?: string,
+  ) {
+    return this.moderationReview.getAuditLog({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      contentType,
+    });
+  }
+
+  @Get('moderation/audit/:contentType/:contentId')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_audit:view')
+  @ApiOperation({ summary: 'Get full audit history for a content item' })
+  @ApiParam({ name: 'contentType' })
+  @ApiParam({ name: 'contentId' })
+  async getItemAudit(
+    @Param('contentType') contentType: string,
+    @Param('contentId') contentId: string,
+  ) {
+    return this.moderationReview.getItemAudit(contentType, contentId);
+  }
+
+  @Get('moderation/disagreements')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_disagreements:view')
+  @ApiOperation({ summary: 'Get AI vs human disagreements for prompt tuning' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'contentType', required: false })
+  async getDisagreements(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('contentType') contentType?: string,
+  ) {
+    return this.moderationReview.getDisagreements({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      contentType,
+    });
   }
 }

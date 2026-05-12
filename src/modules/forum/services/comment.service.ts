@@ -519,6 +519,8 @@ import { MentionService } from '../../mentions/mention.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { MSG } from '../../../common/constants/messages';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 interface UserReactionMap {
   [commentId: string]: { helpful: boolean; supportive: boolean };
@@ -536,6 +538,7 @@ export class CommentService {
     private mentionService: MentionService,
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
+    @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -721,6 +724,15 @@ export class CommentService {
 
       // Invalidate AI insights cache for this topic
       this.okestraService.invalidateCache('topic', topicId).catch(() => {});
+
+      // Enqueue AI moderation (fire-and-forget — never blocks the user)
+      this.moderationQueue.add('moderate', {
+        contentType: 'forum_comment',
+        contentId: comment.id,
+        authorId: userId,
+      }, { jobId: `forum_comment:${comment.id}` }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { commentId: comment.id, error: mqErr });
+      });
 
       logger.info('Comment created', { commentId: comment.id });
       return comment;
