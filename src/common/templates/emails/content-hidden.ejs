@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Content Under Review - AffinityEcho</title>
+    <title>Content Hidden - AffinityEcho</title>
     <!--[if gte mso 9]>
     <xml>
         <o:OfficeDocumentSettings>
@@ -26,8 +26,8 @@
             <v:textbox style="mso-fit-shape-to-text:true" inset="0,0,0,0">
             <![endif]-->
             <div style="background: linear-gradient(135deg, #9333ea 0%, #4f46e5 50%, #3b82f6 100%); background-color: #9333ea; padding: 40px; text-align: center; color: white;">
-                <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: white;">Content Under Review</h1>
-                <p style="margin: 10px 0 0; opacity: 0.9; font-size: 16px; color: white;">Your <%= contentType %> is being reviewed</p>
+                <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: white;">Your <%= contentType %> Has Been Hidden</h1>
+                <p style="margin: 10px 0 0; opacity: 0.9; font-size: 16px; color: white;">Our safety system flagged your content</p>
             </div>
             <!--[if mso]></v:textbox></v:rect><![endif]-->
         </td></tr>
@@ -35,12 +35,12 @@
         <!-- Body -->
         <tr><td style="padding: 40px;">
             <p style="color: #4b5563;">Hello <strong style="color: #9333ea;"><%= username %></strong>,</p>
-            <p style="font-size: 16px; color: #4b5563;">Your <%= contentType %> has been temporarily hidden from the community while it is reviewed by our moderation team.</p>
+            <p style="font-size: 16px; color: #4b5563;">Our automated content safety system has reviewed your <%= contentType %> and determined that it may not align with our community guidelines. Your content has been hidden from the community.</p>
 
             <!-- Reason Box -->
             <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 25px 0;">
             <tr><td style="background-color: #fef3c7; border: 1px solid #fcd34d; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b;" bgcolor="#fef3c7">
-                <p style="margin: 0 0 8px; color: #92400e; font-weight: 600;">Reason</p>
+                <p style="margin: 0 0 8px; color: #92400e; font-weight: 600;">Why was this hidden?</p>
                 <p style="margin: 0; color: #78350f;"><%= reason %></p>
             </td></tr>
             </table>
@@ -60,21 +60,14 @@
             <tr><td style="background-color: #faf5ff; border: 1px solid #e9d5ff; padding: 20px; border-radius: 8px;" bgcolor="#faf5ff">
                 <p style="margin: 0 0 10px; color: #9333ea; font-weight: 600;">What happens next?</p>
                 <ul style="margin: 0; padding-left: 20px; color: #4b5563;">
-                    <li>A human moderator will review your content</li>
-                    <li>If approved, your content will be restored automatically</li>
-                    <li>You'll receive a notification when the review is complete</li>
+                    <li>A human moderator will review this decision</li>
+                    <li>If the moderator disagrees with the AI, your content will be restored and you'll be notified</li>
+                    <li>No action is needed from you at this time</li>
                 </ul>
             </td></tr>
             </table>
 
-            <p style="font-size: 16px; color: #4b5563;">If you believe this was a mistake, you can request a review:</p>
-
-            <!-- Button -->
-            <table cellpadding="0" cellspacing="0" border="0" style="margin: 30px auto;">
-            <tr><td align="center" bgcolor="#9333ea" style="background-color: #9333ea; border-radius: 8px; padding: 14px 36px;">
-                <a href="<%= appealUrl %>" style="color: white; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">Request Review</a>
-            </td></tr>
-            </table>
+            <p style="font-size: 14px; color: #9ca3af;">AffinityEcho uses AI-assisted moderation to keep our community safe. Our system isn't perfect — a human will always have the final say.</p>
         </td></tr>
 
         <!-- Footer -->

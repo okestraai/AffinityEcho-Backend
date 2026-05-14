@@ -125,7 +125,9 @@ export class ReferralCommentsService {
         contentType: 'referral_comment',
         contentId: data.id,
         authorId: userId,
-      }, { jobId: `referral_comment:${data.id}` }).catch(mqErr => {
+      }, { jobId: `referral_comment-${data.id}` }).then(() => {
+        logger.info('Moderation queued', { contentType: 'referral_comment', contentId: data.id });
+      }).catch(mqErr => {
         logger.warn('Failed to enqueue moderation', { commentId: data.id, error: mqErr });
       });
 

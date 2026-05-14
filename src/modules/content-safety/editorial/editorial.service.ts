@@ -80,6 +80,7 @@ export class EditorialService {
       logger.error('Together.ai API call failed', {
         status: res.status,
         model: this.model,
+        responseBody: body.substring(0, 500),
       });
       throw new TogetherApiError(res.status, body);
     }

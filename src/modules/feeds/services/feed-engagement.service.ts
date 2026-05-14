@@ -214,7 +214,9 @@ export class FeedEngagementService {
         contentType: 'feed_comment',
         contentId: comment.id,
         authorId: userId,
-      }, { jobId: `feed_comment:${comment.id}` }).catch(mqErr => {
+      }, { jobId: `feed_comment-${comment.id}` }).then(() => {
+        logger.info('Moderation queued', { contentType: 'feed_comment', contentId: comment.id });
+      }).catch(mqErr => {
         logger.warn('Failed to enqueue moderation', { commentId: comment.id, error: mqErr });
       });
 

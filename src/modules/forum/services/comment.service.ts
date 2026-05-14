@@ -730,7 +730,9 @@ export class CommentService {
         contentType: 'forum_comment',
         contentId: comment.id,
         authorId: userId,
-      }, { jobId: `forum_comment:${comment.id}` }).catch(mqErr => {
+      }, { jobId: `forum_comment-${comment.id}` }).then(() => {
+        logger.info('Moderation queued', { contentType: 'forum_comment', contentId: comment.id });
+      }).catch(mqErr => {
         logger.warn('Failed to enqueue moderation', { commentId: comment.id, error: mqErr });
       });
 

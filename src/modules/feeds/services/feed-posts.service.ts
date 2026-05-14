@@ -97,8 +97,10 @@ export class FeedPostsService {
         contentType: 'feed_post',
         contentId: post.id,
         authorId: userId,
-      }, { jobId: `feed_post:${post.id}` }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { postId: post.id, error: mqErr });
+      }, { jobId: `feed_post-${post.id}` }).then(() => {
+        logger.info('Moderation queued', { contentType: 'feed_post', contentId: post.id });
+      }).catch(mqErr => {
+        logger.warn('Failed to enqueue moderation', { postId: post.id, error: mqErr?.message || mqErr, stack: mqErr?.stack });
       });
 
       await this.redis.delPattern('feeds:*');

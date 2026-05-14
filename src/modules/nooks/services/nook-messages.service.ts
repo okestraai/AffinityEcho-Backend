@@ -356,7 +356,9 @@ export class NookMessagesService {
       contentType: 'nook_message',
       contentId: message.id,
       authorId: userId,
-    }, { jobId: `nook_message:${message.id}` }).catch(mqErr => {
+    }, { jobId: `nook_message-${message.id}` }).then(() => {
+      logger.info('Moderation queued', { contentType: 'nook_message', contentId: message.id });
+    }).catch(mqErr => {
       logger.warn('Failed to enqueue moderation', { messageId: message.id, error: mqErr });
     });
 

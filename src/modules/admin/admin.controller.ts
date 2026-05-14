@@ -2226,12 +2226,14 @@ export class AdminController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'priority', required: false })
   @ApiQuery({ name: 'contentType', required: false })
+  @ApiQuery({ name: 'currentState', required: false, enum: ['hidden', 'visible'] })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async getModerationQueue(
     @Query('status') status?: string,
     @Query('priority') priority?: string,
     @Query('contentType') contentType?: string,
+    @Query('currentState') currentState?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -2239,50 +2241,40 @@ export class AdminController {
       status,
       priority,
       contentType,
+      currentState,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 
-  @Patch('moderation/review/:id/claim')
-  @UseGuards(PermissionGuard)
-  @RequirePermission('ai_review:claim')
-  @ApiOperation({ summary: 'Claim a review queue item' })
-  @ApiParam({ name: 'id', description: 'Review queue item ID' })
-  async claimReviewItem(
-    @Req() req: any,
-    @Param('id') id: string,
-  ) {
-    return this.moderationReview.claimItem(id, req.user.sub);
-  }
-
   @Patch('moderation/review/:id/resolve')
   @UseGuards(PermissionGuard)
   @RequirePermission('ai_review:resolve')
-  @ApiOperation({ summary: 'Resolve a review queue item' })
+  @ApiOperation({ summary: 'Resolve a review queue item (reverse/confirm/hide)' })
   @ApiParam({ name: 'id', description: 'Review queue item ID' })
   @ApiBody({
     schema: {
       properties: {
-        resolution: {
+        action: {
           type: 'string',
-          enum: ['confirm', 'reverse', 'modify'],
+          enum: ['reverse', 'confirm', 'hide'],
+          description: 'reverse = unhide AI-hidden content, confirm = agree content is safe (escalated items), hide = admin hides escalated content',
         },
         reason: { type: 'string' },
       },
-      required: ['resolution'],
+      required: ['action'],
     },
   })
   async resolveReviewItem(
     @Req() req: any,
     @Param('id') id: string,
-    @Body('resolution') resolution: 'confirm' | 'reverse' | 'modify',
+    @Body('action') action: 'reverse' | 'confirm' | 'hide',
     @Body('reason') reason?: string,
   ) {
     return this.moderationReview.resolveItem(
       id,
       req.user.sub,
-      resolution,
+      action,
       reason,
     );
   }
@@ -2291,6 +2283,14 @@ export class AdminController {
   @UseGuards(PermissionGuard)
   @RequirePermission('ai_review:view')
   @ApiOperation({ summary: 'Get moderation review queue statistics' })
+  async getModerationReviewStats() {
+    return this.moderationReview.getReviewStats();
+  }
+
+  @Get('moderation/stats')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ai_audit:view')
+  @ApiOperation({ summary: 'Get overall AI moderation performance stats' })
   async getModerationStats() {
     return this.moderationReview.getStats();
   }
@@ -2302,15 +2302,18 @@ export class AdminController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'contentType', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ['allowed', 'hidden', 'removed', 'pending_review'] })
   async getModerationAudit(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('contentType') contentType?: string,
+    @Query('status') status?: string,
   ) {
     return this.moderationReview.getAuditLog({
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       contentType,
+      status,
     });
   }
 

@@ -53,7 +53,6 @@ export const VALID_PERMISSIONS = [
   'analytics:view',
   'health:view',
   'ai_review:view',
-  'ai_review:claim',
   'ai_review:resolve',
   'ai_audit:view',
   'ai_disagreements:view',

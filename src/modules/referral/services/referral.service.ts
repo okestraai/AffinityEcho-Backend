@@ -490,7 +490,9 @@ export class ReferralService {
         contentType: 'referral_post',
         contentId: data.id,
         authorId: userId,
-      }, { jobId: `referral_post:${data.id}` }).catch(mqErr => {
+      }, { jobId: `referral_post-${data.id}` }).then(() => {
+        logger.info('Moderation queued', { contentType: 'referral_post', contentId: data.id });
+      }).catch(mqErr => {
         logger.warn('Failed to enqueue moderation', { referralId: data.id, error: mqErr });
       });
 

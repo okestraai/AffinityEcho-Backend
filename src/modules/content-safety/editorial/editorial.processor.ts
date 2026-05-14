@@ -160,6 +160,14 @@ export class EditorialProcessor extends WorkerHost {
       }
 
       // 6. Apply enforcement matrix
+      logger.info('AI verdict received', {
+        contentType,
+        contentId,
+        verdict: verdict.verdict,
+        confidence: verdict.confidence,
+        severity: verdict.severity,
+        categories: verdict.categories,
+      });
       const result = this.enforcement.decide(verdict);
 
       // 7. Write audit row (always)

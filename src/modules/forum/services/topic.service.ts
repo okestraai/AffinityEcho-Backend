@@ -199,7 +199,9 @@ export class TopicService {
         contentType: 'forum_topic',
         contentId: topic.id,
         authorId: userId,
-      }, { jobId: `forum_topic:${topic.id}` }).catch(mqErr => {
+      }, { jobId: `forum_topic-${topic.id}` }).then(() => {
+        logger.info('Moderation queued', { contentType: 'forum_topic', contentId: topic.id });
+      }).catch(mqErr => {
         logger.warn('Failed to enqueue moderation', { topicId: topic.id, error: mqErr });
       });
 
