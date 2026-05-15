@@ -268,7 +268,8 @@ export class FeedEngagementService {
         .select('id', { count: 'exact', head: true })
         .eq('content_type', contentType)
         .eq('content_id', contentId)
-        .is('parent_comment_id', null);
+        .is('parent_comment_id', null)
+        .or('is_hidden.is.null,is_hidden.eq.false');
 
       // Step 2: Get paginated top-level comment IDs
       const { data: topLevelComments, error: topLevelError } = await this.admin
@@ -277,6 +278,7 @@ export class FeedEngagementService {
         .eq('content_type', contentType)
         .eq('content_id', contentId)
         .is('parent_comment_id', null)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -317,6 +319,7 @@ export class FeedEngagementService {
         )
         .eq('content_type', contentType)
         .eq('content_id', contentId)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -605,6 +608,7 @@ export class FeedEngagementService {
                 `*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
               )
               .in('id', postIds)
+              .or('is_hidden.is.null,is_hidden.eq.false')
           : Promise.resolve({ data: [] }),
         topicIds.length > 0
           ? this.admin
@@ -613,6 +617,7 @@ export class FeedEngagementService {
                 `*, user_profile:user_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified), forum:forums(id, name)`,
               )
               .in('id', topicIds)
+              .or('is_hidden.is.null,is_hidden.eq.false')
           : Promise.resolve({ data: [] }),
         nookIds.length > 0
           ? this.admin
@@ -621,6 +626,7 @@ export class FeedEngagementService {
                 `*, user_profile:creator_id(id, username, avatar, bio, first_name_encrypted, last_name_encrypted, is_company_verified)`,
               )
               .in('id', nookIds)
+              .or('is_hidden.is.null,is_hidden.eq.false')
               .gt('expires_at', new Date().toISOString())
           : Promise.resolve({ data: [] }),
         this.admin

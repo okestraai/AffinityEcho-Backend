@@ -245,7 +245,7 @@ export class TopicService {
       topic_reactions!topic_id(count)
     `,
       { count: 'exact' },
-    );
+    ).or('is_hidden.is.null,is_hidden.eq.false');
 
     if (userId) {
       query = query.neq('user_id', userId);
@@ -436,6 +436,7 @@ export class TopicService {
         `,
         )
         .eq('id', id)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .single();
 
       if (error || !topic) {
@@ -810,7 +811,8 @@ export class TopicService {
       `,
           { count: 'exact' },
         )
-        .in('forum_id', forumIds);
+        .in('forum_id', forumIds)
+        .or('is_hidden.is.null,is_hidden.eq.false');
 
       query = query.neq('user_id', userId);
 
@@ -1051,6 +1053,7 @@ export class TopicService {
         { count: 'exact' },
       )
       .in('id', topicIds)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .range(from, to);
 
     if (error) {

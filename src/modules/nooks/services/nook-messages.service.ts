@@ -73,6 +73,7 @@ export class NookMessagesService {
       .select(messageSelect, { count: 'exact' })
       .eq('nook_id', nookId)
       .is('parent_message_id', null)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .order('created_at', { ascending: sortOrder === 'asc' })
       .range(from, to);
 
@@ -100,6 +101,7 @@ export class NookMessagesService {
         .select(messageSelect)
         .eq('nook_id', nookId)
         .not('parent_message_id', 'is', null)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: true });
 
       allReplyMessages = (allReplies || []).filter(filterMsg);

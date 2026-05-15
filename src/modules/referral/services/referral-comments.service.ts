@@ -35,6 +35,7 @@ export class ReferralCommentsService {
         .from('referral_comments')
         .select('*', { count: 'exact' })
         .eq('referral_post_id', referralId)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 

@@ -160,6 +160,7 @@ export class FeedPostsService {
           `,
           )
           .eq('id', postId)
+          .or('is_hidden.is.null,is_hidden.eq.false')
           .single(),
         this.admin
           .from('feed_likes')
@@ -293,6 +294,7 @@ export class FeedPostsService {
         )
         .eq('user_id', userId)
         .eq('is_archived', false)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 

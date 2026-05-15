@@ -60,7 +60,8 @@ export class NooksService {
       )
       .eq('is_active', true)
       .gt('expires_at', new Date().toISOString())
-      .neq('creator_id', userId);
+      .neq('creator_id', userId)
+      .or('is_hidden.is.null,is_hidden.eq.false');
 
     // Apply filters
     if (filters.urgency && filters.urgency !== 'all') {
@@ -219,6 +220,7 @@ export class NooksService {
       .from('nooks')
       .select('*')
       .eq('id', id)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .single();
 
     if (error || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
@@ -482,6 +484,7 @@ export class NooksService {
       )
       .eq('creator_id', userId)
       .eq('is_active', true)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -551,6 +554,7 @@ export class NooksService {
       )
       .in('id', nookIds)
       .eq('is_active', true)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .gt('expires_at', new Date().toISOString())
       .range(from, to);
 

@@ -52,6 +52,7 @@ export class ReferralService {
       let postsQuery = this.admin
         .from('referral_posts')
         .select('*', { count: 'exact' })
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('last_activity_at', { ascending: false });
 
       // Apply filters
@@ -325,6 +326,7 @@ export class ReferralService {
       `,
         )
         .eq('id', referralId)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .single();
 
       if (error || !result) {
@@ -696,7 +698,8 @@ export class ReferralService {
       const query = this.admin
         .from('referral_posts')
         .select('*')
-        .eq('status', 'open');
+        .eq('status', 'open')
+        .or('is_hidden.is.null,is_hidden.eq.false');
 
       // Get all posts first
       const { data: allPosts, error } = await query;

@@ -780,6 +780,7 @@ export class CommentService {
       `,
       )
       .eq('topic_id', topicId)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .order('created_at', { ascending: true });
 
     if (error || !allComments) {

@@ -353,6 +353,7 @@ export class FeedsService {
       `,
       )
       .eq('is_archived', false)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .eq('user_profile.has_completed_onboarding', true)
       .neq('user_id', userId);
 
@@ -472,6 +473,7 @@ export class FeedsService {
       `,
       )
       .eq('is_locked', false)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .eq('user_profile.has_completed_onboarding', true)
       .neq('user_id', userId);
 
@@ -600,6 +602,7 @@ export class FeedsService {
       )
       .eq('is_active', true)
       .gt('expires_at', now)
+      .or('is_hidden.is.null,is_hidden.eq.false')
       .eq('user_profile.has_completed_onboarding', true)
       .neq('creator_id', userId);
 
