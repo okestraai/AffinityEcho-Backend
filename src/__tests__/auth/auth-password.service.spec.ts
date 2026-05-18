@@ -286,8 +286,8 @@ describe('AuthService – password', () => {
           id: 'user-123',
           username: 'testuser',
           email: 'test@example.com',
-          first_name: 'enc_John',
-          last_name: 'enc_Doe',
+          first_name: 'John',
+          last_name: 'Doe',
         }),
       );
     });
