@@ -502,11 +502,15 @@ export class AuthService {
       });
       const pem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
 
-      // 4. Verify token
+      // 4. Verify token — accept both production bundle ID and Expo Go dev ID
+      const allowedAudiences: [string, ...string[]] = [
+        this.config.get('APPLE_SERVICE_ID') || 'com.okestra.affinityecho',
+        'host.exp.Exponent',
+      ];
       const payload = jwt.default.verify(idToken, pem, {
         algorithms: ['RS256'],
         issuer: 'https://appleid.apple.com',
-        audience: this.config.get('APPLE_SERVICE_ID') || 'com.okestra.affinityecho',
+        audience: allowedAudiences,
       }) as any;
 
       const appleId = payload.sub;
