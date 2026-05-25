@@ -74,6 +74,7 @@ export class NookMessagesService {
       .eq('nook_id', nookId)
       .is('parent_message_id', null)
       .or('is_hidden.is.null,is_hidden.eq.false')
+      .or('is_deleted.is.null,is_deleted.eq.false')
       .order('created_at', { ascending: sortOrder === 'asc' })
       .range(from, to);
 
@@ -102,6 +103,7 @@ export class NookMessagesService {
         .eq('nook_id', nookId)
         .not('parent_message_id', 'is', null)
         .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: true });
 
       allReplyMessages = (allReplies || []).filter(filterMsg);
@@ -389,11 +391,12 @@ export class NookMessagesService {
 
     if (fetchError || !message)
       throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
+    if (message.is_deleted)
+      throw new NotFoundException(MSG.NOOK.MESSAGE_NOT_FOUND);
 
     // Check if user is creator or admin
     const isCreator = message.user_id === userId;
     const isNookCreator = message.nook?.creator_id === userId;
-    // TODO: Add admin check
 
     if (!isCreator && !isNookCreator) {
       throw new ForbiddenException(
@@ -401,11 +404,15 @@ export class NookMessagesService {
       );
     }
 
-    // Delete message
+    // Recursive collect: message + all reply descendants
+    const idsToDelete = await this.collectMessageDescendants(messageId);
+
+    // Soft-delete all collected messages
+    const now = new Date().toISOString();
     const { error: deleteError } = await this.admin
       .from('nook_messages')
-      .delete()
-      .eq('id', messageId);
+      .update({ is_deleted: true, deleted_at: now })
+      .in('id', idsToDelete);
 
     if (deleteError) throw new BadRequestException(deleteError.message);
 
@@ -419,7 +426,10 @@ export class NookMessagesService {
     await this.admin
       .from('nooks')
       .update({
-        messages_count: Math.max(0, (nook?.messages_count || 1) - 1),
+        messages_count: Math.max(
+          0,
+          (nook?.messages_count || 0) - idsToDelete.length,
+        ),
       })
       .eq('id', nookId);
 
@@ -429,7 +439,27 @@ export class NookMessagesService {
     return {
       success: true,
       message: MSG.NOOK.MESSAGE_DELETED,
+      deleted_count: idsToDelete.length,
     };
+  }
+
+  private async collectMessageDescendants(
+    messageId: string,
+  ): Promise<string[]> {
+    const ids = [messageId];
+    const { data: children } = await this.admin
+      .from('nook_messages')
+      .select('id')
+      .eq('parent_message_id', messageId)
+      .or('is_deleted.is.null,is_deleted.eq.false');
+
+    if (children && children.length > 0) {
+      for (const child of children) {
+        const childIds = await this.collectMessageDescendants(child.id);
+        ids.push(...childIds);
+      }
+    }
+    return ids;
   }
 
   async editMessage(
@@ -467,9 +497,9 @@ export class NookMessagesService {
 
     const { data: updated, error: updateError } = await this.admin
       .from('nook_messages')
-      .update({ content, updated_at: new Date().toISOString() })
+      .update({ content, is_edited: true, updated_at: new Date().toISOString() })
       .eq('id', messageId)
-      .select('id, content, updated_at')
+      .select('id, content, is_edited, updated_at')
       .single();
 
     if (updateError) throw new BadRequestException(updateError.message);

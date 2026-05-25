@@ -646,7 +646,7 @@ describe('NookMessagesService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException when delete operation fails', async () => {
+    it('should throw BadRequestException when soft-delete operation fails', async () => {
       const message = {
         id: messageId,
         user_id: userId,
@@ -655,14 +655,16 @@ describe('NookMessagesService', () => {
       };
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
-      const deleteChain = createMockQueryChain({
+      const descendantsChain = createMockQueryChain({ data: [], error: null });
+      const softDeleteChain = createMockQueryChain({
         data: null,
         error: { message: 'delete failed' },
       });
 
       mockClient.from
         .mockReturnValueOnce(fetchChain)
-        .mockReturnValueOnce(deleteChain);
+        .mockReturnValueOnce(descendantsChain)
+        .mockReturnValueOnce(softDeleteChain);
 
       await expect(
         service.deleteMessage(nookId, messageId, userId),
@@ -679,7 +681,8 @@ describe('NookMessagesService', () => {
       const nookData = { messages_count: 5 };
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
-      const deleteChain = createMockQueryChain({ data: null, error: null });
+      const descendantsChain = createMockQueryChain({ data: [], error: null });
+      const softDeleteChain = createMockQueryChain({ data: null, error: null });
       const nookCountChain = createMockQueryChain({
         data: nookData,
         error: null,
@@ -688,7 +691,8 @@ describe('NookMessagesService', () => {
 
       mockClient.from
         .mockReturnValueOnce(fetchChain)
-        .mockReturnValueOnce(deleteChain)
+        .mockReturnValueOnce(descendantsChain)
+        .mockReturnValueOnce(softDeleteChain)
         .mockReturnValueOnce(nookCountChain)
         .mockReturnValueOnce(updateChain);
 
@@ -707,7 +711,8 @@ describe('NookMessagesService', () => {
       const nookData = { messages_count: 0 };
 
       const fetchChain = createMockQueryChain({ data: message, error: null });
-      const deleteChain = createMockQueryChain({ data: null, error: null });
+      const descendantsChain = createMockQueryChain({ data: [], error: null });
+      const softDeleteChain = createMockQueryChain({ data: null, error: null });
       const nookCountChain = createMockQueryChain({
         data: nookData,
         error: null,
@@ -716,7 +721,8 @@ describe('NookMessagesService', () => {
 
       mockClient.from
         .mockReturnValueOnce(fetchChain)
-        .mockReturnValueOnce(deleteChain)
+        .mockReturnValueOnce(descendantsChain)
+        .mockReturnValueOnce(softDeleteChain)
         .mockReturnValueOnce(nookCountChain)
         .mockReturnValueOnce(updateChain);
 

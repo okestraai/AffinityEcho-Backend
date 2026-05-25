@@ -474,6 +474,7 @@ export class FeedsService {
       )
       .eq('is_locked', false)
       .or('is_hidden.is.null,is_hidden.eq.false')
+      .or('is_deleted.is.null,is_deleted.eq.false')
       .eq('user_profile.has_completed_onboarding', true)
       .neq('user_id', userId);
 

@@ -264,18 +264,139 @@ export class NooksService {
     };
   }
 
-  async remove(id: string) {
-    // First check if nook exists
+  async update(
+    id: string,
+    userId: string,
+    dto: {
+      title?: string;
+      description?: string;
+      urgency?: string;
+      scope?: string;
+      hashtags?: string[];
+    },
+  ) {
+    logger.info('Updating nook', { nookId: id, userId });
+
+    try {
+      const { data: nook, error: fetchError } = await this.admin
+        .from('nooks')
+        .select('id, creator_id, deleted_at, is_hidden, is_locked')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !nook)
+        throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+      if (nook.creator_id !== userId)
+        throw new ForbiddenException('You can only edit your own nooks');
+      if (nook.deleted_at)
+        throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+      if (nook.is_hidden)
+        throw new ForbiddenException('This nook is under moderation review');
+      if (nook.is_locked)
+        throw new ForbiddenException('This nook is locked');
+
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+        is_edited: true,
+      };
+
+      if (dto.title !== undefined) {
+        if (!dto.title || dto.title.trim().length === 0)
+          throw new BadRequestException('Title cannot be empty');
+        if (dto.title.length > 200)
+          throw new BadRequestException('Title must be 200 characters or less');
+        updateData.title = dto.title.trim();
+      }
+      if (dto.description !== undefined) {
+        if (dto.description.length > 2000)
+          throw new BadRequestException(
+            'Description must be 2000 characters or less',
+          );
+        updateData.description = dto.description.trim();
+      }
+      if (dto.urgency !== undefined) {
+        if (!['high', 'medium', 'low'].includes(dto.urgency))
+          throw new BadRequestException(
+            'Urgency must be high, medium, or low',
+          );
+        updateData.urgency = dto.urgency;
+      }
+      if (dto.scope !== undefined) {
+        if (!['global', 'company'].includes(dto.scope))
+          throw new BadRequestException('Scope must be global or company');
+        updateData.scope = dto.scope;
+      }
+      if (dto.hashtags !== undefined) {
+        if (dto.hashtags.length > 10)
+          throw new BadRequestException('Maximum 10 hashtags allowed');
+        updateData.hashtags = dto.hashtags;
+      }
+
+      if (Object.keys(updateData).length <= 2)
+        throw new BadRequestException('At least one field is required');
+
+      const { data: updated, error: updateError } = await this.admin
+        .from('nooks')
+        .update(updateData)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (updateError) {
+        logger.error('Failed to update nook', { error: updateError });
+        throw new BadRequestException('Failed to update nook');
+      }
+
+      await this.redis.delPattern('nooks:*');
+
+      return {
+        success: true,
+        data: updated,
+        message: 'Nook updated successfully',
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      logger.error('Unexpected error updating nook', { error });
+      throw new BadRequestException('Failed to update nook');
+    }
+  }
+
+  async remove(id: string, userId?: string) {
     const { data: nook, error: fetchError } = await this.admin
       .from('nooks')
-      .select('creator_id')
+      .select('creator_id, deleted_at')
       .eq('id', id)
       .single();
 
     if (fetchError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+    if (nook.deleted_at) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+    if (userId && nook.creator_id !== userId)
+      throw new ForbiddenException('You can only delete your own nooks');
 
-    // Delete nook
-    const { error } = await this.admin.from('nooks').delete().eq('id', id);
+    const now = new Date().toISOString();
+
+    // Soft-delete all nook_messages
+    await this.admin
+      .from('nook_messages')
+      .update({ is_deleted: true, deleted_at: now })
+      .eq('nook_id', id);
+
+    // Delete nook_reactions
+    await this.admin.from('nook_reactions').delete().eq('nook_id', id);
+
+    // Delete nook_members
+    await this.admin.from('nook_members').delete().eq('nook_id', id);
+
+    // Soft-delete the nook (use existing deleted_at column)
+    const { error } = await this.admin
+      .from('nooks')
+      .update({ deleted_at: now })
+      .eq('id', id);
 
     if (error) throw new BadRequestException(error.message);
 

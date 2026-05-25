@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
@@ -269,7 +270,8 @@ export class FeedEngagementService {
         .eq('content_type', contentType)
         .eq('content_id', contentId)
         .is('parent_comment_id', null)
-        .or('is_hidden.is.null,is_hidden.eq.false');
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false');
 
       // Step 2: Get paginated top-level comment IDs
       const { data: topLevelComments, error: topLevelError } = await this.admin
@@ -279,6 +281,7 @@ export class FeedEngagementService {
         .eq('content_id', contentId)
         .is('parent_comment_id', null)
         .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -320,6 +323,7 @@ export class FeedEngagementService {
         .eq('content_type', contentType)
         .eq('content_id', contentId)
         .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -420,6 +424,158 @@ export class FeedEngagementService {
       logger.error(MSG.FEED.COMMENTS_FAILED, { error });
       throw new BadRequestException(MSG.FEED.COMMENTS_FAILED);
     }
+  }
+
+  async editComment(commentId: string, userId: string, content: string) {
+    logger.info('Editing feed comment', { commentId, userId });
+
+    try {
+      // Verify ownership and check guards
+      const { data: comment, error: fetchError } = await this.admin
+        .from('feed_comments')
+        .select('id, user_id, is_deleted, is_hidden')
+        .eq('id', commentId)
+        .single();
+
+      if (fetchError || !comment)
+        throw new NotFoundException('Comment not found');
+      if (comment.user_id !== userId)
+        throw new ForbiddenException('You can only edit your own comments');
+      if (comment.is_deleted)
+        throw new NotFoundException('Comment not found');
+      if (comment.is_hidden)
+        throw new ForbiddenException('This comment is under moderation review');
+
+      // Validate content
+      if (!content || content.trim().length === 0)
+        throw new BadRequestException('Content is required');
+      if (content.length > 5000)
+        throw new BadRequestException('Content must be 5000 characters or less');
+
+      const { data: updated, error: updateError } = await this.admin
+        .from('feed_comments')
+        .update({
+          content: content.trim(),
+          is_edited: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', commentId)
+        .select(`
+          *,
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
+        `)
+        .single();
+
+      if (updateError) {
+        logger.error('Failed to update comment', { error: updateError });
+        throw new BadRequestException('Failed to update comment');
+      }
+
+      return {
+        success: true,
+        data: updated,
+        message: 'Comment updated successfully',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      logger.error('Unexpected error editing comment', { error });
+      throw new BadRequestException('Failed to update comment');
+    }
+  }
+
+  async deleteComment(commentId: string, userId: string) {
+    logger.info('Deleting feed comment', { commentId, userId });
+
+    try {
+      const { data: comment, error: fetchError } = await this.admin
+        .from('feed_comments')
+        .select('id, user_id, content_type, content_id, is_deleted')
+        .eq('id', commentId)
+        .single();
+
+      if (fetchError || !comment)
+        throw new NotFoundException('Comment not found');
+      if (comment.user_id !== userId)
+        throw new ForbiddenException('You can only delete your own comments');
+      if (comment.is_deleted)
+        throw new NotFoundException('Comment not found');
+
+      // Recursive collect: this comment + all descendants
+      const idsToDelete = await this.collectCommentDescendants(commentId);
+
+      // Delete reactions for all collected comments
+      if (idsToDelete.length > 0) {
+        await this.admin
+          .from('feed_reactions')
+          .delete()
+          .in('content_id', idsToDelete);
+      }
+
+      // Soft-delete all collected comments
+      const now = new Date().toISOString();
+      const { error: deleteError } = await this.admin
+        .from('feed_comments')
+        .update({ is_deleted: true, deleted_at: now })
+        .in('id', idsToDelete);
+
+      if (deleteError) {
+        logger.error('Failed to soft-delete comments', { error: deleteError });
+        throw new BadRequestException('Failed to delete comment');
+      }
+
+      // Decrement parent content's comments_count
+      const tableMap: Record<string, string> = {
+        post: 'feed_posts',
+        topic: 'forum_topics',
+        nook_message: 'nook_messages',
+      };
+      const table = tableMap[comment.content_type];
+      if (table) {
+        const countCol = comment.content_type === 'post' ? 'comments_count' : 'comments_count';
+        const { data: parent } = await this.admin
+          .from(table)
+          .select(countCol)
+          .eq('id', comment.content_id)
+          .single();
+        if (parent) {
+          const newCount = Math.max(0, (parent[countCol] || 0) - idsToDelete.length);
+          await this.admin
+            .from(table)
+            .update({ [countCol]: newCount })
+            .eq('id', comment.content_id);
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Comment deleted successfully',
+        deleted_count: idsToDelete.length,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      logger.error('Unexpected error deleting comment', { error });
+      throw new BadRequestException('Failed to delete comment');
+    }
+  }
+
+  /**
+   * Recursively collect a comment and all its descendants via parent_comment_id
+   */
+  private async collectCommentDescendants(commentId: string): Promise<string[]> {
+    const ids = [commentId];
+    const { data: children } = await this.admin
+      .from('feed_comments')
+      .select('id')
+      .eq('parent_comment_id', commentId)
+      .or('is_deleted.is.null,is_deleted.eq.false');
+
+    if (children && children.length > 0) {
+      for (const child of children) {
+        const childIds = await this.collectCommentDescendants(child.id);
+        ids.push(...childIds);
+      }
+    }
+    return ids;
   }
 
   // ============ SHARES ============

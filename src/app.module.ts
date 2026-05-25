@@ -29,6 +29,7 @@ import { NookCronJobs } from './jobs/nook-cron.jobs';
 import { DigestCronJobs } from './jobs/digest-cron.jobs';
 import { HealthCronJobs } from './jobs/health-cron.jobs';
 import { ModerationSweepJobs } from './jobs/moderation-sweep.jobs';
+import { DeleteSweepJobs } from './jobs/delete-sweep.jobs';
 import { AdminHealthService } from './modules/admin/services/admin-health.service';
 import { EmailService } from './common/utils/email/email.service';
 import { OkestraModule } from './modules/okestra/okestra.module';
@@ -79,6 +80,7 @@ import { ContentSafetyModule } from './modules/content-safety/content-safety.mod
     DigestCronJobs,
     HealthCronJobs,
     ModerationSweepJobs,
+    DeleteSweepJobs,
     AdminHealthService,
     EmailService,
     {

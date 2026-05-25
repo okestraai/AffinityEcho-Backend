@@ -188,17 +188,23 @@ describe('CommentService', () => {
         data: { id: 'c1', user_id: 'u1', topic_id: 't1' },
         error: null,
       });
-      const deleteChain = createMockQueryChain({ data: null, error: null });
-      const updateChain = createMockQueryChain({ data: null, error: null });
+      const descendantsChain = createMockQueryChain({ data: [], error: null });
+      const deleteReactionsChain = createMockQueryChain({ data: null, error: null });
+      const softDeleteChain = createMockQueryChain({ data: null, error: null });
+      const topicChain = createMockQueryChain({ data: { comments_count: 5 }, error: null });
+      const updateCountChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(fetchChain)
-        .mockReturnValueOnce(deleteChain)
-        .mockReturnValueOnce(updateChain);
+        .mockReturnValueOnce(fetchChain)        // fetch comment
+        .mockReturnValueOnce(descendantsChain)   // collect descendants
+        .mockReturnValueOnce(deleteReactionsChain) // delete reactions
+        .mockReturnValueOnce(softDeleteChain)    // soft-delete comments
+        .mockReturnValueOnce(topicChain)         // get topic count
+        .mockReturnValueOnce(updateCountChain);  // update topic count
 
       const result = await service.deleteComment('c1', 'u1');
       expect(result).toBeDefined();
-      expect(result.message).toBe(MSG.FORUM.COMMENT_DELETED);
+      expect(result.success).toBe(true);
     });
 
     it('should throw if comment not found', async () => {
@@ -252,6 +258,100 @@ describe('CommentService', () => {
       await expect(
         service.addCommentReaction('u1', 'nope', 'helpful'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('updateComment', () => {
+    it('should update comment content successfully', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'c1', user_id: 'u1', is_deleted: false, is_hidden: false },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: { ...mockComment, content: 'Updated content', is_edited: true },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.updateComment('c1', 'u1', 'Updated content');
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Comment updated successfully');
+    });
+
+    it('should throw NotFoundException when comment not found', async () => {
+      const fetchChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateComment('nope', 'u1', 'content'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when not owner', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'c1', user_id: 'other-user', is_deleted: false, is_hidden: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateComment('c1', 'u1', 'content'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when comment is_deleted', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'c1', user_id: 'u1', is_deleted: true, is_hidden: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateComment('c1', 'u1', 'content'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when comment is_hidden', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'c1', user_id: 'u1', is_deleted: false, is_hidden: true },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateComment('c1', 'u1', 'content'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw BadRequestException when content is empty', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'c1', user_id: 'u1', is_deleted: false, is_hidden: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateComment('c1', 'u1', ''),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when content too long (>5000 chars)', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'c1', user_id: 'u1', is_deleted: false, is_hidden: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      const longContent = 'a'.repeat(5001);
+      await expect(
+        service.updateComment('c1', 'u1', longContent),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

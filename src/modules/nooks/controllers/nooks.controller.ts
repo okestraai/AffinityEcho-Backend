@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Delete,
@@ -133,11 +134,42 @@ export class NooksController {
     return this.nooksService.findOne(id, user.userId);
   }
 
+  @Put(':id')
+  @ApiOperation({
+    summary: 'Edit a nook',
+    description: 'Edit nook details. Only the creator can edit.',
+  })
+  @ApiParam({ name: 'id', description: 'Nook ID' })
+  @ApiBody({
+    schema: {
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        urgency: { type: 'string', enum: ['high', 'medium', 'low'] },
+        scope: { type: 'string', enum: ['global', 'company'] },
+        hashtags: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+    @Body()
+    dto: {
+      title?: string;
+      description?: string;
+      urgency?: string;
+      scope?: string;
+      hashtags?: string[];
+    },
+  ) {
+    return this.nooksService.update(id, user.userId, dto);
+  }
+
   @Delete(':id')
-  @UseGuards(NookCreatorGuard)
   @ApiOperation({
     summary: 'Delete a nook',
-    description: 'Delete a nook (creator or admin only)',
+    description: 'Delete a nook (creator only). Soft-deletes the nook and all messages.',
   })
   @ApiParam({ name: 'id', description: 'Nook ID' })
   @ApiResponse({
@@ -146,10 +178,13 @@ export class NooksController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - not creator or admin',
+    description: 'Forbidden - not creator',
   })
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.nooksService.remove(id);
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.nooksService.remove(id, user.userId);
   }
 
   @Post(':id/lock')

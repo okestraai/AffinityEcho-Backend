@@ -245,7 +245,8 @@ export class TopicService {
       topic_reactions!topic_id(count)
     `,
       { count: 'exact' },
-    ).or('is_hidden.is.null,is_hidden.eq.false');
+    ).or('is_hidden.is.null,is_hidden.eq.false')
+    .or('is_deleted.is.null,is_deleted.eq.false');
 
     if (userId) {
       query = query.neq('user_id', userId);
@@ -437,6 +438,7 @@ export class TopicService {
         )
         .eq('id', id)
         .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .single();
 
       if (error || !topic) {
@@ -641,55 +643,180 @@ export class TopicService {
     }
   }
 
-  async deleteTopic(id: string, userId: string) {
+  async updateTopic(topicId: string, userId: string, dto: { title?: string; content?: string; tags?: string[]; isAnonymous?: boolean }) {
+    logger.info('Updating topic', { topicId, userId });
+
     try {
-      const { data: topic } = await this.admin
+      const { data: topic, error: fetchError } = await this.admin
         .from('forum_topics')
-        .select('id, user_id, forum_id')
+        .select('id, user_id, is_deleted, is_hidden, is_locked')
+        .eq('id', topicId)
+        .single();
+
+      if (fetchError || !topic)
+        throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
+      if (topic.user_id !== userId)
+        throw new ForbiddenException('You can only edit your own topics');
+      if (topic.is_deleted)
+        throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
+      if (topic.is_hidden)
+        throw new ForbiddenException('This topic is under moderation review');
+      if (topic.is_locked)
+        throw new ForbiddenException('This topic is locked');
+
+      // Build update payload - at least one field required
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+        is_edited: true,
+      };
+
+      if (dto.title !== undefined) {
+        if (!dto.title || dto.title.trim().length === 0)
+          throw new BadRequestException('Title cannot be empty');
+        if (dto.title.length > 300)
+          throw new BadRequestException('Title must be 300 characters or less');
+        updateData.title = dto.title.trim();
+      }
+      if (dto.content !== undefined) {
+        if (!dto.content || dto.content.trim().length === 0)
+          throw new BadRequestException('Content cannot be empty');
+        if (dto.content.length > 10000)
+          throw new BadRequestException('Content must be 10000 characters or less');
+        updateData.content = dto.content.trim();
+      }
+      if (dto.tags !== undefined) {
+        if (dto.tags.length > 10)
+          throw new BadRequestException('Maximum 10 tags allowed');
+        updateData.tags = dto.tags;
+      }
+      if (dto.isAnonymous !== undefined) {
+        updateData.is_anonymous = dto.isAnonymous;
+      }
+
+      if (Object.keys(updateData).length <= 2) // only updated_at + is_edited
+        throw new BadRequestException('At least one field is required');
+
+      const { data: updated, error: updateError } = await this.admin
+        .from('forum_topics')
+        .update(updateData)
+        .eq('id', topicId)
+        .select(`
+          *,
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
+        `)
+        .single();
+
+      if (updateError) {
+        logger.error('Failed to update topic', { error: updateError });
+        throw new BadRequestException('Failed to update topic');
+      }
+
+      await this.redis.delPattern('feeds:*');
+      await this.redis.delPattern('forum:*');
+
+      return {
+        success: true,
+        data: updated,
+        message: 'Topic updated successfully',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      logger.error('Unexpected error updating topic', { error });
+      throw new BadRequestException('Failed to update topic');
+    }
+  }
+
+  async deleteTopic(id: string, userId: string) {
+    logger.info('Deleting topic', { topicId: id, userId });
+
+    try {
+      const { data: topic, error: fetchError } = await this.admin
+        .from('forum_topics')
+        .select('id, user_id, forum_id, is_deleted')
         .eq('id', id)
         .single();
 
-      if (!topic) throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
+      if (fetchError || !topic)
+        throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
       if (topic.user_id !== userId)
-        throw new ForbiddenException(MSG.FORUM.NOT_AUTHORIZED);
+        throw new ForbiddenException('You can only delete your own topics');
+      if (topic.is_deleted)
+        throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
 
-      await this.admin.from('forum_topics').delete().eq('id', id);
+      const now = new Date().toISOString();
 
-      // Get current forum topic count
-      const { data: forum } = await this.admin
-        .from('forums')
-        .select('topic_count')
-        .eq('id', topic.forum_id)
-        .single();
+      // 1. Delete comment_reactions for all comments in this topic
+      const { data: commentIds } = await this.admin
+        .from('forum_comments')
+        .select('id')
+        .eq('topic_id', id);
 
-      const currentCount = forum?.topic_count || 0;
-      const newCount = Math.max(0, currentCount - 1);
+      if (commentIds && commentIds.length > 0) {
+        const ids = commentIds.map((c: any) => c.id);
+        await this.admin
+          .from('comment_reactions')
+          .delete()
+          .in('comment_id', ids);
+      }
 
-      await this.safeRpc(
-        'decrement_forum_topic_count',
-        { forum_id: topic.forum_id },
-        async () => {
+      // 2. Delete topic_reactions
+      await this.admin
+        .from('topic_reactions')
+        .delete()
+        .eq('topic_id', id);
+
+      // 3. Delete topic_bookmarks
+      await this.admin
+        .from('topic_bookmarks')
+        .delete()
+        .eq('topic_id', id);
+
+      // 4. Soft-delete ALL forum_comments
+      await this.admin
+        .from('forum_comments')
+        .update({ is_deleted: true, deleted_at: now })
+        .eq('topic_id', id);
+
+      // 5. Soft-delete the topic
+      const { error: deleteError } = await this.admin
+        .from('forum_topics')
+        .update({ is_deleted: true, deleted_at: now })
+        .eq('id', id);
+
+      if (deleteError) {
+        logger.error('Failed to soft-delete topic', { error: deleteError });
+        throw new BadRequestException('Failed to delete topic');
+      }
+
+      // 6. Decrement forum topic_count
+      try {
+        await this.admin.rpc('decrement_topic_count', { forum_id_param: topic.forum_id });
+      } catch {
+        // Fallback: manual decrement
+        const { data: forum } = await this.admin
+          .from('forums')
+          .select('topic_count')
+          .eq('id', topic.forum_id)
+          .single();
+        if (forum) {
           await this.admin
             .from('forums')
-            .update({
-              topic_count: newCount,
-              last_activity: new Date().toISOString(),
-            })
+            .update({ topic_count: Math.max(0, (forum.topic_count || 0) - 1) })
             .eq('id', topic.forum_id);
-        },
-      );
+        }
+      }
 
-      await this.redis.delPattern('topics:*');
+      await this.redis.delPattern('feeds:*');
+      await this.redis.delPattern('forum:*');
 
-      return { success: true };
+      return {
+        success: true,
+        message: 'Topic and all comments deleted successfully',
+      };
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException
-      )
-        throw error;
-      logger.error(MSG.FORUM.DELETE_TOPIC_FAILED, { error });
-      throw new InternalServerErrorException(MSG.FORUM.DELETE_TOPIC_FAILED);
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      logger.error('Unexpected error deleting topic', { error });
+      throw new BadRequestException('Failed to delete topic');
     }
   }
 
@@ -812,7 +939,8 @@ export class TopicService {
           { count: 'exact' },
         )
         .in('forum_id', forumIds)
-        .or('is_hidden.is.null,is_hidden.eq.false');
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false');
 
       query = query.neq('user_id', userId);
 
@@ -1054,6 +1182,7 @@ export class TopicService {
       )
       .in('id', topicIds)
       .or('is_hidden.is.null,is_hidden.eq.false')
+      .or('is_deleted.is.null,is_deleted.eq.false')
       .range(from, to);
 
     if (error) {

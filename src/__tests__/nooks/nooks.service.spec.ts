@@ -12,7 +12,7 @@ jest.mock('../../common/utils/logger.util', () => ({
   },
 }));
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { NooksService } from '../../modules/nooks/services/nooks.service';
 import { supabaseAdmin } from '../../database/supabase.client';
 import {
@@ -388,6 +388,123 @@ describe('NooksService', () => {
       mockClient.from.mockReturnValueOnce(chain);
 
       await expect(service.getBookmarkedNooks('u1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('update', () => {
+    it('should update nook title successfully', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: null, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: { ...mockNook, title: 'Updated Nook', is_edited: true },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.update('nook-1', 'u1', { title: 'Updated Nook' });
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Nook updated successfully');
+    });
+
+    it('should throw NotFoundException when nook not found', async () => {
+      const fetchChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nope', 'u1', { title: 'New' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when not creator', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'other-user', deleted_at: null, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when nook has deleted_at', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: '2026-01-01', is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when nook is_hidden', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: null, is_hidden: true, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when nook is_locked', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: null, is_hidden: false, is_locked: true },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw BadRequestException when no fields provided', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: null, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should validate urgency enum (only high/medium/low)', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: null, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', { urgency: 'critical' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should validate scope enum (only global/company)', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 'nook-1', creator_id: 'u1', deleted_at: null, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.update('nook-1', 'u1', { scope: 'local' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

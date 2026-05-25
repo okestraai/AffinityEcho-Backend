@@ -781,6 +781,7 @@ export class CommentService {
       )
       .eq('topic_id', topicId)
       .or('is_hidden.is.null,is_hidden.eq.false')
+      .or('is_deleted.is.null,is_deleted.eq.false')
       .order('created_at', { ascending: true });
 
     if (error || !allComments) {
@@ -974,35 +975,144 @@ export class CommentService {
   }
 
   async deleteComment(commentId: string, userId: string) {
-    const { data: comment } = await this.admin
-      .from('forum_comments')
-      .select('id, user_id, topic_id')
-      .eq('id', commentId)
-      .single();
+    logger.info('Deleting forum comment', { commentId, userId });
 
-    if (!comment) throw new NotFoundException(MSG.FORUM.COMMENT_NOT_FOUND);
-    if (comment.user_id !== userId)
-      throw new ForbiddenException(MSG.FORUM.NOT_YOUR_COMMENT);
+    try {
+      const { data: comment, error: fetchError } = await this.admin
+        .from('forum_comments')
+        .select('id, user_id, topic_id, is_deleted')
+        .eq('id', commentId)
+        .single();
 
-    await this.admin.from('forum_comments').delete().eq('id', commentId);
+      if (fetchError || !comment)
+        throw new NotFoundException('Comment not found');
+      if (comment.user_id !== userId)
+        throw new ForbiddenException('You can only delete your own comments');
+      if (comment.is_deleted)
+        throw new NotFoundException('Comment not found');
 
-    const { error } = await this.admin.rpc('decrement_topic_comment_count', {
-      topic_id: comment.topic_id,
-    });
-    if (error) {
+      // Recursive collect descendants
+      const idsToDelete = await this.collectForumCommentDescendants(commentId);
+
+      // Delete reactions for all collected
+      if (idsToDelete.length > 0) {
+        await this.admin
+          .from('comment_reactions')
+          .delete()
+          .in('comment_id', idsToDelete);
+      }
+
+      // Soft-delete all
+      const now = new Date().toISOString();
       await this.admin
-        .from('forum_topics')
-        .update({ comments_count: () => 'comments_count - 1' })
-        .eq('id', comment.topic_id)
-        .gte('comments_count', 1);
+        .from('forum_comments')
+        .update({ is_deleted: true, deleted_at: now })
+        .in('id', idsToDelete);
+
+      // Decrement topic comments_count
+      try {
+        const { data: topic } = await this.admin
+          .from('forum_topics')
+          .select('comments_count')
+          .eq('id', comment.topic_id)
+          .single();
+        if (topic) {
+          await this.admin
+            .from('forum_topics')
+            .update({ comments_count: Math.max(0, (topic.comments_count || 0) - idsToDelete.length) })
+            .eq('id', comment.topic_id);
+        }
+      } catch (e) {
+        logger.warn('Failed to decrement comment count', { error: e });
+      }
+
+      // Invalidate AI insights cache for this topic
+      this.okestraService
+        .invalidateCache('topic', comment.topic_id)
+        .catch(() => {});
+
+      return {
+        success: true,
+        message: 'Comment deleted successfully',
+        deleted_count: idsToDelete.length,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      logger.error('Unexpected error deleting forum comment', { error });
+      throw new BadRequestException('Failed to delete comment');
     }
+  }
 
-    // Invalidate AI insights cache for this topic
-    this.okestraService
-      .invalidateCache('topic', comment.topic_id)
-      .catch(() => {});
+  async updateComment(commentId: string, userId: string, content: string) {
+    logger.info('Updating forum comment', { commentId, userId });
 
-    return { success: true, message: MSG.FORUM.COMMENT_DELETED };
+    try {
+      const { data: comment, error: fetchError } = await this.admin
+        .from('forum_comments')
+        .select('id, user_id, is_deleted, is_hidden')
+        .eq('id', commentId)
+        .single();
+
+      if (fetchError || !comment)
+        throw new NotFoundException('Comment not found');
+      if (comment.user_id !== userId)
+        throw new ForbiddenException('You can only edit your own comments');
+      if (comment.is_deleted)
+        throw new NotFoundException('Comment not found');
+      if (comment.is_hidden)
+        throw new ForbiddenException('This comment is under moderation review');
+
+      if (!content || content.trim().length === 0)
+        throw new BadRequestException('Content is required');
+      if (content.length > 5000)
+        throw new BadRequestException('Content must be 5000 characters or less');
+
+      const { data: updated, error: updateError } = await this.admin
+        .from('forum_comments')
+        .update({
+          content: content.trim(),
+          is_edited: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', commentId)
+        .select(`
+          *,
+          user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
+        `)
+        .single();
+
+      if (updateError) {
+        logger.error('Failed to update comment', { error: updateError });
+        throw new BadRequestException('Failed to update comment');
+      }
+
+      return {
+        success: true,
+        data: updated,
+        message: 'Comment updated successfully',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      logger.error('Unexpected error updating forum comment', { error });
+      throw new BadRequestException('Failed to update comment');
+    }
+  }
+
+  private async collectForumCommentDescendants(commentId: string): Promise<string[]> {
+    const ids = [commentId];
+    const { data: children } = await this.admin
+      .from('forum_comments')
+      .select('id')
+      .eq('parent_comment_id', commentId)
+      .or('is_deleted.is.null,is_deleted.eq.false');
+
+    if (children && children.length > 0) {
+      for (const child of children) {
+        const childIds = await this.collectForumCommentDescendants(child.id);
+        ids.push(...childIds);
+      }
+    }
+    return ids;
   }
 
   private async applyIdentityReveals(

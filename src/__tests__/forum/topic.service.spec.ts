@@ -412,6 +412,112 @@ describe('TopicService', () => {
     });
   });
 
+  describe('updateTopic', () => {
+    it('should update topic title successfully', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'u1', is_deleted: false, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      const updateChain = createMockQueryChain({
+        data: { ...mockTopic, title: 'Updated Title', is_edited: true },
+        error: null,
+      });
+
+      mockClient.from
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain);
+
+      const result = await service.updateTopic('t1', 'u1', { title: 'Updated Title' });
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Topic updated successfully');
+    });
+
+    it('should throw NotFoundException when topic not found', async () => {
+      const fetchChain = createMockQueryChain({
+        data: null,
+        error: { message: 'not found' },
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateTopic('nope', 'u1', { title: 'New' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when not owner', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'other-user', is_deleted: false, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateTopic('t1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when topic is_deleted', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'u1', is_deleted: true, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateTopic('t1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when topic is_hidden (moderation)', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'u1', is_deleted: false, is_hidden: true, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateTopic('t1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when topic is_locked', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'u1', is_deleted: false, is_hidden: false, is_locked: true },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateTopic('t1', 'u1', { title: 'New' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw BadRequestException when no fields provided', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'u1', is_deleted: false, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      await expect(
+        service.updateTopic('t1', 'u1', {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when title too long (>300 chars)', async () => {
+      const fetchChain = createMockQueryChain({
+        data: { id: 't1', user_id: 'u1', is_deleted: false, is_hidden: false, is_locked: false },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(fetchChain);
+
+      const longTitle = 'a'.repeat(301);
+      await expect(
+        service.updateTopic('t1', 'u1', { title: longTitle }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('findRecentDiscussions', () => {
     it('should return empty when no forums found', async () => {
       // getUserCompanyList: from('user_profiles')

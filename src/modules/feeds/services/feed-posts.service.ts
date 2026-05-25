@@ -383,6 +383,7 @@ export class FeedPostsService {
 
       const updateData: any = {
         updated_at: new Date().toISOString(),
+        is_edited: true,
       };
 
       if (dto.content) updateData.content = dto.content;
@@ -441,19 +442,68 @@ export class FeedPostsService {
       // Verify ownership
       const { data: existing } = await this.admin
         .from('feed_posts')
-        .select('user_id')
+        .select('user_id, is_archived')
         .eq('id', postId)
         .single();
 
       if (!existing) {
         throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
-
+      if (existing.is_archived) {
+        throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
+      }
       if (existing.user_id !== userId) {
         throw new ForbiddenException(MSG.FEED.CANT_DELETE);
       }
 
-      // Soft delete by archiving
+      const now = new Date().toISOString();
+
+      // 1. Collect all comment IDs for this post
+      const { data: comments } = await this.admin
+        .from('feed_comments')
+        .select('id')
+        .eq('content_type', 'post')
+        .eq('content_id', postId);
+
+      if (comments && comments.length > 0) {
+        const commentIds = comments.map((c: any) => c.id);
+
+        // 2. Delete reactions for comments
+        await this.admin
+          .from('feed_reactions')
+          .delete()
+          .in('content_id', commentIds);
+
+        // 3. Soft-delete comments
+        await this.admin
+          .from('feed_comments')
+          .update({ is_deleted: true, deleted_at: now })
+          .eq('content_type', 'post')
+          .eq('content_id', postId);
+      }
+
+      // 4. Delete post reactions, likes, bookmarks, shares
+      await this.admin
+        .from('feed_reactions')
+        .delete()
+        .eq('content_id', postId);
+      await this.admin
+        .from('feed_likes')
+        .delete()
+        .eq('content_type', 'post')
+        .eq('content_id', postId);
+      await this.admin
+        .from('feed_bookmarks')
+        .delete()
+        .eq('content_type', 'post')
+        .eq('content_id', postId);
+      await this.admin
+        .from('feed_shares')
+        .delete()
+        .eq('content_type', 'post')
+        .eq('content_id', postId);
+
+      // 5. Soft delete by archiving (keep existing pattern)
       const { error } = await this.admin
         .from('feed_posts')
         .update({ is_archived: true })

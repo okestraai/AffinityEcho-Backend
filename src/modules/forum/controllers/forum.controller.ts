@@ -501,6 +501,30 @@ export class ForumController {
     return this.topicService.deleteTopic(id, user.userId);
   }
 
+  @Put('topics/:id')
+  @ApiOperation({
+    summary: 'Edit topic',
+    description: 'Edit a topic. Only the topic owner can edit it.',
+  })
+  @ApiParam({ name: 'id', description: 'Topic ID' })
+  @ApiBody({
+    schema: {
+      properties: {
+        title: { type: 'string' },
+        content: { type: 'string' },
+        tags: { type: 'array', items: { type: 'string' } },
+        isAnonymous: { type: 'boolean' },
+      },
+    },
+  })
+  async updateTopic(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() dto: { title?: string; content?: string; tags?: string[]; isAnonymous?: boolean },
+  ) {
+    return this.topicService.updateTopic(id, user.userId, dto);
+  }
+
   // ========== COMMENT ENDPOINTS ==========
 
   @Post('comments')
@@ -575,6 +599,28 @@ export class ForumController {
   })
   async deleteComment(@Param('id') id: string, @CurrentUser() user: any) {
     return this.commentService.deleteComment(id, user.userId);
+  }
+
+  @Put('comments/:id')
+  @ApiOperation({
+    summary: 'Edit comment',
+    description: 'Edit a comment. Only the comment owner can edit it.',
+  })
+  @ApiParam({ name: 'id', description: 'Comment ID' })
+  @ApiBody({
+    schema: {
+      properties: {
+        content: { type: 'string' },
+      },
+      required: ['content'],
+    },
+  })
+  async updateComment(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body('content') content: string,
+  ) {
+    return this.commentService.updateComment(id, user.userId, content);
   }
 
   // ========== OTHER ENDPOINTS ==========

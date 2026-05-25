@@ -137,13 +137,13 @@ describe('FeedPostsService', () => {
   });
 
   describe('updatePost', () => {
-    it('should update own post', async () => {
+    it('should update own post and set is_edited', async () => {
       const fetchChain = createMockQueryChain({
         data: { id: 'post-1', user_id: 'u1' },
         error: null,
       });
       const updateChain = createMockQueryChain({
-        data: { ...mockPost, content: 'Updated' },
+        data: { ...mockPost, content: 'Updated', is_edited: true },
         error: null,
       });
       mockClient.from
@@ -155,6 +155,10 @@ describe('FeedPostsService', () => {
       } as any);
       expect(result.success).toBe(true);
       expect(result.message).toBe(MSG.FEED.POST_UPDATED);
+      // Verify is_edited was sent in update
+      expect(updateChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ is_edited: true }),
+      );
     });
 
     it('should throw if not post owner', async () => {
@@ -183,15 +187,27 @@ describe('FeedPostsService', () => {
   });
 
   describe('deletePost', () => {
-    it('should delete own post', async () => {
+    it('should cascade soft-delete post and comments', async () => {
       const fetchChain = createMockQueryChain({
-        data: { id: 'post-1', user_id: 'u1' },
+        data: { id: 'post-1', user_id: 'u1', is_archived: false },
         error: null,
       });
-      const deleteChain = createMockQueryChain({ data: null, error: null });
+      const commentsChain = createMockQueryChain({
+        data: [{ id: 'c1' }, { id: 'c2' }],
+        error: null,
+      });
+      const defaultChain = createMockQueryChain({ data: null, error: null });
+
       mockClient.from
-        .mockReturnValueOnce(fetchChain)
-        .mockReturnValueOnce(deleteChain);
+        .mockReturnValueOnce(fetchChain)     // fetch post
+        .mockReturnValueOnce(commentsChain)  // collect comment IDs
+        .mockReturnValueOnce(defaultChain)   // delete comment reactions
+        .mockReturnValueOnce(defaultChain)   // soft-delete comments
+        .mockReturnValueOnce(defaultChain)   // delete post reactions
+        .mockReturnValueOnce(defaultChain)   // delete post likes
+        .mockReturnValueOnce(defaultChain)   // delete post bookmarks
+        .mockReturnValueOnce(defaultChain)   // delete post shares
+        .mockReturnValueOnce(defaultChain);  // archive post
 
       const result = await service.deletePost('post-1', 'u1');
       expect(result.success).toBe(true);
@@ -200,12 +216,22 @@ describe('FeedPostsService', () => {
 
     it('should throw if not post owner', async () => {
       const chain = createMockQueryChain({
-        data: { id: 'post-1', user_id: 'other' },
+        data: { id: 'post-1', user_id: 'other', is_archived: false },
         error: null,
       });
       mockClient.from.mockReturnValue(chain);
 
       await expect(service.deletePost('post-1', 'u1')).rejects.toThrow();
+    });
+
+    it('should throw if post already archived', async () => {
+      const chain = createMockQueryChain({
+        data: { id: 'post-1', user_id: 'u1', is_archived: true },
+        error: null,
+      });
+      mockClient.from.mockReturnValue(chain);
+
+      await expect(service.deletePost('post-1', 'u1')).rejects.toThrow(NotFoundException);
     });
   });
 

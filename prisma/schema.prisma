@@ -255,6 +255,11 @@ model forum_topics {
   reaction_inspired_count  Int @default(0)
   reaction_heard_count     Int @default(0)
 
+  // User edit/delete
+  is_edited          Boolean  @default(false)
+  is_deleted         Boolean  @default(false)
+  deleted_at         DateTime? @db.Timestamptz(3)
+
   // Admin moderation
   is_hidden          Boolean  @default(false)
   hidden_by          String?  @db.Uuid
@@ -287,6 +292,11 @@ model forum_comments {
 
   helpful_count      Int      @default(0)
   supportive_count   Int      @default(0)
+
+  // User edit/delete
+  is_edited          Boolean  @default(false)
+  is_deleted         Boolean  @default(false)
+  deleted_at         DateTime? @db.Timestamptz(3)
 
   // Admin moderation
   is_hidden          Boolean  @default(false)
@@ -819,6 +829,7 @@ model nooks {
   is_active           Boolean  @default(true)
   is_locked           Boolean  @default(false)
   locked_reason       String?
+  is_edited           Boolean  @default(false)
 
   // Admin moderation
   is_hidden           Boolean  @default(false)
@@ -885,6 +896,11 @@ model nook_messages {
   is_flagged          Boolean  @default(false)
   flagged_count       Int      @default(0)
 
+  // User edit/delete
+  is_edited           Boolean  @default(false)
+  is_deleted          Boolean  @default(false)
+  deleted_at          DateTime? @db.Timestamptz(3)
+
   // Admin moderation
   is_hidden           Boolean  @default(false)
   hidden_by           String?  @db.Uuid
@@ -906,7 +922,7 @@ model nook_messages {
   parent              nook_messages?     @relation("message_replies", fields: [parent_message_id], references: [id], onDelete: Cascade)
   replies             nook_messages[]    @relation("message_replies")
   reactions           nook_message_reactions[]
-  
+
   @@index([nook_id])
   @@index([user_id])
   @@index([created_at])
@@ -967,6 +983,7 @@ model feed_posts {
   // Metadata
   is_pinned           Boolean  @default(false)
   is_archived         Boolean  @default(false)
+  is_edited           Boolean  @default(false)
 
   // Admin moderation
   is_hidden           Boolean  @default(false)
@@ -1020,6 +1037,11 @@ model feed_comments {
 
   // For threaded comments
   parent_comment_id   String?  @db.Uuid
+
+  // User edit/delete
+  is_edited           Boolean  @default(false)
+  is_deleted          Boolean  @default(false)
+  deleted_at          DateTime? @db.Timestamptz(3)
 
   // Admin moderation
   is_hidden           Boolean  @default(false)

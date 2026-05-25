@@ -222,6 +222,30 @@ export class FeedsController {
     );
   }
 
+  @Put('comments/:commentId')
+  @ApiOperation({ summary: 'Edit a feed comment' })
+  @ApiParam({ name: 'commentId', description: 'Comment ID' })
+  @ApiBody({ schema: { properties: { content: { type: 'string' } }, required: ['content'] } })
+  async editComment(
+    @Req() req: any,
+    @Param('commentId') commentId: string,
+    @Body('content') content: string,
+  ) {
+    const userId = req.user.sub;
+    return this.feedEngagementService.editComment(commentId, userId, content);
+  }
+
+  @Delete('comments/:commentId')
+  @ApiOperation({ summary: 'Delete a feed comment and its replies' })
+  @ApiParam({ name: 'commentId', description: 'Comment ID' })
+  async deleteComment(
+    @Req() req: any,
+    @Param('commentId') commentId: string,
+  ) {
+    const userId = req.user.sub;
+    return this.feedEngagementService.deleteComment(commentId, userId);
+  }
+
   // ============ SHARES ============
   @Post(':contentType/:contentId/share')
   @ApiOperation({ summary: 'Share a feed item' })
