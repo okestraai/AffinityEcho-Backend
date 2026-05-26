@@ -348,6 +348,7 @@ export class NooksService {
       }
 
       await this.redis.delPattern('nooks:*');
+      await this.redis.delPattern('feeds:*');
 
       return {
         success: true,
