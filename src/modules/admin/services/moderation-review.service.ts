@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { EmailService } from '../../../common/utils/email/email.service';
+import { RedisService } from '../../../common/services/redis.service';
 import logger from '../../../common/utils/logger.util';
 
 const TABLE_MAP: Record<string, { table: string; authorCol: string; contentCol: string; titleCol?: string }> = {
@@ -38,6 +39,7 @@ export class ModerationReviewService {
   constructor(
     private config: ConfigService,
     private emailService: EmailService,
+    private redis: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -301,6 +303,13 @@ export class ModerationReviewService {
         })
         .eq('content_type', item.content_type)
         .eq('content_id', item.content_id);
+    }
+
+    // Invalidate caches so changes appear immediately
+    if (action === 'reverse' || action === 'hide') {
+      await this.redis.delPattern('feeds:*');
+      await this.redis.delPattern('topics:*');
+      await this.redis.delPattern('nooks:*');
     }
 
     const messages: Record<string, string> = {

@@ -12,6 +12,7 @@ import { EditorialVerdict } from './dto/editorial-verdict.dto';
 import { POLICY_VERSION } from './editorial-prompts';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { RedisService } from '../../../common/services/redis.service';
 
 export interface ModerationJobData {
   contentType: string;
@@ -47,6 +48,7 @@ export class EditorialProcessor extends WorkerHost {
     private enforcement: EnforcementService,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
+    private redis: RedisService,
   ) {
     super();
     this.admin = supabaseAdmin(config);
@@ -188,6 +190,11 @@ export class EditorialProcessor extends WorkerHost {
           true,
           verdict.userFacingReason || verdict.rationale,
         );
+
+        // Invalidate caches so hidden content disappears immediately
+        await this.redis.delPattern('feeds:*');
+        await this.redis.delPattern('topics:*');
+        await this.redis.delPattern('nooks:*');
 
         // Send notification + email to author
         this.notifyAuthor(

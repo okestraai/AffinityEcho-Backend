@@ -471,6 +471,8 @@ export class FeedEngagementService {
         throw new BadRequestException('Failed to update comment');
       }
 
+      await this.redis.delPattern('feeds:*');
+
       return {
         success: true,
         data: updated,
@@ -545,6 +547,8 @@ export class FeedEngagementService {
             .eq('id', comment.content_id);
         }
       }
+
+      await this.redis.delPattern('feeds:*');
 
       return {
         success: true,

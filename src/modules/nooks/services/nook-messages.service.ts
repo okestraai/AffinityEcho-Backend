@@ -15,6 +15,7 @@ import logger from '../../../common/utils/logger.util';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { MSG } from '../../../common/constants/messages';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
+import { RedisService } from '../../../common/services/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -29,6 +30,7 @@ export class NookMessagesService {
     private notificationsService: NotificationsService,
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
+    private redis: RedisService,
     @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
@@ -435,6 +437,9 @@ export class NookMessagesService {
 
     // Invalidate AI insights cache for this nook
     this.okestraService.invalidateCache('nook', nookId).catch(() => {});
+
+    await this.redis.delPattern('nooks:*');
+    await this.redis.delPattern('feeds:*');
 
     return {
       success: true,

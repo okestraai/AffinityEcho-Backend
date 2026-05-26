@@ -18,6 +18,7 @@ import { ModerationReviewService } from './services/moderation-review.service';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 import { EmailService } from '../../common/utils/email/email.service';
+import { RedisService } from '../../common/services/redis.service';
 
 @Module({
   imports: [AuthModule],
@@ -40,6 +41,7 @@ import { EmailService } from '../../common/utils/email/email.service';
     PermissionGuard,
     EncryptionUtil,
     EmailService,
+    RedisService,
   ],
   exports: [AdminHealthService],
 })

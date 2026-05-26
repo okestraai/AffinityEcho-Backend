@@ -401,6 +401,7 @@ export class NooksService {
     if (error) throw new BadRequestException(error.message);
 
     await this.redis.delPattern('nooks:*');
+    await this.redis.delPattern('feeds:*');
 
     return {
       success: true,

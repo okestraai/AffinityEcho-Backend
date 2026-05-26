@@ -325,6 +325,7 @@ export class UserProfileService {
         )
         .eq('user_id', targetUserId)
         .eq('is_archived', false)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -334,6 +335,8 @@ export class UserProfileService {
           'id, title, content, tags, scope, comments_count, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, created_at, is_anonymous, forum:forums(id, name)',
         )
         .eq('user_id', targetUserId)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -345,6 +348,8 @@ export class UserProfileService {
         .eq('creator_id', targetUserId)
         .eq('is_active', true)
         .gt('expires_at', now)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -354,6 +359,8 @@ export class UserProfileService {
           'id, content_type, content_id, content, is_anonymous, created_at',
         )
         .eq('user_id', targetUserId)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -615,11 +622,14 @@ export class UserProfileService {
         .select('id')
         .eq('user_id', targetUserId)
         .eq('is_archived', false)
+        .or('is_hidden.is.null,is_hidden.eq.false')
         .limit(100),
       this.admin
         .from('forum_topics')
         .select('id')
         .eq('user_id', targetUserId)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .limit(100),
     ]);
 
@@ -761,29 +771,38 @@ export class UserProfileService {
           .from('feed_posts')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', userId)
-          .eq('is_archived', false),
+          .eq('is_archived', false)
+          .or('is_hidden.is.null,is_hidden.eq.false'),
         this.admin
           .from('referral_posts')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .or('is_hidden.is.null,is_hidden.eq.false'),
         // Comments posted
         this.admin
           .from('forum_comments')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .or('is_hidden.is.null,is_hidden.eq.false')
+          .or('is_deleted.is.null,is_deleted.eq.false'),
         this.admin
           .from('feed_comments')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .or('is_hidden.is.null,is_hidden.eq.false')
+          .or('is_deleted.is.null,is_deleted.eq.false'),
         this.admin
           .from('referral_comments')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .or('is_hidden.is.null,is_hidden.eq.false'),
         // Topics and nooks
         this.admin
           .from('forum_topics')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .or('is_hidden.is.null,is_hidden.eq.false')
+          .or('is_deleted.is.null,is_deleted.eq.false'),
         this.admin
           .from('nook_members')
           .select('*', { count: 'exact', head: true })
@@ -793,13 +812,16 @@ export class UserProfileService {
           .from('feed_posts')
           .select('likes_count')
           .eq('user_id', userId)
-          .eq('is_archived', false),
+          .eq('is_archived', false)
+          .or('is_hidden.is.null,is_hidden.eq.false'),
         this.admin
           .from('forum_topics')
           .select(
             'reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count',
           )
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .or('is_hidden.is.null,is_hidden.eq.false')
+          .or('is_deleted.is.null,is_deleted.eq.false'),
         this.admin
           .from('referral_posts')
           .select('likes_count')
@@ -1058,6 +1080,7 @@ export class UserProfileService {
               )
               .eq('user_id', userId)
               .eq('is_archived', false)
+              .or('is_hidden.is.null,is_hidden.eq.false')
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
           : Promise.resolve({ data: null, count: 0 }),
@@ -1069,6 +1092,8 @@ export class UserProfileService {
                 { count: 'exact' },
               )
               .eq('user_id', userId)
+              .or('is_hidden.is.null,is_hidden.eq.false')
+              .or('is_deleted.is.null,is_deleted.eq.false')
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
           : Promise.resolve({ data: null, count: 0 }),
@@ -1082,6 +1107,8 @@ export class UserProfileService {
               .eq('creator_id', userId)
               .eq('is_active', true)
               .gt('expires_at', now)
+              .or('is_hidden.is.null,is_hidden.eq.false')
+              .is('deleted_at', null)
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
           : Promise.resolve({ data: null, count: 0 }),

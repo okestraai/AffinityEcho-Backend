@@ -519,6 +519,7 @@ import { MentionService } from '../../mentions/mention.service';
 import { OkestraService } from '../../okestra/services/okestra.service';
 import { MSG } from '../../../common/constants/messages';
 import { ContentSafetyService } from '../../content-safety/content-safety.service';
+import { RedisService } from '../../../common/services/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -538,6 +539,7 @@ export class CommentService {
     private mentionService: MentionService,
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
+    private redis: RedisService,
     @InjectQueue('moderation') private moderationQueue: Queue,
   ) {
     this.admin = supabaseAdmin(config);
@@ -1031,6 +1033,9 @@ export class CommentService {
         .invalidateCache('topic', comment.topic_id)
         .catch(() => {});
 
+      await this.redis.delPattern('feeds:*');
+      await this.redis.delPattern('topics:*');
+
       return {
         success: true,
         message: 'Comment deleted successfully',
@@ -1085,6 +1090,9 @@ export class CommentService {
         logger.error('Failed to update comment', { error: updateError });
         throw new BadRequestException('Failed to update comment');
       }
+
+      await this.redis.delPattern('feeds:*');
+      await this.redis.delPattern('topics:*');
 
       return {
         success: true,

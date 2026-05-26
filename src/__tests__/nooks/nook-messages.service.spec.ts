@@ -65,15 +65,12 @@ describe('NookMessagesService', () => {
 
     const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
 
-    service = new NookMessagesService(
-      mockConfigService,
+    service = new NookMessagesService(mockConfigService,
       mockIdentityReveal,
       mockMentionService,
       mockNotificationsService,
       mockOkestraService as any,
-      mockContentSafety as any,
-      mockModerationQueue as any,
-    );
+      mockContentSafety as any, { delPattern: jest.fn().mockResolvedValue(undefined), get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) } as any, mockModerationQueue as any);
   });
 
   describe('getMessages', () => {

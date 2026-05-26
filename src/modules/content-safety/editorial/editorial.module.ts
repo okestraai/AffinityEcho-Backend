@@ -6,6 +6,7 @@ import { EnforcementService } from './enforcement.service';
 import { EditorialProcessor } from './editorial.processor';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { NotificationsModule } from '../../notifications/notifications.module';
+import { RedisService } from '../../../common/services/redis.service';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { NotificationsModule } from '../../notifications/notifications.module';
     EnforcementService,
     EditorialProcessor,
     EmailService,
+    RedisService,
   ],
   exports: [
     EditorialService,

@@ -81,6 +81,7 @@ describe('CommentService', () => {
       mockMentionService,
       mockOkestra,
       mockContentSafety,
+      { delPattern: jest.fn().mockResolvedValue(undefined), get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) } as any,
       mockModerationQueue as any,
     );
   });

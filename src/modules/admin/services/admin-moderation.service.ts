@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { AdminModerationQueryDto } from '../dto/admin-moderation-query.dto';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import { AdminUsersService } from './admin-users.service';
+import { RedisService } from '../../../common/services/redis.service';
 import PDFDocument from 'pdfkit';
 
 // Maps API type names to their source tables, content column, author column, and hidden-column support
@@ -78,8 +79,15 @@ export class AdminModerationService {
   constructor(
     private config: ConfigService,
     private adminUsers: AdminUsersService,
+    private redis: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
+  }
+
+  private async invalidateContentCaches() {
+    await this.redis.delPattern('feeds:*');
+    await this.redis.delPattern('topics:*');
+    await this.redis.delPattern('nooks:*');
   }
 
   async listContent(query: AdminModerationQueryDto) {
@@ -393,6 +401,7 @@ export class AdminModerationService {
       ip,
     );
 
+    await this.invalidateContentCaches();
     return { success: true, data: null };
   }
 
@@ -426,6 +435,7 @@ export class AdminModerationService {
       ip,
     );
 
+    await this.invalidateContentCaches();
     return { success: true, data: null };
   }
 
@@ -472,6 +482,7 @@ export class AdminModerationService {
       {},
       ip,
     );
+    await this.invalidateContentCaches();
     return null; // 204
   }
 

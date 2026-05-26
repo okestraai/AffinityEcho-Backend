@@ -26,7 +26,7 @@ describe('ModerationReviewService', () => {
     };
 
     const config = createMockConfigService();
-    service = new ModerationReviewService(config as any, mockEmailService as any);
+    service = new ModerationReviewService(config as any, mockEmailService as any, { delPattern: jest.fn().mockResolvedValue(undefined), get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) } as any);
   });
 
   describe('getQueue', () => {

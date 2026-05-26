@@ -45,6 +45,7 @@ describe('AdminModerationService', () => {
     service = new AdminModerationService(
       createMockConfigService() as any,
       mockAdminUsers as any,
+      { delPattern: jest.fn().mockResolvedValue(undefined), get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

@@ -10,6 +10,7 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
 import { OkestraModule } from '../okestra/okestra.module';
 import { ContentSafetyModule } from '../content-safety/content-safety.module';
+import { RedisService } from '../../common/services/redis.service';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { ContentSafetyModule } from '../content-safety/content-safety.module';
     ContentSafetyModule,
   ],
   controllers: [ForumController],
-  providers: [ForumService, TopicService, CommentService],
+  providers: [ForumService, TopicService, CommentService, RedisService],
   exports: [ForumService, TopicService, CommentService],
 })
 export class ForumModule {}
