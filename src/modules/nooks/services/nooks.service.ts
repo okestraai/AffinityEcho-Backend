@@ -393,10 +393,10 @@ export class NooksService {
     // Delete nook_members
     await this.admin.from('nook_members').delete().eq('nook_id', id);
 
-    // Soft-delete the nook (use existing deleted_at column)
+    // Soft-delete the nook (use existing deleted_at column + deactivate)
     const { error } = await this.admin
       .from('nooks')
-      .update({ deleted_at: now })
+      .update({ deleted_at: now, is_active: false })
       .eq('id', id);
 
     if (error) throw new BadRequestException(error.message);
