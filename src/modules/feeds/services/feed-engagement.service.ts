@@ -211,15 +211,28 @@ export class FeedEngagementService {
       }
 
       // Enqueue AI moderation (fire-and-forget — never blocks the user)
-      this.moderationQueue.add('moderate', {
-        contentType: 'feed_comment',
-        contentId: comment.id,
-        authorId: userId,
-      }, { jobId: `feed_comment-${comment.id}` }).then(() => {
-        logger.info('Moderation queued', { contentType: 'feed_comment', contentId: comment.id });
-      }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { commentId: comment.id, error: mqErr });
-      });
+      this.moderationQueue
+        .add(
+          'moderate',
+          {
+            contentType: 'feed_comment',
+            contentId: comment.id,
+            authorId: userId,
+          },
+          { jobId: `feed_comment-${comment.id}` },
+        )
+        .then(() => {
+          logger.info('Moderation queued', {
+            contentType: 'feed_comment',
+            contentId: comment.id,
+          });
+        })
+        .catch((mqErr) => {
+          logger.warn('Failed to enqueue moderation', {
+            commentId: comment.id,
+            error: mqErr,
+          });
+        });
 
       // Increment comment count
       await this.incrementCommentCount(contentType, contentId);
@@ -441,8 +454,7 @@ export class FeedEngagementService {
         throw new NotFoundException('Comment not found');
       if (comment.user_id !== userId)
         throw new ForbiddenException('You can only edit your own comments');
-      if (comment.is_deleted)
-        throw new NotFoundException('Comment not found');
+      if (comment.is_deleted) throw new NotFoundException('Comment not found');
       if (comment.is_hidden)
         throw new ForbiddenException('This comment is under moderation review');
 
@@ -450,7 +462,9 @@ export class FeedEngagementService {
       if (!content || content.trim().length === 0)
         throw new BadRequestException('Content is required');
       if (content.length > 5000)
-        throw new BadRequestException('Content must be 5000 characters or less');
+        throw new BadRequestException(
+          'Content must be 5000 characters or less',
+        );
 
       const { data: updated, error: updateError } = await this.admin
         .from('feed_comments')
@@ -460,10 +474,12 @@ export class FeedEngagementService {
           updated_at: new Date().toISOString(),
         })
         .eq('id', commentId)
-        .select(`
+        .select(
+          `
           *,
           user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
-        `)
+        `,
+        )
         .single();
 
       if (updateError) {
@@ -479,7 +495,12 @@ export class FeedEngagementService {
         message: 'Comment updated successfully',
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       logger.error('Unexpected error editing comment', { error });
       throw new BadRequestException('Failed to update comment');
     }
@@ -499,8 +520,7 @@ export class FeedEngagementService {
         throw new NotFoundException('Comment not found');
       if (comment.user_id !== userId)
         throw new ForbiddenException('You can only delete your own comments');
-      if (comment.is_deleted)
-        throw new NotFoundException('Comment not found');
+      if (comment.is_deleted) throw new NotFoundException('Comment not found');
 
       // Recursive collect: this comment + all descendants
       const idsToDelete = await this.collectCommentDescendants(commentId);
@@ -533,14 +553,18 @@ export class FeedEngagementService {
       };
       const table = tableMap[comment.content_type];
       if (table) {
-        const countCol = comment.content_type === 'post' ? 'comments_count' : 'comments_count';
+        const countCol =
+          comment.content_type === 'post' ? 'comments_count' : 'comments_count';
         const { data: parent } = await this.admin
           .from(table)
           .select(countCol)
           .eq('id', comment.content_id)
           .single();
         if (parent) {
-          const newCount = Math.max(0, (parent[countCol] || 0) - idsToDelete.length);
+          const newCount = Math.max(
+            0,
+            (parent[countCol] || 0) - idsToDelete.length,
+          );
           await this.admin
             .from(table)
             .update({ [countCol]: newCount })
@@ -556,30 +580,64 @@ export class FeedEngagementService {
         deleted_count: idsToDelete.length,
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       logger.error('Unexpected error deleting comment', { error });
       throw new BadRequestException('Failed to delete comment');
     }
   }
 
   /**
-   * Recursively collect a comment and all its descendants via parent_comment_id
+   * Collect a comment and all its descendants in ONE query + in-memory tree walk.
+   * Replaces recursive DB calls (O(depth)) with a single query (O(1)).
    */
-  private async collectCommentDescendants(commentId: string): Promise<string[]> {
-    const ids = [commentId];
-    const { data: children } = await this.admin
+  private async collectCommentDescendants(
+    commentId: string,
+  ): Promise<string[]> {
+    // Fetch the root comment to get its content_type + content_id
+    const { data: root } = await this.admin
       .from('feed_comments')
-      .select('id')
-      .eq('parent_comment_id', commentId)
+      .select('id, content_type, content_id')
+      .eq('id', commentId)
+      .single();
+
+    if (!root) return [commentId];
+
+    // Fetch ALL non-deleted comments for this content in one query
+    const { data: allComments } = await this.admin
+      .from('feed_comments')
+      .select('id, parent_comment_id')
+      .eq('content_type', root.content_type)
+      .eq('content_id', root.content_id)
       .or('is_deleted.is.null,is_deleted.eq.false');
 
-    if (children && children.length > 0) {
-      for (const child of children) {
-        const childIds = await this.collectCommentDescendants(child.id);
-        ids.push(...childIds);
+    if (!allComments || allComments.length === 0) return [commentId];
+
+    // Build parent→children map in memory
+    const childrenMap = new Map<string, string[]>();
+    for (const c of allComments) {
+      if (c.parent_comment_id) {
+        const siblings = childrenMap.get(c.parent_comment_id) || [];
+        siblings.push(c.id);
+        childrenMap.set(c.parent_comment_id, siblings);
       }
     }
-    return ids;
+
+    // BFS from commentId to collect all descendants
+    const result: string[] = [];
+    const queue = [commentId];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      result.push(current);
+      const kids = childrenMap.get(current);
+      if (kids) queue.push(...kids);
+    }
+
+    return result;
   }
 
   // ============ SHARES ============
@@ -1238,7 +1296,10 @@ export class FeedEngagementService {
       );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
-      const actorName = await this.identityReveal.resolveNotificationName(userId, contentOwnerId);
+      const actorName = await this.identityReveal.resolveNotificationName(
+        userId,
+        contentOwnerId,
+      );
 
       await this.notificationsService.createNotification({
         user_id: contentOwnerId,
@@ -1270,7 +1331,10 @@ export class FeedEngagementService {
       );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
-      const actorName = await this.identityReveal.resolveNotificationName(userId, contentOwnerId);
+      const actorName = await this.identityReveal.resolveNotificationName(
+        userId,
+        contentOwnerId,
+      );
 
       await this.notificationsService.createNotification({
         user_id: contentOwnerId,
@@ -1392,7 +1456,10 @@ export class FeedEngagementService {
       );
       if (!contentOwnerId || contentOwnerId === userId) return;
 
-      const actorName = await this.identityReveal.resolveNotificationName(userId, contentOwnerId);
+      const actorName = await this.identityReveal.resolveNotificationName(
+        userId,
+        contentOwnerId,
+      );
 
       await this.notificationsService.createNotification({
         user_id: contentOwnerId,

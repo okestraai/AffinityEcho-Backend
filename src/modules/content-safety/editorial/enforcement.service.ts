@@ -21,16 +21,12 @@ export class EnforcementService {
   private readonly autoHideConfidence: number;
 
   constructor(private config: ConfigService) {
-    this.mode =
-      this.config.get<string>('MODERATION_MODE') || 'shadow';
+    this.mode = this.config.get<string>('MODERATION_MODE') || 'shadow';
     this.autoRemoveConfidence = parseFloat(
-      this.config.get<string>(
-        'MODERATION_AUTO_REMOVE_CONFIDENCE',
-      ) || '0.90',
+      this.config.get<string>('MODERATION_AUTO_REMOVE_CONFIDENCE') || '0.90',
     );
     this.autoHideConfidence = parseFloat(
-      this.config.get<string>('MODERATION_AUTO_HIDE_CONFIDENCE') ||
-        '0.75',
+      this.config.get<string>('MODERATION_AUTO_HIDE_CONFIDENCE') || '0.75',
     );
   }
 
@@ -104,9 +100,7 @@ export class EnforcementService {
       moderationStatus: 'allowed',
       needsReview: true,
       reviewPriority:
-        verdict.confidence < this.autoHideConfidence
-          ? 'normal'
-          : 'low',
+        verdict.confidence < this.autoHideConfidence ? 'normal' : 'low',
       reviewReason:
         verdict.confidence < this.autoHideConfidence
           ? 'low_confidence_allow'
@@ -141,25 +135,19 @@ export class EnforcementService {
     }
 
     // High-confidence hide
-    const isHighSeverity = ['high', 'critical'].includes(
-      verdict.severity,
-    );
+    const isHighSeverity = ['high', 'critical'].includes(verdict.severity);
 
     return {
       action: 'hide',
       moderationStatus: 'hidden',
       needsReview: true,
       reviewPriority: isHighSeverity ? 'high' : 'normal',
-      reviewReason: isHighSeverity
-        ? 'high_severity_hide'
-        : 'auto_hide',
+      reviewReason: isHighSeverity ? 'high_severity_hide' : 'auto_hide',
       sendSafetyDm: false,
     };
   }
 
-  private handleRemove(
-    verdict: EditorialVerdict,
-  ): EnforcementResult {
+  private handleRemove(verdict: EditorialVerdict): EnforcementResult {
     // allow_only or hide_enabled mode — don't enforce removes
     if (this.mode === 'allow_only' || this.mode === 'hide_enabled') {
       return {
@@ -180,9 +168,7 @@ export class EnforcementService {
     if (['low', 'medium'].includes(verdict.severity)) {
       return {
         action:
-          verdict.confidence >= this.autoHideConfidence
-            ? 'hide'
-            : 'allow',
+          verdict.confidence >= this.autoHideConfidence ? 'hide' : 'allow',
         moderationStatus:
           verdict.confidence >= this.autoHideConfidence
             ? 'hidden'
@@ -231,10 +217,7 @@ export class EnforcementService {
         INSTANT_REMOVE_CATEGORIES.has(c),
       );
 
-      if (
-        verdict.confidence >= 0.85 &&
-        hasInstantCategory
-      ) {
+      if (verdict.confidence >= 0.85 && hasInstantCategory) {
         logger.warn('Instant remove — critical severity', {
           categories: verdict.categories,
           confidence: verdict.confidence,

@@ -103,35 +103,39 @@ export class AdminReportsService {
     const { data, error, count } = await q;
     if (error) throw new BadRequestException(error.message);
 
-    // Summary counts across ALL reports (ignoring current filters)
-    const { data: summaryData } = await this.admin
-      .from('harassment_reports')
-      .select('status, immediate_risk');
+    // Summary counts via head-count queries instead of full table scan
+    const [submitted, underReview, resolved, declined, critical] =
+      await Promise.all([
+        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'submitted'),
+        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'under_review'),
+        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'resolved'),
+        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'declined'),
+        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('immediate_risk', true),
+      ]);
 
     const summary = {
-      submitted: 0,
-      under_review: 0,
-      resolved: 0,
-      declined: 0,
-      critical: 0,
+      submitted: submitted.count ?? 0,
+      under_review: underReview.count ?? 0,
+      resolved: resolved.count ?? 0,
+      declined: declined.count ?? 0,
+      critical: critical.count ?? 0,
       high: 0,
       medium: 0,
       low: 0,
     };
 
-    for (const r of summaryData ?? []) {
-      const s = r.status as keyof typeof summary;
-      if (s in summary) summary[s]++;
+    // Priority calculation for non-critical
+    const { data: summaryData } = await this.admin
+      .from('harassment_reports')
+      .select('status, immediate_risk')
+      .eq('immediate_risk', false)
+      .in('status', ['submitted', 'under_review']);
 
-      // Calculate priority
-      if (r.immediate_risk) {
-        summary.critical++;
-      } else if (r.status === 'submitted') {
+    for (const r of summaryData ?? []) {
+      if (r.status === 'submitted') {
         summary.high++;
       } else if (r.status === 'under_review') {
         summary.medium++;
-      } else if (r.status === 'resolved' || r.status === 'declined') {
-        summary.low++;
       }
     }
 

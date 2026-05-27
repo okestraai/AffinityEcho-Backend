@@ -607,9 +607,10 @@ export class QueryChain {
     const conflictTarget = conflictCols
       .map((c) => escapeIdentifier(c))
       .join(', ');
-    const conflictAction = this.upsertOpts.ignoreDuplicates || !updateSet
-      ? 'ON CONFLICT DO NOTHING'
-      : `ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateSet}`;
+    const conflictAction =
+      this.upsertOpts.ignoreDuplicates || !updateSet
+        ? 'ON CONFLICT DO NOTHING'
+        : `ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateSet}`;
 
     const sql = `INSERT INTO ${escapeIdentifier(this.table)} (${colNames}) VALUES ${valueSets.join(', ')} ${conflictAction} RETURNING *`;
     const result = await this.pool.query(sql);

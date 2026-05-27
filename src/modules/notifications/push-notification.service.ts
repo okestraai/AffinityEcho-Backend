@@ -186,8 +186,7 @@ export class PushNotificationService {
     if (data) {
       for (const [k, v] of Object.entries(data)) {
         if (v !== null && v !== undefined) {
-          stringData[k] =
-            typeof v === 'object' ? JSON.stringify(v) : String(v);
+          stringData[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
         }
       }
     }

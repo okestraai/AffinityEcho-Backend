@@ -143,9 +143,7 @@ export class AuthService {
     // Validate inputs
     if (!this.validateEmail(dto.email)) {
       logger.warn('Signup failed: Invalid email format', {});
-      throw new BadRequestException(
-        MSG.AUTH.INVALID_EMAIL,
-      );
+      throw new BadRequestException(MSG.AUTH.INVALID_EMAIL);
     }
 
     const usernameValidation = this.validateUsername(dto.username);
@@ -285,9 +283,7 @@ export class AuthService {
 
     // Validate email format
     if (!this.validateEmail(dto.email)) {
-      throw new BadRequestException(
-        MSG.AUTH.INVALID_EMAIL,
-      );
+      throw new BadRequestException(MSG.AUTH.INVALID_EMAIL);
     }
 
     const passwordValidation = this.validatePassword(dto.password);
@@ -470,7 +466,10 @@ export class AuthService {
   // APPLE SIGN-IN VERIFICATION
   async verifyAppleToken(
     idToken: string,
-    appleUser?: { email?: string; fullName?: { givenName?: string; familyName?: string } },
+    appleUser?: {
+      email?: string;
+      fullName?: { givenName?: string; familyName?: string };
+    },
   ) {
     logger.info('Verifying Apple Sign-In token');
 
@@ -559,10 +558,14 @@ export class AuthService {
         let firstNameEncrypted: string | null = null;
         let lastNameEncrypted: string | null = null;
         if (appleUser?.fullName?.givenName) {
-          firstNameEncrypted = this.encryption.encrypt(appleUser.fullName.givenName);
+          firstNameEncrypted = this.encryption.encrypt(
+            appleUser.fullName.givenName,
+          );
         }
         if (appleUser?.fullName?.familyName) {
-          lastNameEncrypted = this.encryption.encrypt(appleUser.fullName.familyName);
+          lastNameEncrypted = this.encryption.encrypt(
+            appleUser.fullName.familyName,
+          );
         }
 
         await this.createProfile(
@@ -593,7 +596,12 @@ export class AuthService {
             .eq('id', userId);
         }
 
-        existingUser = { id: userId, email, username, has_completed_onboarding: false };
+        existingUser = {
+          id: userId,
+          email,
+          username,
+          has_completed_onboarding: false,
+        };
       }
 
       // 6. Update last_active_at on Apple login
@@ -603,7 +611,10 @@ export class AuthService {
         .eq('id', existingUser.id);
 
       // 7. Generate tokens
-      const tokens = this.generateTokens(existingUser.id, existingUser.email || email);
+      const tokens = this.generateTokens(
+        existingUser.id,
+        existingUser.email || email,
+      );
 
       logger.info('Apple Sign-In successful', { userId: existingUser.id });
 
@@ -614,7 +625,8 @@ export class AuthService {
           id: existingUser.id,
           username: existingUser.username,
           email: existingUser.email || email,
-          has_completed_onboarding: existingUser.has_completed_onboarding || false,
+          has_completed_onboarding:
+            existingUser.has_completed_onboarding || false,
         },
       };
     } catch (error) {
@@ -1006,9 +1018,7 @@ export class AuthService {
 
     // Validate email format
     if (!this.validateEmail(dto.email)) {
-      throw new BadRequestException(
-        MSG.AUTH.INVALID_EMAIL,
-      );
+      throw new BadRequestException(MSG.AUTH.INVALID_EMAIL);
     }
 
     try {
@@ -1302,7 +1312,10 @@ export class AuthService {
       }
 
       logger.info('Profile updated successfully', { userId });
-      return { message: MSG.USER.PROFILE_UPDATED, profile: this.cleanUserData(data) };
+      return {
+        message: MSG.USER.PROFILE_UPDATED,
+        profile: this.cleanUserData(data),
+      };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       logger.error('Unexpected error during profile update', { userId, error });
@@ -1408,8 +1421,12 @@ export class AuthService {
       id: p.id,
       username: p.username,
       email: p.email,
-      first_name: p.first_name_encrypted ? this.encryption.decrypt(p.first_name_encrypted) : null,
-      last_name: p.last_name_encrypted ? this.encryption.decrypt(p.last_name_encrypted) : null,
+      first_name: p.first_name_encrypted
+        ? (() => { try { return this.encryption.decrypt(p.first_name_encrypted); } catch { return null; } })()
+        : null,
+      last_name: p.last_name_encrypted
+        ? (() => { try { return this.encryption.decrypt(p.last_name_encrypted); } catch { return null; } })()
+        : null,
       avatar: p.avatar ?? null,
       bio: p.bio ?? null,
       job_title: p.job_title ?? null,

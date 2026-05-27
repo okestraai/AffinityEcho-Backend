@@ -102,7 +102,10 @@ export class ReferralCommentsService {
       // Create notification for referral post author (if not commenting on own post)
       if (referralPost && referralPost.user_id !== userId) {
         try {
-          const actorName = await this.identityReveal.resolveNotificationName(userId, referralPost.user_id);
+          const actorName = await this.identityReveal.resolveNotificationName(
+            userId,
+            referralPost.user_id,
+          );
 
           await this.notificationsService.createNotification({
             user_id: referralPost.user_id,
@@ -122,15 +125,28 @@ export class ReferralCommentsService {
       }
 
       // Enqueue AI moderation (fire-and-forget — never blocks the user)
-      this.moderationQueue.add('moderate', {
-        contentType: 'referral_comment',
-        contentId: data.id,
-        authorId: userId,
-      }, { jobId: `referral_comment-${data.id}` }).then(() => {
-        logger.info('Moderation queued', { contentType: 'referral_comment', contentId: data.id });
-      }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { commentId: data.id, error: mqErr });
-      });
+      this.moderationQueue
+        .add(
+          'moderate',
+          {
+            contentType: 'referral_comment',
+            contentId: data.id,
+            authorId: userId,
+          },
+          { jobId: `referral_comment-${data.id}` },
+        )
+        .then(() => {
+          logger.info('Moderation queued', {
+            contentType: 'referral_comment',
+            contentId: data.id,
+          });
+        })
+        .catch((mqErr) => {
+          logger.warn('Failed to enqueue moderation', {
+            commentId: data.id,
+            error: mqErr,
+          });
+        });
 
       return {
         success: true,

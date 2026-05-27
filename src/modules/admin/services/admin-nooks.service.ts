@@ -54,46 +54,50 @@ export class AdminNooksService {
     const { data, error, count } = await q;
     if (error) throw new BadRequestException(error.message);
 
-    // Enrich with message_count and messages_this_week
-    const nooks = await Promise.all(
-      (data ?? []).map(async (n: any) => {
-        const [msgCount, msgWeek] = await Promise.all([
-          this.admin
-            .from('nook_messages')
-            .select('id', { count: 'exact' })
-            .eq('nook_id', n.id),
-          this.admin
-            .from('nook_messages')
-            .select('id', { count: 'exact' })
-            .eq('nook_id', n.id)
-            .gte('created_at', weekAgo),
-        ]);
-        return {
-          ...n,
-          message_count: msgCount.count ?? 0,
-          messages_this_week: msgWeek.count ?? 0,
-        };
-      }),
-    );
+    // Batch enrich with message stats — 2 queries instead of 2×N
+    const nookIds = (data ?? []).map((n: any) => n.id);
+    let msgStatsMap = new Map<string, { total: number; thisWeek: number }>();
+    if (nookIds.length > 0) {
+      const [allMsgs, weekMsgs] = await Promise.all([
+        this.admin
+          .from('nook_messages')
+          .select('nook_id')
+          .in('nook_id', nookIds),
+        this.admin
+          .from('nook_messages')
+          .select('nook_id')
+          .in('nook_id', nookIds)
+          .gte('created_at', weekAgo),
+      ]);
+      for (const m of allMsgs.data ?? []) {
+        const s = msgStatsMap.get(m.nook_id) || { total: 0, thisWeek: 0 };
+        s.total++;
+        msgStatsMap.set(m.nook_id, s);
+      }
+      for (const m of weekMsgs.data ?? []) {
+        const s = msgStatsMap.get(m.nook_id) || { total: 0, thisWeek: 0 };
+        s.thisWeek++;
+        msgStatsMap.set(m.nook_id, s);
+      }
+    }
+    const nooks = (data ?? []).map((n: any) => {
+      const stats = msgStatsMap.get(n.id) || { total: 0, thisWeek: 0 };
+      return { ...n, message_count: stats.total, messages_this_week: stats.thisWeek };
+    });
 
-    // Summary
-    const { data: allNooks } = await this.admin
-      .from('nooks')
-      .select('scope, is_locked')
-      .is('deleted_at', null);
+    // Summary — 4 head-count queries instead of full table scan
+    const [publicCount, companyCount, lockedCount] = await Promise.all([
+      this.admin.from('nooks').select('id', { count: 'exact', head: true }).eq('scope', 'public').is('deleted_at', null),
+      this.admin.from('nooks').select('id', { count: 'exact', head: true }).eq('scope', 'company').is('deleted_at', null),
+      this.admin.from('nooks').select('id', { count: 'exact', head: true }).eq('is_locked', true).is('deleted_at', null),
+    ]);
     const summary = {
       total: count ?? 0,
-      public: 0,
-      private: 0,
-      company: 0,
-      locked: 0,
+      public: publicCount.count ?? 0,
+      private: Math.max(0, (count ?? 0) - (publicCount.count ?? 0) - (companyCount.count ?? 0)),
+      company: companyCount.count ?? 0,
+      locked: lockedCount.count ?? 0,
     };
-    for (const n of allNooks ?? []) {
-      if (n.scope === 'public') summary.public++;
-      else if (n.scope === 'private') summary.private++;
-      else if (n.scope === 'company') summary.company++;
-      if (n.is_locked) summary.locked++;
-    }
 
     return {
       success: true,

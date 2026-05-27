@@ -99,7 +99,9 @@ export class ReferralBookmarksService {
       let filtered = data || [];
       if (hiddenIds.length > 0) {
         const hiddenSet = new Set(hiddenIds);
-        filtered = filtered.filter((b: any) => !hiddenSet.has(b.referral_post_id));
+        filtered = filtered.filter(
+          (b: any) => !hiddenSet.has(b.referral_post_id),
+        );
       }
 
       if (blockedIds.length > 0 && filtered.length > 0) {
@@ -112,9 +114,13 @@ export class ReferralBookmarksService {
         if (posts) {
           const blockedSet = new Set(blockedIds);
           const blockedPostIds = new Set(
-            posts.filter((p: any) => blockedSet.has(p.user_id)).map((p: any) => p.id),
+            posts
+              .filter((p: any) => blockedSet.has(p.user_id))
+              .map((p: any) => p.id),
           );
-          filtered = filtered.filter((b: any) => !blockedPostIds.has(b.referral_post_id));
+          filtered = filtered.filter(
+            (b: any) => !blockedPostIds.has(b.referral_post_id),
+          );
         }
       }
 

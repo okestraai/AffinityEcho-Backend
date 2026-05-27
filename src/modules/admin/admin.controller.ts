@@ -2226,7 +2226,11 @@ export class AdminController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'priority', required: false })
   @ApiQuery({ name: 'contentType', required: false })
-  @ApiQuery({ name: 'currentState', required: false, enum: ['hidden', 'visible'] })
+  @ApiQuery({
+    name: 'currentState',
+    required: false,
+    enum: ['hidden', 'visible'],
+  })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async getModerationQueue(
@@ -2250,7 +2254,9 @@ export class AdminController {
   @Patch('moderation/review/:id/resolve')
   @UseGuards(PermissionGuard)
   @RequirePermission('ai_review:resolve')
-  @ApiOperation({ summary: 'Resolve a review queue item (reverse/confirm/hide)' })
+  @ApiOperation({
+    summary: 'Resolve a review queue item (reverse/confirm/hide)',
+  })
   @ApiParam({ name: 'id', description: 'Review queue item ID' })
   @ApiBody({
     schema: {
@@ -2258,7 +2264,8 @@ export class AdminController {
         action: {
           type: 'string',
           enum: ['reverse', 'confirm', 'hide'],
-          description: 'reverse = unhide AI-hidden content, confirm = agree content is safe (escalated items), hide = admin hides escalated content',
+          description:
+            'reverse = unhide AI-hidden content, confirm = agree content is safe (escalated items), hide = admin hides escalated content',
         },
         reason: { type: 'string' },
       },
@@ -2271,12 +2278,7 @@ export class AdminController {
     @Body('action') action: 'reverse' | 'confirm' | 'hide',
     @Body('reason') reason?: string,
   ) {
-    return this.moderationReview.resolveItem(
-      id,
-      req.user.sub,
-      action,
-      reason,
-    );
+    return this.moderationReview.resolveItem(id, req.user.sub, action, reason);
   }
 
   @Get('moderation/review/stats')
@@ -2302,7 +2304,11 @@ export class AdminController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'contentType', required: false })
-  @ApiQuery({ name: 'status', required: false, enum: ['allowed', 'hidden', 'removed', 'pending_review'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['allowed', 'hidden', 'removed', 'pending_review'],
+  })
   async getModerationAudit(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

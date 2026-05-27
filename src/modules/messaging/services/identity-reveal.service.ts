@@ -312,7 +312,9 @@ export class IdentityRevealService {
           ? this.identityReveal.decryptRealName(
               responder?.first_name_encrypted,
               responder?.last_name_encrypted,
-            ) || responder?.username || 'Someone'
+            ) ||
+            responder?.username ||
+            'Someone'
           : responder?.username || 'Someone';
 
         await this.notificationsService.createNotification({

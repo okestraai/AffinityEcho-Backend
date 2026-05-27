@@ -288,7 +288,9 @@ export class AdminHealthService {
       const smtpUser = this.config.get<string>('SMTP_USER');
       const smtpPass = this.config.get<string>('SMTP_PASS');
       if (!smtpHost || !smtpUser || !smtpPass)
-        throw new Error('SMTP credentials not configured (SMTP_HOST, SMTP_USER, or SMTP_PASS missing)');
+        throw new Error(
+          'SMTP credentials not configured (SMTP_HOST, SMTP_USER, or SMTP_PASS missing)',
+        );
       return {
         status: 'up',
         latency_ms: Date.now() - start,

@@ -39,10 +39,15 @@ export class NooksService {
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) {
       // Apply hidden content filter post-cache so hides take effect immediately
-      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'nook');
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(
+        userId,
+        'nook',
+      );
       if (hiddenIds.length > 0) {
         const hiddenSet = new Set(hiddenIds);
-        cached.data.nooks = cached.data.nooks.filter((n: any) => !hiddenSet.has(n.id));
+        cached.data.nooks = cached.data.nooks.filter(
+          (n: any) => !hiddenSet.has(n.id),
+        );
       }
       return cached;
     }
@@ -126,10 +131,15 @@ export class NooksService {
     await this.redis.set(cacheKey, result, 120000);
 
     // Apply hidden content filter post-cache so hides take effect immediately
-    const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'nook');
+    const hiddenIds = await this.contentSafety.getHiddenContentIds(
+      userId,
+      'nook',
+    );
     if (hiddenIds.length > 0) {
       const hiddenSet = new Set(hiddenIds);
-      result.data.nooks = result.data.nooks.filter((n: any) => !hiddenSet.has(n.id));
+      result.data.nooks = result.data.nooks.filter(
+        (n: any) => !hiddenSet.has(n.id),
+      );
     }
 
     return result;
@@ -195,15 +205,28 @@ export class NooksService {
     ]);
 
     // Enqueue AI moderation (fire-and-forget — never blocks the user)
-    this.moderationQueue.add('moderate', {
-      contentType: 'nook',
-      contentId: nook.id,
-      authorId: userId,
-    }, { jobId: `nook-${nook.id}` }).then(() => {
-      logger.info('Moderation queued', { contentType: 'nook', contentId: nook.id });
-    }).catch(mqErr => {
-      logger.warn('Failed to enqueue moderation', { nookId: nook.id, error: mqErr });
-    });
+    this.moderationQueue
+      .add(
+        'moderate',
+        {
+          contentType: 'nook',
+          contentId: nook.id,
+          authorId: userId,
+        },
+        { jobId: `nook-${nook.id}` },
+      )
+      .then(() => {
+        logger.info('Moderation queued', {
+          contentType: 'nook',
+          contentId: nook.id,
+        });
+      })
+      .catch((mqErr) => {
+        logger.warn('Failed to enqueue moderation', {
+          nookId: nook.id,
+          error: mqErr,
+        });
+      });
 
     await this.redis.delPattern('nooks:*');
 
@@ -284,16 +307,13 @@ export class NooksService {
         .eq('id', id)
         .single();
 
-      if (fetchError || !nook)
-        throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+      if (fetchError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
       if (nook.creator_id !== userId)
         throw new ForbiddenException('You can only edit your own nooks');
-      if (nook.deleted_at)
-        throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+      if (nook.deleted_at) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
       if (nook.is_hidden)
         throw new ForbiddenException('This nook is under moderation review');
-      if (nook.is_locked)
-        throw new ForbiddenException('This nook is locked');
+      if (nook.is_locked) throw new ForbiddenException('This nook is locked');
 
       const updateData: any = {
         updated_at: new Date().toISOString(),
@@ -316,9 +336,7 @@ export class NooksService {
       }
       if (dto.urgency !== undefined) {
         if (!['high', 'medium', 'low'].includes(dto.urgency))
-          throw new BadRequestException(
-            'Urgency must be high, medium, or low',
-          );
+          throw new BadRequestException('Urgency must be high, medium, or low');
         updateData.urgency = dto.urgency;
       }
       if (dto.scope !== undefined) {
@@ -393,10 +411,10 @@ export class NooksService {
     // Delete nook_members
     await this.admin.from('nook_members').delete().eq('nook_id', id);
 
-    // Soft-delete the nook (use existing deleted_at column + deactivate)
+    // Soft-delete the nook (use existing deleted_at column)
     const { error } = await this.admin
       .from('nooks')
-      .update({ deleted_at: now, is_active: false })
+      .update({ deleted_at: now })
       .eq('id', id);
 
     if (error) throw new BadRequestException(error.message);
@@ -521,9 +539,8 @@ export class NooksService {
 
     // Distinct users currently in active nooks
     const inANookNow = new Set(
-      inANookNowResult?.data?.map(
-        (row: { user_id: string }) => row.user_id,
-      ) || [],
+      inANookNowResult?.data?.map((row: { user_id: string }) => row.user_id) ||
+        [],
     ).size;
 
     // All time interactions = messages + reactions + member joins

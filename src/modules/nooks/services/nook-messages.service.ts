@@ -133,15 +133,16 @@ export class NookMessagesService {
     }
 
     // Collect all unique OTHER user IDs from the full tree
-    const otherUserIds: string[] = [];
+    const otherUserIdSet = new Set<string>();
     const collectUserIds = (msgs: any[]) => {
       for (const msg of msgs) {
         if (msg.user_id && msg.user_id !== userId)
-          otherUserIds.push(msg.user_id);
+          otherUserIdSet.add(msg.user_id);
         if (msg.replies?.length) collectUserIds(msg.replies);
       }
     };
     collectUserIds(rootMessages);
+    const otherUserIds = Array.from(otherUserIdSet);
 
     // Get revealed user IDs in a single query
     const revealedIds = await this.identityReveal.getRevealedUserIds(
@@ -293,7 +294,7 @@ export class NookMessagesService {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const { count: recentMessages } = await this.admin
       .from('nook_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('nook_id', nookId)
       .gte('created_at', oneHourAgo.toISOString());
 
@@ -335,7 +336,10 @@ export class NookMessagesService {
           .single();
 
         if (parentMsg && parentMsg.user_id !== userId) {
-          const actorName = await this.identityReveal.resolveNotificationName(userId, parentMsg.user_id);
+          const actorName = await this.identityReveal.resolveNotificationName(
+            userId,
+            parentMsg.user_id,
+          );
 
           await this.notificationsService.createNotification({
             user_id: parentMsg.user_id,
@@ -358,15 +362,28 @@ export class NookMessagesService {
     this.okestraService.invalidateCache('nook', nookId).catch(() => {});
 
     // Enqueue AI moderation (fire-and-forget — never blocks the user)
-    this.moderationQueue.add('moderate', {
-      contentType: 'nook_message',
-      contentId: message.id,
-      authorId: userId,
-    }, { jobId: `nook_message-${message.id}` }).then(() => {
-      logger.info('Moderation queued', { contentType: 'nook_message', contentId: message.id });
-    }).catch(mqErr => {
-      logger.warn('Failed to enqueue moderation', { messageId: message.id, error: mqErr });
-    });
+    this.moderationQueue
+      .add(
+        'moderate',
+        {
+          contentType: 'nook_message',
+          contentId: message.id,
+          authorId: userId,
+        },
+        { jobId: `nook_message-${message.id}` },
+      )
+      .then(() => {
+        logger.info('Moderation queued', {
+          contentType: 'nook_message',
+          contentId: message.id,
+        });
+      })
+      .catch((mqErr) => {
+        logger.warn('Failed to enqueue moderation', {
+          messageId: message.id,
+          error: mqErr,
+        });
+      });
 
     return {
       success: true,
@@ -502,7 +519,11 @@ export class NookMessagesService {
 
     const { data: updated, error: updateError } = await this.admin
       .from('nook_messages')
-      .update({ content, is_edited: true, updated_at: new Date().toISOString() })
+      .update({
+        content,
+        is_edited: true,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', messageId)
       .select('id, content, is_edited, updated_at')
       .single();
@@ -552,7 +573,7 @@ export class NookMessagesService {
 
     const { count: recentMessages } = await this.admin
       .from('nook_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('nook_id', nookId)
       .gte('created_at', oneHourAgo.toISOString());
 

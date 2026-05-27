@@ -148,22 +148,24 @@ export class AdminModerationService {
         sourceData.map((item: any) => item.hidden_by).filter((id: any) => id),
       );
 
-      // Batch fetch moderation records (Supabase has limit, so we chunk if needed)
+      // Batch fetch moderation records — parallelize chunks
       const chunkSize = 1000;
-      const moderationData: any[] = [];
-
+      const moderationChunks = [];
       for (let i = 0; i < contentIds.length; i += chunkSize) {
-        const chunk = contentIds.slice(i, i + chunkSize);
-        const { data } = await this.admin
-          .from('content_moderation')
-          .select(
-            'id, content_id, moderation_status, moderation_reason, reports_count, moderated_by, moderated_at',
-          )
-          .eq('content_type', type)
-          .in('content_id', chunk);
-
-        if (data) moderationData.push(...data);
+        moderationChunks.push(contentIds.slice(i, i + chunkSize));
       }
+      const moderationResults = await Promise.all(
+        moderationChunks.map((chunk) =>
+          this.admin
+            .from('content_moderation')
+            .select(
+              'id, content_id, moderation_status, moderation_reason, reports_count, moderated_by, moderated_at',
+            )
+            .eq('content_type', type)
+            .in('content_id', chunk),
+        ),
+      );
+      const moderationData = moderationResults.flatMap((r) => r.data ?? []);
 
       // Create a map for quick lookup
       const moderationMap = new Map();
@@ -172,21 +174,22 @@ export class AdminModerationService {
         if (cm.moderated_by) moderatorIds.add(cm.moderated_by);
       });
 
-      // Batch fetch all users (authors + moderators) in chunks
+      // Batch fetch all users — parallelize chunks
       const allUserIds = Array.from(new Set([...userIds, ...moderatorIds]));
-      const usersData: any[] = [];
-
+      const userChunks = [];
       for (let i = 0; i < allUserIds.length; i += chunkSize) {
         const chunk = allUserIds.slice(i, i + chunkSize);
-        if (chunk.length > 0) {
-          const { data } = await this.admin
+        if (chunk.length > 0) userChunks.push(chunk);
+      }
+      const userResults = await Promise.all(
+        userChunks.map((chunk) =>
+          this.admin
             .from('user_profiles')
             .select('id, username, avatar, is_company_verified')
-            .in('id', chunk);
-
-          if (data) usersData.push(...data);
-        }
-      }
+            .in('id', chunk),
+        ),
+      );
+      const usersData = userResults.flatMap((r) => r.data ?? []);
 
       // Create user map for quick lookup
       const userMap = new Map();

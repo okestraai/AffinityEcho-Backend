@@ -653,7 +653,10 @@ export class CommentService {
       // Create notification for topic creator (if not commenting on own topic)
       if (topic.user_id !== userId) {
         try {
-          const actorName = await this.identityReveal.resolveNotificationName(userId, topic.user_id);
+          const actorName = await this.identityReveal.resolveNotificationName(
+            userId,
+            topic.user_id,
+          );
 
           await this.notificationsService.createNotification({
             user_id: topic.user_id,
@@ -687,7 +690,10 @@ export class CommentService {
             parentComment.user_id !== userId &&
             parentComment.user_id !== topic.user_id
           ) {
-            const actorName = await this.identityReveal.resolveNotificationName(userId, parentComment.user_id);
+            const actorName = await this.identityReveal.resolveNotificationName(
+              userId,
+              parentComment.user_id,
+            );
 
             await this.notificationsService.createNotification({
               user_id: parentComment.user_id,
@@ -728,15 +734,28 @@ export class CommentService {
       this.okestraService.invalidateCache('topic', topicId).catch(() => {});
 
       // Enqueue AI moderation (fire-and-forget — never blocks the user)
-      this.moderationQueue.add('moderate', {
-        contentType: 'forum_comment',
-        contentId: comment.id,
-        authorId: userId,
-      }, { jobId: `forum_comment-${comment.id}` }).then(() => {
-        logger.info('Moderation queued', { contentType: 'forum_comment', contentId: comment.id });
-      }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { commentId: comment.id, error: mqErr });
-      });
+      this.moderationQueue
+        .add(
+          'moderate',
+          {
+            contentType: 'forum_comment',
+            contentId: comment.id,
+            authorId: userId,
+          },
+          { jobId: `forum_comment-${comment.id}` },
+        )
+        .then(() => {
+          logger.info('Moderation queued', {
+            contentType: 'forum_comment',
+            contentId: comment.id,
+          });
+        })
+        .catch((mqErr) => {
+          logger.warn('Failed to enqueue moderation', {
+            commentId: comment.id,
+            error: mqErr,
+          });
+        });
 
       logger.info('Comment created', { commentId: comment.id });
       return comment;
@@ -932,7 +951,10 @@ export class CommentService {
     // Create notification for comment author (if not reacting to own comment)
     if (commentCheck.user_id !== userId) {
       try {
-        const actorName = await this.identityReveal.resolveNotificationName(userId, commentCheck.user_id);
+        const actorName = await this.identityReveal.resolveNotificationName(
+          userId,
+          commentCheck.user_id,
+        );
 
         await this.notificationsService.createNotification({
           user_id: commentCheck.user_id,
@@ -990,8 +1012,7 @@ export class CommentService {
         throw new NotFoundException('Comment not found');
       if (comment.user_id !== userId)
         throw new ForbiddenException('You can only delete your own comments');
-      if (comment.is_deleted)
-        throw new NotFoundException('Comment not found');
+      if (comment.is_deleted) throw new NotFoundException('Comment not found');
 
       // Recursive collect descendants
       const idsToDelete = await this.collectForumCommentDescendants(commentId);
@@ -1021,7 +1042,12 @@ export class CommentService {
         if (topic) {
           await this.admin
             .from('forum_topics')
-            .update({ comments_count: Math.max(0, (topic.comments_count || 0) - idsToDelete.length) })
+            .update({
+              comments_count: Math.max(
+                0,
+                (topic.comments_count || 0) - idsToDelete.length,
+              ),
+            })
             .eq('id', comment.topic_id);
         }
       } catch (e) {
@@ -1042,7 +1068,12 @@ export class CommentService {
         deleted_count: idsToDelete.length,
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       logger.error('Unexpected error deleting forum comment', { error });
       throw new BadRequestException('Failed to delete comment');
     }
@@ -1062,15 +1093,16 @@ export class CommentService {
         throw new NotFoundException('Comment not found');
       if (comment.user_id !== userId)
         throw new ForbiddenException('You can only edit your own comments');
-      if (comment.is_deleted)
-        throw new NotFoundException('Comment not found');
+      if (comment.is_deleted) throw new NotFoundException('Comment not found');
       if (comment.is_hidden)
         throw new ForbiddenException('This comment is under moderation review');
 
       if (!content || content.trim().length === 0)
         throw new BadRequestException('Content is required');
       if (content.length > 5000)
-        throw new BadRequestException('Content must be 5000 characters or less');
+        throw new BadRequestException(
+          'Content must be 5000 characters or less',
+        );
 
       const { data: updated, error: updateError } = await this.admin
         .from('forum_comments')
@@ -1080,10 +1112,12 @@ export class CommentService {
           updated_at: new Date().toISOString(),
         })
         .eq('id', commentId)
-        .select(`
+        .select(
+          `
           *,
           user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
-        `)
+        `,
+        )
         .single();
 
       if (updateError) {
@@ -1100,27 +1134,59 @@ export class CommentService {
         message: 'Comment updated successfully',
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       logger.error('Unexpected error updating forum comment', { error });
       throw new BadRequestException('Failed to update comment');
     }
   }
 
-  private async collectForumCommentDescendants(commentId: string): Promise<string[]> {
-    const ids = [commentId];
-    const { data: children } = await this.admin
+  /**
+   * Collect a comment and all its descendants in ONE query + in-memory BFS.
+   * Replaces recursive DB calls (O(depth)) with a single query (O(1)).
+   */
+  private async collectForumCommentDescendants(
+    commentId: string,
+  ): Promise<string[]> {
+    const { data: root } = await this.admin
       .from('forum_comments')
-      .select('id')
-      .eq('parent_comment_id', commentId)
+      .select('id, topic_id')
+      .eq('id', commentId)
+      .single();
+
+    if (!root) return [commentId];
+
+    const { data: allComments } = await this.admin
+      .from('forum_comments')
+      .select('id, parent_comment_id')
+      .eq('topic_id', root.topic_id)
       .or('is_deleted.is.null,is_deleted.eq.false');
 
-    if (children && children.length > 0) {
-      for (const child of children) {
-        const childIds = await this.collectForumCommentDescendants(child.id);
-        ids.push(...childIds);
+    if (!allComments || allComments.length === 0) return [commentId];
+
+    const childrenMap = new Map<string, string[]>();
+    for (const c of allComments) {
+      if (c.parent_comment_id) {
+        const siblings = childrenMap.get(c.parent_comment_id) || [];
+        siblings.push(c.id);
+        childrenMap.set(c.parent_comment_id, siblings);
       }
     }
-    return ids;
+
+    const result: string[] = [];
+    const queue = [commentId];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      result.push(current);
+      const kids = childrenMap.get(current);
+      if (kids) queue.push(...kids);
+    }
+
+    return result;
   }
 
   private async applyIdentityReveals(
@@ -1155,9 +1221,7 @@ export class CommentService {
       const isOwnContent = authorId === userId;
       const isRevealed = revealedIds.has(authorId);
 
-      let displayName = item.is_anonymous
-        ? 'Anonymous User'
-        : profile.username;
+      let displayName = item.is_anonymous ? 'Anonymous User' : profile.username;
 
       if (isOwnContent || isRevealed) {
         if (!nameCache.has(authorId)) {

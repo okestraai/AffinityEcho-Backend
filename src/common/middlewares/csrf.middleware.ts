@@ -22,7 +22,9 @@ export class CsrfMiddleware implements NestMiddleware {
     const authHeader = req.headers['authorization'];
     const hasBearerToken = authHeader && authHeader.startsWith('Bearer ');
     const hasCsrfCookie = !!req.cookies?.['XSRF-TOKEN'];
-    const isWebClient = !hasBearerToken && (hasCsrfCookie || req.headers['origin'] || req.headers['referer']);
+    const isWebClient =
+      !hasBearerToken &&
+      (hasCsrfCookie || req.headers['origin'] || req.headers['referer']);
 
     // Only set CSRF cookie for web clients (not mobile)
     if (isWebClient && !hasCsrfCookie) {

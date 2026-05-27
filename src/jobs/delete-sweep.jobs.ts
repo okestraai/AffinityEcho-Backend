@@ -51,10 +51,7 @@ export class DeleteSweepJobs {
 
       if (feedCommentIds && feedCommentIds.length > 0) {
         const ids = feedCommentIds.map((c: any) => c.id);
-        await this.admin
-          .from('feed_reactions')
-          .delete()
-          .in('content_id', ids);
+        await this.admin.from('feed_reactions').delete().in('content_id', ids);
       }
 
       // 3. Hard-delete feed_comments
@@ -103,9 +100,15 @@ export class DeleteSweepJobs {
       if (archivedPosts && archivedPosts.length > 0) {
         // Clean up remaining engagement data first
         const postIds = archivedPosts.map((p: any) => p.id);
-        await this.admin.from('feed_reactions').delete().in('content_id', postIds);
+        await this.admin
+          .from('feed_reactions')
+          .delete()
+          .in('content_id', postIds);
         await this.admin.from('feed_likes').delete().in('content_id', postIds);
-        await this.admin.from('feed_bookmarks').delete().in('content_id', postIds);
+        await this.admin
+          .from('feed_bookmarks')
+          .delete()
+          .in('content_id', postIds);
         await this.admin.from('feed_shares').delete().in('content_id', postIds);
         await this.admin
           .from('feed_posts')
@@ -124,8 +127,14 @@ export class DeleteSweepJobs {
 
       if (deletedTopics && deletedTopics.length > 0) {
         const topicIds = deletedTopics.map((t: any) => t.id);
-        await this.admin.from('topic_reactions').delete().in('topic_id', topicIds);
-        await this.admin.from('topic_bookmarks').delete().in('topic_id', topicIds);
+        await this.admin
+          .from('topic_reactions')
+          .delete()
+          .in('topic_id', topicIds);
+        await this.admin
+          .from('topic_bookmarks')
+          .delete()
+          .in('topic_id', topicIds);
         await this.admin
           .from('forum_topics')
           .delete()

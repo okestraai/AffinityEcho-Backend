@@ -224,14 +224,25 @@ describe('AdminReportsService', () => {
         error: null,
         count: 1,
       });
-      const summaryChain = createMockQueryChain({
-        data: [
-          { status: 'submitted', immediate_risk: true },
-          { status: 'under_review', immediate_risk: false },
-        ],
+      // 5 head-count queries: submitted, under_review, resolved, declined, critical
+      const submittedCount = createMockQueryChain({ data: null, error: null, count: 1 });
+      const underReviewCount = createMockQueryChain({ data: null, error: null, count: 1 });
+      const resolvedCount = createMockQueryChain({ data: null, error: null, count: 0 });
+      const declinedCount = createMockQueryChain({ data: null, error: null, count: 0 });
+      const criticalCount = createMockQueryChain({ data: null, error: null, count: 1 });
+      // 1 filtered query for non-critical priority calc
+      const priorityChain = createMockQueryChain({
+        data: [{ status: 'under_review', immediate_risk: false }],
         error: null,
       });
-      mockClient.from.mockReturnValueOnce(listChain).mockReturnValueOnce(summaryChain);
+      mockClient.from
+        .mockReturnValueOnce(listChain)
+        .mockReturnValueOnce(submittedCount)
+        .mockReturnValueOnce(underReviewCount)
+        .mockReturnValueOnce(resolvedCount)
+        .mockReturnValueOnce(declinedCount)
+        .mockReturnValueOnce(criticalCount)
+        .mockReturnValueOnce(priorityChain);
 
       const result = await service.listReports('admin-1', {} as any);
       expect(result.success).toBe(true);

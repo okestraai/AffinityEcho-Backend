@@ -69,7 +69,10 @@ export class NookCronJobs implements OnModuleInit {
       .lt('expires_at', soonThreshold.toISOString());
 
     if (error) {
-      logger.error('Error fetching expiring nooks', { module: 'NookCron', error: error.message });
+      logger.error('Error fetching expiring nooks', {
+        module: 'NookCron',
+        error: error.message,
+      });
       return;
     }
 
@@ -81,9 +84,15 @@ export class NookCronJobs implements OnModuleInit {
         .in('id', ids);
 
       if (updateError) {
-        logger.error('Error renewing nooks', { module: 'NookCron', error: updateError.message });
+        logger.error('Error renewing nooks', {
+          module: 'NookCron',
+          error: updateError.message,
+        });
       } else {
-        logger.info(`Renewed ${expiringNooks.length} expiring nooks for another 24h`, { module: 'NookCron' });
+        logger.info(
+          `Renewed ${expiringNooks.length} expiring nooks for another 24h`,
+          { module: 'NookCron' },
+        );
       }
     }
   }

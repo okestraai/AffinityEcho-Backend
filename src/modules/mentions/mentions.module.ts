@@ -5,7 +5,11 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [ConfigModule, EncryptionModule, forwardRef(() => NotificationsModule)],
+  imports: [
+    ConfigModule,
+    EncryptionModule,
+    forwardRef(() => NotificationsModule),
+  ],
   providers: [MentionService],
   exports: [MentionService],
 })

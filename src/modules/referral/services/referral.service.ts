@@ -488,15 +488,28 @@ export class ReferralService {
       await this.admin.rpc('increment_user_posts', { user_id: userId });
 
       // Enqueue AI moderation (fire-and-forget — never blocks the user)
-      this.moderationQueue.add('moderate', {
-        contentType: 'referral_post',
-        contentId: data.id,
-        authorId: userId,
-      }, { jobId: `referral_post-${data.id}` }).then(() => {
-        logger.info('Moderation queued', { contentType: 'referral_post', contentId: data.id });
-      }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { referralId: data.id, error: mqErr });
-      });
+      this.moderationQueue
+        .add(
+          'moderate',
+          {
+            contentType: 'referral_post',
+            contentId: data.id,
+            authorId: userId,
+          },
+          { jobId: `referral_post-${data.id}` },
+        )
+        .then(() => {
+          logger.info('Moderation queued', {
+            contentType: 'referral_post',
+            contentId: data.id,
+          });
+        })
+        .catch((mqErr) => {
+          logger.warn('Failed to enqueue moderation', {
+            referralId: data.id,
+            error: mqErr,
+          });
+        });
 
       return {
         success: true,

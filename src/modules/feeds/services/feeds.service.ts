@@ -220,14 +220,11 @@ export class FeedsService {
         let feedItems: FeedItem[] = contentResults.flat();
 
         // Filter out blocked users' content (only on fresh build — block list rarely changes)
-        const blockedIds =
-          await this.contentSafety.getBlockedUserIds(userId);
+        const blockedIds = await this.contentSafety.getBlockedUserIds(userId);
 
         if (blockedIds.length > 0) {
           const blockedSet = new Set(blockedIds);
-          feedItems = feedItems.filter(
-            (item) => !blockedSet.has(item.user_id),
-          );
+          feedItems = feedItems.filter((item) => !blockedSet.has(item.user_id));
         }
 
         const context: RankingContext = {

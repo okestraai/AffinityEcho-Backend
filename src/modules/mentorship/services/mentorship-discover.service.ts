@@ -132,9 +132,11 @@ export class MentorshipDiscoverService {
 
       // Exclude existing mentor-mentee pairs
       if (excludeIds.size > 0) {
-        for (const id of excludeIds) {
-          supabaseQuery = supabaseQuery.neq('id', id);
-        }
+        supabaseQuery = supabaseQuery.not(
+          'id',
+          'in',
+          `(${Array.from(excludeIds).join(',')})`,
+        );
       }
 
       // Search filter

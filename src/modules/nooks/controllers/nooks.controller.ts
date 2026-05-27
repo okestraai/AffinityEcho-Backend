@@ -169,7 +169,8 @@ export class NooksController {
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a nook',
-    description: 'Delete a nook (creator only). Soft-deletes the nook and all messages.',
+    description:
+      'Delete a nook (creator only). Soft-deletes the nook and all messages.',
   })
   @ApiParam({ name: 'id', description: 'Nook ID' })
   @ApiResponse({

@@ -48,9 +48,7 @@ export class EditorialService {
    * Call the Together.ai LLM to judge a content item.
    * Returns null if the service is not configured (missing API key).
    */
-  async judge(
-    payload: EditorialPayload,
-  ): Promise<EditorialVerdict | null> {
+  async judge(payload: EditorialPayload): Promise<EditorialVerdict | null> {
     if (!this.isConfigured) {
       return null;
     }
@@ -109,13 +107,9 @@ export class EditorialService {
         ? Math.max(0, Math.min(1, parsed.confidence))
         : 0.5;
 
-    const severity = [
-      'none',
-      'low',
-      'medium',
-      'high',
-      'critical',
-    ].includes(parsed.severity)
+    const severity = ['none', 'low', 'medium', 'high', 'critical'].includes(
+      parsed.severity,
+    )
       ? parsed.severity
       : 'medium';
 
@@ -123,9 +117,7 @@ export class EditorialService {
       verdict,
       confidence,
       severity,
-      categories: Array.isArray(parsed.categories)
-        ? parsed.categories
-        : [],
+      categories: Array.isArray(parsed.categories) ? parsed.categories : [],
       rationale:
         typeof parsed.rationale === 'string'
           ? parsed.rationale.substring(0, 300)

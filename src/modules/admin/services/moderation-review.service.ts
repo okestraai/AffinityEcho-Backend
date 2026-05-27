@@ -10,15 +10,53 @@ import { EmailService } from '../../../common/utils/email/email.service';
 import { RedisService } from '../../../common/services/redis.service';
 import logger from '../../../common/utils/logger.util';
 
-const TABLE_MAP: Record<string, { table: string; authorCol: string; contentCol: string; titleCol?: string }> = {
-  feed_post: { table: 'feed_posts', authorCol: 'user_id', contentCol: 'content' },
-  feed_comment: { table: 'feed_comments', authorCol: 'user_id', contentCol: 'content' },
-  forum_topic: { table: 'forum_topics', authorCol: 'user_id', contentCol: 'content', titleCol: 'title' },
-  forum_comment: { table: 'forum_comments', authorCol: 'user_id', contentCol: 'content' },
-  nook: { table: 'nooks', authorCol: 'creator_id', contentCol: 'description', titleCol: 'title' },
-  nook_message: { table: 'nook_messages', authorCol: 'user_id', contentCol: 'content' },
-  referral_post: { table: 'referral_posts', authorCol: 'user_id', contentCol: 'description_encrypted', titleCol: 'title_encrypted' },
-  referral_comment: { table: 'referral_comments', authorCol: 'user_id', contentCol: 'content' },
+const TABLE_MAP: Record<
+  string,
+  { table: string; authorCol: string; contentCol: string; titleCol?: string }
+> = {
+  feed_post: {
+    table: 'feed_posts',
+    authorCol: 'user_id',
+    contentCol: 'content',
+  },
+  feed_comment: {
+    table: 'feed_comments',
+    authorCol: 'user_id',
+    contentCol: 'content',
+  },
+  forum_topic: {
+    table: 'forum_topics',
+    authorCol: 'user_id',
+    contentCol: 'content',
+    titleCol: 'title',
+  },
+  forum_comment: {
+    table: 'forum_comments',
+    authorCol: 'user_id',
+    contentCol: 'content',
+  },
+  nook: {
+    table: 'nooks',
+    authorCol: 'creator_id',
+    contentCol: 'description',
+    titleCol: 'title',
+  },
+  nook_message: {
+    table: 'nook_messages',
+    authorCol: 'user_id',
+    contentCol: 'content',
+  },
+  referral_post: {
+    table: 'referral_posts',
+    authorCol: 'user_id',
+    contentCol: 'description_encrypted',
+    titleCol: 'title_encrypted',
+  },
+  referral_comment: {
+    table: 'referral_comments',
+    authorCol: 'user_id',
+    contentCol: 'content',
+  },
 };
 
 const HUMAN_TYPE: Record<string, string> = {
@@ -73,7 +111,8 @@ export class ModerationReviewService {
         if (!data) return { preview: null, title: null, authorId: null };
 
         const rawContent = data[info.contentCol] || '';
-        const preview = typeof rawContent === 'string' ? rawContent.substring(0, 100) : '';
+        const preview =
+          typeof rawContent === 'string' ? rawContent.substring(0, 100) : '';
         const title = info.titleCol ? data[info.titleCol] || null : null;
         const authorId = data[info.authorCol];
 
@@ -82,7 +121,9 @@ export class ModerationReviewService {
     );
 
     // Collect unique author IDs for username lookup
-    const authorIds = [...new Set(enriched.map(e => e.authorId).filter(Boolean))];
+    const authorIds = [
+      ...new Set(enriched.map((e) => e.authorId).filter(Boolean)),
+    ];
     let authorMap = new Map<string, string>();
     if (authorIds.length > 0) {
       const { data: profiles } = await this.admin
@@ -131,8 +172,10 @@ export class ModerationReviewService {
     }
 
     if (filters.priority) query = query.eq('priority', filters.priority);
-    if (filters.contentType) query = query.eq('content_type', filters.contentType);
-    if (filters.currentState) query = query.eq('current_state', filters.currentState);
+    if (filters.contentType)
+      query = query.eq('content_type', filters.contentType);
+    if (filters.currentState)
+      query = query.eq('current_state', filters.currentState);
 
     query = query.range(offset, offset + limit - 1);
 
@@ -140,9 +183,15 @@ export class ModerationReviewService {
     if (error) throw new BadRequestException(error.message);
 
     // Sort by priority weight
-    const priorityWeight: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+    const priorityWeight: Record<string, number> = {
+      urgent: 0,
+      high: 1,
+      normal: 2,
+      low: 3,
+    };
     const sorted = (data || []).sort(
-      (a: any, b: any) => (priorityWeight[a.priority] ?? 4) - (priorityWeight[b.priority] ?? 4),
+      (a: any, b: any) =>
+        (priorityWeight[a.priority] ?? 4) - (priorityWeight[b.priority] ?? 4),
     );
 
     // Enrich with content preview, title, author
@@ -151,9 +200,8 @@ export class ModerationReviewService {
     // Add available_actions + extract author_signals from ai_payload
     const withActions = enriched.map((item: any) => ({
       ...item,
-      available_actions: item.current_state === 'hidden'
-        ? ['reverse']
-        : ['confirm', 'hide'],
+      available_actions:
+        item.current_state === 'hidden' ? ['reverse'] : ['confirm', 'hide'],
       author_signals: item.ai_payload?.authorSignals || null,
       parent_context: (item.ai_payload?.parentChain || []).map((p: any) => ({
         type: p.type,
@@ -164,7 +212,9 @@ export class ModerationReviewService {
     }));
 
     // Enrich resolved_by with username
-    const resolvedByIds = [...new Set(withActions.map((i: any) => i.resolved_by).filter(Boolean))];
+    const resolvedByIds = [
+      ...new Set(withActions.map((i: any) => i.resolved_by).filter(Boolean)),
+    ];
     let resolvedMap = new Map<string, string>();
     if (resolvedByIds.length > 0) {
       const { data: admins } = await this.admin
@@ -176,7 +226,9 @@ export class ModerationReviewService {
 
     const final = withActions.map((item: any) => ({
       ...item,
-      resolved_by_username: item.resolved_by ? resolvedMap.get(item.resolved_by) || null : null,
+      resolved_by_username: item.resolved_by
+        ? resolvedMap.get(item.resolved_by) || null
+        : null,
     }));
 
     return {
@@ -214,7 +266,9 @@ export class ModerationReviewService {
       throw new BadRequestException('Cannot reverse — content is not hidden');
     }
     if (action === 'confirm' && item.current_state !== 'visible') {
-      throw new BadRequestException('Cannot confirm — content is not visible (escalated)');
+      throw new BadRequestException(
+        'Cannot confirm — content is not visible (escalated)',
+      );
     }
     if (action === 'hide' && item.current_state !== 'visible') {
       throw new BadRequestException('Cannot hide — content is already hidden');
@@ -235,7 +289,7 @@ export class ModerationReviewService {
       })
       .eq('id', itemId);
 
-    let previousState = item.current_state;
+    const previousState = item.current_state;
     let newState = item.current_state;
 
     if (action === 'reverse') {
@@ -269,10 +323,14 @@ export class ModerationReviewService {
         human_reason: reason || null,
         resolved_by: adminId,
       });
-
     } else if (action === 'hide') {
       // Admin hides escalated content
-      await this.hideContent(item.content_type, item.content_id, adminId, reason);
+      await this.hideContent(
+        item.content_type,
+        item.content_id,
+        adminId,
+        reason,
+      );
       newState = 'hidden';
 
       // Update/insert audit row
@@ -289,8 +347,11 @@ export class ModerationReviewService {
         .eq('content_id', item.content_id);
 
       // Email author: content hidden
-      await this.sendHiddenNotification(item.content_type, item.content_id, reason);
-
+      await this.sendHiddenNotification(
+        item.content_type,
+        item.content_id,
+        reason,
+      );
     } else {
       // confirm — just close the review item, update audit
       await this.admin
@@ -338,11 +399,21 @@ export class ModerationReviewService {
     if (!info) return;
     await this.admin
       .from(info.table)
-      .update({ is_hidden: false, hidden_by: null, hidden_at: null, hidden_reason: null })
+      .update({
+        is_hidden: false,
+        hidden_by: null,
+        hidden_at: null,
+        hidden_reason: null,
+      })
       .eq('id', contentId);
   }
 
-  private async hideContent(contentType: string, contentId: string, adminId: string, reason?: string) {
+  private async hideContent(
+    contentType: string,
+    contentId: string,
+    adminId: string,
+    reason?: string,
+  ) {
     const info = TABLE_MAP[contentType];
     if (!info) return;
     await this.admin
@@ -379,7 +450,10 @@ export class ModerationReviewService {
     return profile;
   }
 
-  private async sendRestoredNotification(contentType: string, contentId: string) {
+  private async sendRestoredNotification(
+    contentType: string,
+    contentId: string,
+  ) {
     try {
       const profile = await this.getAuthorInfo(contentType, contentId);
       if (profile?.email) {
@@ -390,11 +464,19 @@ export class ModerationReviewService {
         );
       }
     } catch (err) {
-      logger.warn('Failed to send restored notification', { contentType, contentId, error: err });
+      logger.warn('Failed to send restored notification', {
+        contentType,
+        contentId,
+        error: err,
+      });
     }
   }
 
-  private async sendHiddenNotification(contentType: string, contentId: string, reason?: string) {
+  private async sendHiddenNotification(
+    contentType: string,
+    contentId: string,
+    reason?: string,
+  ) {
     try {
       const profile = await this.getAuthorInfo(contentType, contentId);
       if (profile?.email) {
@@ -402,12 +484,17 @@ export class ModerationReviewService {
           profile.email,
           profile.username,
           HUMAN_TYPE[contentType] || 'content',
-          reason || 'This content was hidden after review by our moderation team.',
+          reason ||
+            'This content was hidden after review by our moderation team.',
           contentId,
         );
       }
     } catch (err) {
-      logger.warn('Failed to send hidden notification', { contentType, contentId, error: err });
+      logger.warn('Failed to send hidden notification', {
+        contentType,
+        contentId,
+        error: err,
+      });
     }
   }
 
@@ -426,12 +513,19 @@ export class ModerationReviewService {
     ]);
 
     const pending = pendingResult.data || [];
-    const priorityCounts: Record<string, number> = { urgent: 0, high: 0, normal: 0, low: 0 };
+    const priorityCounts: Record<string, number> = {
+      urgent: 0,
+      high: 0,
+      normal: 0,
+      low: 0,
+    };
     const stateCounts: Record<string, number> = { hidden: 0, visible: 0 };
 
     pending.forEach((item: any) => {
-      if (priorityCounts[item.priority] !== undefined) priorityCounts[item.priority]++;
-      if (stateCounts[item.current_state] !== undefined) stateCounts[item.current_state]++;
+      if (priorityCounts[item.priority] !== undefined)
+        priorityCounts[item.priority]++;
+      if (stateCounts[item.current_state] !== undefined)
+        stateCounts[item.current_state]++;
     });
 
     return {
@@ -450,25 +544,32 @@ export class ModerationReviewService {
   // ─── OVERALL AI STATS ─────────────────────────────────────────
 
   async getStats() {
-    const [aiDecisionsResult, disagreementsResult, pendingResult, resolvedTodayResult] =
-      await Promise.all([
-        this.admin
-          .from('content_moderation')
-          .select('moderation_status, ai_confidence, content_type, raw_response')
-          .like('moderated_by', 'ai:%'),
-        this.admin
-          .from('moderation_disagreements')
-          .select('id', { count: 'exact', head: true }),
-        this.admin
-          .from('moderation_review_queue')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'pending'),
-        this.admin
-          .from('moderation_review_queue')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'resolved')
-          .gte('resolved_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
-      ]);
+    const [
+      aiDecisionsResult,
+      disagreementsResult,
+      pendingResult,
+      resolvedTodayResult,
+    ] = await Promise.all([
+      this.admin
+        .from('content_moderation')
+        .select('moderation_status, ai_confidence, content_type, raw_response')
+        .like('moderated_by', 'ai:%'),
+      this.admin
+        .from('moderation_disagreements')
+        .select('id', { count: 'exact', head: true }),
+      this.admin
+        .from('moderation_review_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending'),
+      this.admin
+        .from('moderation_review_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'resolved')
+        .gte(
+          'resolved_at',
+          new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+        ),
+    ]);
 
     const aiDecisions = aiDecisionsResult.data || [];
     const totalDecisions = aiDecisions.length;
@@ -476,14 +577,23 @@ export class ModerationReviewService {
     // Verdict distribution
     const verdictDist: Record<string, number> = {};
     aiDecisions.forEach((d: any) => {
-      verdictDist[d.moderation_status] = (verdictDist[d.moderation_status] || 0) + 1;
+      verdictDist[d.moderation_status] =
+        (verdictDist[d.moderation_status] || 0) + 1;
     });
 
     // Average confidence
-    const confidences = aiDecisions.map((d: any) => d.ai_confidence).filter((c: any) => c != null);
-    const avgConfidence = confidences.length > 0
-      ? parseFloat((confidences.reduce((a: number, b: number) => a + b, 0) / confidences.length).toFixed(2))
-      : 0;
+    const confidences = aiDecisions
+      .map((d: any) => d.ai_confidence)
+      .filter((c: any) => c != null);
+    const avgConfidence =
+      confidences.length > 0
+        ? parseFloat(
+            (
+              confidences.reduce((a: number, b: number) => a + b, 0) /
+              confidences.length
+            ).toFixed(2),
+          )
+        : 0;
 
     // Hidden by category
     const hiddenByCategory: Record<string, number> = {};
@@ -499,15 +609,17 @@ export class ModerationReviewService {
     // Content type breakdown
     const contentTypeBreakdown: Record<string, number> = {};
     aiDecisions.forEach((d: any) => {
-      contentTypeBreakdown[d.content_type] = (contentTypeBreakdown[d.content_type] || 0) + 1;
+      contentTypeBreakdown[d.content_type] =
+        (contentTypeBreakdown[d.content_type] || 0) + 1;
     });
 
     // Reversal rate
     const totalDisagreements = disagreementsResult.count || 0;
     const hiddenCount = verdictDist['hidden'] || 0;
-    const reversalRate = hiddenCount > 0
-      ? ((totalDisagreements / hiddenCount) * 100).toFixed(1)
-      : '0.0';
+    const reversalRate =
+      hiddenCount > 0
+        ? ((totalDisagreements / hiddenCount) * 100).toFixed(1)
+        : '0.0';
 
     return {
       success: true,
@@ -548,7 +660,8 @@ export class ModerationReviewService {
       .order('moderated_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (filters.contentType) query = query.eq('content_type', filters.contentType);
+    if (filters.contentType)
+      query = query.eq('content_type', filters.contentType);
     if (filters.status) query = query.eq('moderation_status', filters.status);
 
     const { data, error, count } = await query;
@@ -556,9 +669,11 @@ export class ModerationReviewService {
 
     // Check which items were reversed
     const items = data || [];
-    const contentKeys = items.map((i: any) => `${i.content_type}:${i.content_id}`);
+    const contentKeys = items.map(
+      (i: any) => `${i.content_type}:${i.content_id}`,
+    );
 
-    let reversedSet = new Set<string>();
+    const reversedSet = new Set<string>();
     if (contentKeys.length > 0) {
       const { data: disagreements } = await this.admin
         .from('moderation_disagreements')
@@ -615,7 +730,9 @@ export class ModerationReviewService {
           id: contentId,
           preview: (data[info.contentCol] || '').substring(0, 200),
           title: info.titleCol ? data[info.titleCol] || null : null,
-          author: profile ? { id: profile.id, username: profile.username } : null,
+          author: profile
+            ? { id: profile.id, username: profile.username }
+            : null,
           created_at: data.created_at,
           current_state: data.is_hidden ? 'hidden' : 'visible',
         };
@@ -662,7 +779,9 @@ export class ModerationReviewService {
       .eq('content_type', contentType)
       .eq('content_id', contentId);
 
-    const resolvedByIds = (reviewHistory || []).map((r: any) => r.resolved_by).filter(Boolean);
+    const resolvedByIds = (reviewHistory || [])
+      .map((r: any) => r.resolved_by)
+      .filter(Boolean);
     let resolvedMap = new Map<string, string>();
     if (resolvedByIds.length > 0) {
       const { data: admins } = await this.admin
@@ -679,7 +798,9 @@ export class ModerationReviewService {
       status: r.status,
       resolution: r.resolution,
       resolution_reason: r.resolution_reason,
-      resolved_by_username: r.resolved_by ? resolvedMap.get(r.resolved_by) || null : null,
+      resolved_by_username: r.resolved_by
+        ? resolvedMap.get(r.resolved_by) || null
+        : null,
       resolved_at: r.resolved_at,
       created_at: r.created_at,
     }));
@@ -691,7 +812,9 @@ export class ModerationReviewService {
       .eq('content_type', contentType)
       .eq('content_id', contentId);
 
-    const disResolvedIds = (disagreements || []).map((d: any) => d.resolved_by).filter(Boolean);
+    const disResolvedIds = (disagreements || [])
+      .map((d: any) => d.resolved_by)
+      .filter(Boolean);
     let disMap = new Map<string, string>();
     if (disResolvedIds.length > 0) {
       const { data: admins } = await this.admin
@@ -707,7 +830,9 @@ export class ModerationReviewService {
       ai_categories: d.ai_verdict?.categories || [],
       human_said: d.human_resolution,
       human_reason: d.human_reason,
-      reversed_by_username: d.resolved_by ? disMap.get(d.resolved_by) || null : null,
+      reversed_by_username: d.resolved_by
+        ? disMap.get(d.resolved_by) || null
+        : null,
       created_at: d.created_at,
     }));
 
@@ -739,7 +864,8 @@ export class ModerationReviewService {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (filters.contentType) query = query.eq('content_type', filters.contentType);
+    if (filters.contentType)
+      query = query.eq('content_type', filters.contentType);
 
     const { data, error, count } = await query;
     if (error) throw new BadRequestException(error.message);
@@ -748,7 +874,9 @@ export class ModerationReviewService {
     const items = data || [];
     const enriched = await this.enrichItems(items);
 
-    const resolvedByIds = [...new Set(items.map((d: any) => d.resolved_by).filter(Boolean))];
+    const resolvedByIds = [
+      ...new Set(items.map((d: any) => d.resolved_by).filter(Boolean)),
+    ];
     let resolvedMap = new Map<string, string>();
     if (resolvedByIds.length > 0) {
       const { data: admins } = await this.admin
@@ -761,7 +889,10 @@ export class ModerationReviewService {
     const final = enriched.map((item: any) => ({
       ...item,
       reversed_by: item.resolved_by
-        ? { id: item.resolved_by, username: resolvedMap.get(item.resolved_by) || null }
+        ? {
+            id: item.resolved_by,
+            username: resolvedMap.get(item.resolved_by) || null,
+          }
         : null,
     }));
 

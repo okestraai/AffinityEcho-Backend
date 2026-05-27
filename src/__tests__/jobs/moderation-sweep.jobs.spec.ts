@@ -71,25 +71,24 @@ describe('ModerationSweepJobs', () => {
       );
     });
 
-    it('should respect maxPerSweep limit by stopping at table boundary', async () => {
+    it('should respect maxPerSweep limit across all tables', async () => {
       service = createService({ MODERATION_SWEEP_MAX_PER_RUN: '2' });
 
-      // First table returns exactly 2 items (hits max)
-      mockPool.query.mockResolvedValueOnce({
-        rows: [
-          { id: 'fp-1', author_id: 'u1' },
-          { id: 'fp-2', author_id: 'u2' },
-        ],
-      });
+      // All 8 tables queried in parallel, each returns 1 item
+      for (let i = 0; i < 8; i++) {
+        mockPool.query.mockResolvedValueOnce({
+          rows: [{ id: `item-${i}`, author_id: `u-${i}` }],
+        });
+      }
 
       await service.sweepUnmoderatedContent();
 
-      // Stops after first table since max reached
+      // All 8 tables queried (parallel), but only 2 items enqueued (maxPerSweep)
+      expect(mockPool.query).toHaveBeenCalledTimes(8);
       expect(mockQueue.add).toHaveBeenCalledTimes(2);
-      expect(mockPool.query).toHaveBeenCalledTimes(1);
     });
 
-    it('should stop querying tables after maxPerSweep reached', async () => {
+    it('should query all tables in parallel even with small max', async () => {
       service = createService({ MODERATION_SWEEP_MAX_PER_RUN: '2' });
 
       mockPool.query.mockResolvedValueOnce({
@@ -98,11 +97,14 @@ describe('ModerationSweepJobs', () => {
           { id: 'fp-2', author_id: 'u2' },
         ],
       });
+      for (let i = 0; i < 7; i++) {
+        mockPool.query.mockResolvedValueOnce({ rows: [] });
+      }
 
       await service.sweepUnmoderatedContent();
 
-      // Only 1 table queried because max was hit
-      expect(mockPool.query).toHaveBeenCalledTimes(1);
+      // All 8 tables queried in parallel
+      expect(mockPool.query).toHaveBeenCalledTimes(8);
       expect(mockQueue.add).toHaveBeenCalledTimes(2);
     });
 
@@ -198,23 +200,19 @@ describe('ModerationSweepJobs', () => {
       expect(mockPool.query.mock.calls[0][0]).toContain("INTERVAL '60 minutes'");
     });
 
-    it('should pass remaining limit to each table query', async () => {
-      service = createService({ MODERATION_SWEEP_MAX_PER_RUN: '50' });
+    it('should pass per-type limit to each table query', async () => {
+      service = createService({ MODERATION_SWEEP_MAX_PER_RUN: '80' });
 
-      // First table returns 10
-      mockPool.query.mockResolvedValueOnce({
-        rows: Array.from({ length: 10 }, (_, i) => ({ id: `fp-${i}`, author_id: `u-${i}` })),
-      });
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 8; i++) {
         mockPool.query.mockResolvedValueOnce({ rows: [] });
       }
 
       await service.sweepUnmoderatedContent();
 
-      // First call: limit = 50
-      expect(mockPool.query.mock.calls[0][1][1]).toBe(50);
-      // Second call: limit = 40 (50 - 10)
-      expect(mockPool.query.mock.calls[1][1][1]).toBe(40);
+      // perType = Math.ceil(80 / 8) = 10, each table gets same limit
+      for (let i = 0; i < 8; i++) {
+        expect(mockPool.query.mock.calls[i][1][1]).toBe(10);
+      }
     });
 
     it('should use correct author column for nooks', async () => {

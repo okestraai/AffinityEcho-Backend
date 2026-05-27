@@ -141,7 +141,14 @@ export class EditorialProcessor extends WorkerHost {
           contentId,
           'normal',
           'system_error',
-          { verdict: 'escalate', confidence: 0, severity: 'none', categories: [], rationale: 'LLM unavailable', userFacingReason: null },
+          {
+            verdict: 'escalate',
+            confidence: 0,
+            severity: 'none',
+            categories: [],
+            rationale: 'LLM unavailable',
+            userFacingReason: null,
+          },
           payload,
           'visible',
         );
@@ -316,8 +323,7 @@ export class EditorialProcessor extends WorkerHost {
         .single();
 
       if (nook?.expires_at) {
-        const expiresIn =
-          new Date(nook.expires_at).getTime() - Date.now();
+        const expiresIn = new Date(nook.expires_at).getTime() - Date.now();
         if (expiresIn < 60 * 60 * 1000) {
           return 'nook_expiring_soon';
         }
@@ -340,8 +346,7 @@ export class EditorialProcessor extends WorkerHost {
           .single();
 
         if (nook?.expires_at) {
-          const expiresIn =
-            new Date(nook.expires_at).getTime() - Date.now();
+          const expiresIn = new Date(nook.expires_at).getTime() - Date.now();
           if (expiresIn < 60 * 60 * 1000) {
             return 'nook_expiring_soon';
           }
@@ -514,9 +519,7 @@ export class EditorialProcessor extends WorkerHost {
 
     // In-app notification
     const title =
-      action === 'remove'
-        ? 'Content Removed'
-        : 'Content Under Review';
+      action === 'remove' ? 'Content Removed' : 'Content Under Review';
     const message =
       action === 'remove'
         ? `Your ${humanType} has been removed for violating community guidelines.`

@@ -750,13 +750,19 @@ describe('FeedEngagementService', () => {
         data: { id: 'c1', user_id: 'u1', content_type: 'post', content_id: 'p1', is_deleted: false },
         error: null,
       });
-      // collectDescendants for c1: has one child
-      const descendantsC1Chain = createMockQueryChain({
-        data: [{ id: 'child-1' }],
+      // collectDescendants: 1) fetch root to get content_type/content_id
+      const rootFetchChain = createMockQueryChain({
+        data: { id: 'c1', content_type: 'post', content_id: 'p1' },
         error: null,
       });
-      // collectDescendants for child-1: no grandchildren
-      const descendantsChild1Chain = createMockQueryChain({ data: [], error: null });
+      // collectDescendants: 2) fetch ALL comments for this post (c1 + child-1)
+      const allCommentsChain = createMockQueryChain({
+        data: [
+          { id: 'c1', parent_comment_id: null },
+          { id: 'child-1', parent_comment_id: 'c1' },
+        ],
+        error: null,
+      });
       // reactions delete
       const reactionsDeleteChain = createMockQueryChain({ data: null, error: null });
       // soft-delete
@@ -770,9 +776,9 @@ describe('FeedEngagementService', () => {
       const parentUpdateChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
-        .mockReturnValueOnce(fetchChain)            // fetch comment
-        .mockReturnValueOnce(descendantsC1Chain)    // collectDescendants for c1
-        .mockReturnValueOnce(descendantsChild1Chain) // collectDescendants for child-1
+        .mockReturnValueOnce(fetchChain)            // fetch comment for ownership
+        .mockReturnValueOnce(rootFetchChain)        // collectDescendants: fetch root
+        .mockReturnValueOnce(allCommentsChain)      // collectDescendants: fetch all
         .mockReturnValueOnce(reactionsDeleteChain)  // delete reactions
         .mockReturnValueOnce(softDeleteChain)       // soft-delete
         .mockReturnValueOnce(parentFetchChain)      // parent fetch

@@ -82,13 +82,12 @@ export class ContextBuilderService {
     contentId: string,
     authorId: string,
   ): Promise<EditorialPayload> {
-    const [subject, parentChain, container, authorSignals] =
-      await Promise.all([
-        this.loadSubject(contentType, contentId),
-        this.walkParentChain(contentType, contentId),
-        this.loadContainer(contentType, contentId),
-        this.loadAuthorSignals(authorId),
-      ]);
+    const [subject, parentChain, container, authorSignals] = await Promise.all([
+      this.loadSubject(contentType, contentId),
+      this.walkParentChain(contentType, contentId),
+      this.loadContainer(contentType, contentId),
+      this.loadAuthorSignals(authorId),
+    ]);
 
     return {
       subject,
@@ -115,9 +114,7 @@ export class ContextBuilderService {
       .single();
 
     if (error || !data) {
-      throw new Error(
-        `Content not found: ${contentType}/${contentId}`,
-      );
+      throw new Error(`Content not found: ${contentType}/${contentId}`);
     }
 
     return {
@@ -203,10 +200,7 @@ export class ContextBuilderService {
           type: 'feed_comment',
           id: parent.id,
           authorId: parent.user_id,
-          content: this.truncate(
-            parent.content,
-            MAX_PARENT_COMMENT_CHARS,
-          ),
+          content: this.truncate(parent.content, MAX_PARENT_COMMENT_CHARS),
           createdAt: parent.created_at,
         });
       }
@@ -296,10 +290,7 @@ export class ContextBuilderService {
           type: 'forum_comment',
           id: parent.id,
           authorId: parent.user_id,
-          content: this.truncate(
-            parent.content,
-            MAX_PARENT_COMMENT_CHARS,
-          ),
+          content: this.truncate(parent.content, MAX_PARENT_COMMENT_CHARS),
           createdAt: parent.created_at,
         });
       }
@@ -318,10 +309,7 @@ export class ContextBuilderService {
         id: topic.id,
         authorId: topic.user_id,
         title: topic.title,
-        content: this.truncate(
-          topic.content,
-          MAX_PARENT_POST_CHARS,
-        ),
+        content: this.truncate(topic.content, MAX_PARENT_POST_CHARS),
         createdAt: topic.created_at,
       });
     }
@@ -352,10 +340,7 @@ export class ContextBuilderService {
           type: 'nook_message',
           id: parent.id,
           authorId: parent.user_id,
-          content: this.truncate(
-            parent.content,
-            MAX_PARENT_COMMENT_CHARS,
-          ),
+          content: this.truncate(parent.content, MAX_PARENT_COMMENT_CHARS),
           createdAt: parent.created_at,
         });
       }
@@ -374,10 +359,7 @@ export class ContextBuilderService {
         id: nook.id,
         authorId: nook.creator_id,
         title: nook.title,
-        content: this.truncate(
-          nook.description,
-          MAX_PARENT_POST_CHARS,
-        ),
+        content: this.truncate(nook.description, MAX_PARENT_POST_CHARS),
         createdAt: nook.created_at,
       });
     }
@@ -524,9 +506,7 @@ export class ContextBuilderService {
    * Load lightweight author reputation signals.
    * No PII — just counts and account age.
    */
-  private async loadAuthorSignals(
-    authorId: string,
-  ): Promise<AuthorSignals> {
+  private async loadAuthorSignals(authorId: string): Promise<AuthorSignals> {
     const defaults: AuthorSignals = {
       accountAgeDays: 0,
       priorFlagsAgainstAuthor: 0,
@@ -535,22 +515,21 @@ export class ContextBuilderService {
     };
 
     try {
-      const [profileResult, flagsResult, removalsResult] =
-        await Promise.all([
-          this.admin
-            .from('user_profiles')
-            .select('created_at')
-            .eq('id', authorId)
-            .single(),
-          this.admin
-            .from('content_flags')
-            .select('id', { count: 'exact', head: true })
-            .eq('reported_user_id', authorId),
-          this.admin
-            .from('content_moderation')
-            .select('id', { count: 'exact', head: true })
-            .eq('moderation_status', 'removed'),
-        ]);
+      const [profileResult, flagsResult, removalsResult] = await Promise.all([
+        this.admin
+          .from('user_profiles')
+          .select('created_at')
+          .eq('id', authorId)
+          .single(),
+        this.admin
+          .from('content_flags')
+          .select('id', { count: 'exact', head: true })
+          .eq('reported_user_id', authorId),
+        this.admin
+          .from('content_moderation')
+          .select('id', { count: 'exact', head: true })
+          .eq('moderation_status', 'removed'),
+      ]);
 
       if (profileResult.data?.created_at) {
         const created = new Date(profileResult.data.created_at);

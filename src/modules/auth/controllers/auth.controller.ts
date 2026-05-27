@@ -150,12 +150,20 @@ export class AuthController {
   @Post('apple/verify')
   @ApiOperation({
     summary: 'Verify Apple Sign-In token',
-    description: 'Verify the Apple ID token from native iOS sign-in and return auth tokens.',
+    description:
+      'Verify the Apple ID token from native iOS sign-in and return auth tokens.',
   })
   @ApiResponse({ status: 200, description: 'Apple Sign-In successful' })
   @ApiResponse({ status: 400, description: 'Invalid token' })
   async verifyAppleToken(
-    @Body() body: { id_token: string; user?: { email?: string; fullName?: { givenName?: string; familyName?: string } } },
+    @Body()
+    body: {
+      id_token: string;
+      user?: {
+        email?: string;
+        fullName?: { givenName?: string; familyName?: string };
+      };
+    },
   ) {
     return this.authService.verifyAppleToken(body.id_token, body.user);
   }

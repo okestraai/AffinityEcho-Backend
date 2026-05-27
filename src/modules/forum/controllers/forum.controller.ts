@@ -520,7 +520,13 @@ export class ForumController {
   async updateTopic(
     @Param('id') id: string,
     @CurrentUser() user: any,
-    @Body() dto: { title?: string; content?: string; tags?: string[]; isAnonymous?: boolean },
+    @Body()
+    dto: {
+      title?: string;
+      content?: string;
+      tags?: string[];
+      isAnonymous?: boolean;
+    },
   ) {
     return this.topicService.updateTopic(id, user.userId, dto);
   }

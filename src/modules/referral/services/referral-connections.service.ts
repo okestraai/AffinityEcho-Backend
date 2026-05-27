@@ -302,7 +302,10 @@ export class ReferralConnectionsService {
         ]);
 
         // Create in-app notification
-        const senderName = await this.identityReveal.resolveNotificationName(userId, post.user_id);
+        const senderName = await this.identityReveal.resolveNotificationName(
+          userId,
+          post.user_id,
+        );
         await this.notificationsService.createNotification({
           user_id: post.user_id,
           actor_id: userId,
@@ -410,7 +413,10 @@ export class ReferralConnectionsService {
         ]);
 
         // Create in-app notification
-        const receiverName = await this.identityReveal.resolveNotificationName(userId, connection.sender_id);
+        const receiverName = await this.identityReveal.resolveNotificationName(
+          userId,
+          connection.sender_id,
+        );
         await this.notificationsService.createNotification({
           user_id: connection.sender_id,
           actor_id: userId,

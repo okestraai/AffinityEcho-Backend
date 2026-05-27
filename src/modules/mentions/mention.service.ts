@@ -101,7 +101,10 @@ export class MentionService {
 
       for (const user of mentionableUsers) {
         try {
-          const actorName = await this.identityReveal.resolveNotificationName(mentionerId, user.id);
+          const actorName = await this.identityReveal.resolveNotificationName(
+            mentionerId,
+            user.id,
+          );
           await this.notifications.createNotification({
             user_id: user.id,
             actor_id: mentionerId,

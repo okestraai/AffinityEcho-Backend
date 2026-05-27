@@ -225,7 +225,12 @@ export class FeedsController {
   @Put('comments/:commentId')
   @ApiOperation({ summary: 'Edit a feed comment' })
   @ApiParam({ name: 'commentId', description: 'Comment ID' })
-  @ApiBody({ schema: { properties: { content: { type: 'string' } }, required: ['content'] } })
+  @ApiBody({
+    schema: {
+      properties: { content: { type: 'string' } },
+      required: ['content'],
+    },
+  })
   async editComment(
     @Req() req: any,
     @Param('commentId') commentId: string,
@@ -238,10 +243,7 @@ export class FeedsController {
   @Delete('comments/:commentId')
   @ApiOperation({ summary: 'Delete a feed comment and its replies' })
   @ApiParam({ name: 'commentId', description: 'Comment ID' })
-  async deleteComment(
-    @Req() req: any,
-    @Param('commentId') commentId: string,
-  ) {
+  async deleteComment(@Req() req: any, @Param('commentId') commentId: string) {
     const userId = req.user.sub;
     return this.feedEngagementService.deleteComment(commentId, userId);
   }

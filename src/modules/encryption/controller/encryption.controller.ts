@@ -162,9 +162,7 @@ export class EncryptionController {
       }
 
       if (!body.data || !body.sessionId) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       // Validate data types
@@ -315,9 +313,7 @@ export class EncryptionController {
       }
 
       if (!body.data || !body.sessionId) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       if (typeof body.data !== 'string') {
@@ -431,9 +427,7 @@ export class EncryptionController {
       }
 
       if (!body.encryptedData || !body.sessionId) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       // Validate data types
@@ -585,9 +579,7 @@ export class EncryptionController {
     try {
       // Validate request body
       if (!body || !body.encryptedData) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       const decrypted = await this.decryptWithMasterKeyInternal(
@@ -649,9 +641,7 @@ export class EncryptionController {
     try {
       // Validate request body
       if (!body || !body.sessionId) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       const session = this.sessionKeys.get(body.sessionId);
@@ -718,9 +708,7 @@ export class EncryptionController {
     try {
       // Validate request body
       if (!body || !body.sessionId) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       this.validateSessionInternal(body.sessionId, userId);
@@ -810,9 +798,7 @@ export class EncryptionController {
 
     try {
       if (!body?.sessionEncryptedData || !body?.sessionId) {
-        throw new BadRequestException(
-          MSG.ENCRYPTION.INVALID_DATA,
-        );
+        throw new BadRequestException(MSG.ENCRYPTION.INVALID_DATA);
       }
 
       this.validateSessionInternal(body.sessionId, userId);

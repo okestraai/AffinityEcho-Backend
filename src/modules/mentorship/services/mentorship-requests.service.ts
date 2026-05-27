@@ -260,7 +260,10 @@ export class MentorshipRequestsService {
     requestType: string,
   ) {
     try {
-      const actorName = await this.identityReveal.resolveNotificationName(requesterId, targetUserId);
+      const actorName = await this.identityReveal.resolveNotificationName(
+        requesterId,
+        targetUserId,
+      );
 
       await this.notificationsService.createNotification({
         user_id: targetUserId,

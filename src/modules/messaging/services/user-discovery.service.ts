@@ -207,45 +207,48 @@ export class UserDiscoveryService {
         }
       }
 
-      // Get connection stats for each user
-      const enhancedUsers = await Promise.all(
-        filteredUsers.map(async (user: any) => {
-          // Get mutual connections count
-          const { count: mutualConnections } = await this.admin
-            .from('user_follows')
-            .select('*', { count: 'exact', head: true })
-            .or(`follower_id.eq.${userId},following_id.eq.${userId}`)
-            .or(`follower_id.eq.${user.id},following_id.eq.${user.id}`);
+      // Batch fetch all follows for current user — 1 query instead of N
+      const userIds = filteredUsers.map((u: any) => u.id);
+      const { data: myFollows } = await this.admin
+        .from('user_follows')
+        .select('follower_id, following_id')
+        .or(`follower_id.eq.${userId},following_id.eq.${userId}`);
 
-          // Get common skills (if needed)
-          const commonSkills = user.skills || [];
+      // Build sets for O(1) lookup
+      const iFollow = new Set<string>();
+      const followMe = new Set<string>();
+      for (const f of myFollows ?? []) {
+        if (f.follower_id === userId) iFollow.add(f.following_id);
+        if (f.following_id === userId) followMe.add(f.follower_id);
+      }
 
-          // Decrypt encrypted fields
-          let company = null;
-          let careerLevel = null;
-          try {
-            if (user.company_encrypted)
-              company = this.encryption.decrypt(user.company_encrypted);
-            if (user.career_level_encrypted)
-              careerLevel = this.encryption.decrypt(
-                user.career_level_encrypted,
-              );
-          } catch {
-            // ignore decryption errors
-          }
+      const enhancedUsers = filteredUsers.map((user: any) => {
+        // Mutual = I follow them AND they follow me
+        const mutual = (iFollow.has(user.id) ? 1 : 0) + (followMe.has(user.id) ? 1 : 0);
+        const commonSkills = user.skills || [];
 
-          const { company_encrypted, career_level_encrypted, ...rest } = user;
+        let company = null;
+        let careerLevel = null;
+        try {
+          if (user.company_encrypted)
+            company = this.encryption.decrypt(user.company_encrypted);
+          if (user.career_level_encrypted)
+            careerLevel = this.encryption.decrypt(user.career_level_encrypted);
+        } catch {
+          // ignore decryption errors
+        }
 
-          return {
-            ...rest,
-            company,
-            career_level: careerLevel,
-            mutual_connections: mutualConnections || 0,
-            common_skills: commonSkills,
-            can_message: true,
-          };
-        }),
-      );
+        const { company_encrypted, career_level_encrypted, ...rest } = user;
+
+        return {
+          ...rest,
+          company,
+          career_level: careerLevel,
+          mutual_connections: mutual,
+          common_skills: commonSkills,
+          can_message: true,
+        };
+      });
 
       return {
         success: true,

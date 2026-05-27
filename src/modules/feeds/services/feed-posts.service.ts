@@ -93,15 +93,29 @@ export class FeedPostsService {
       logger.info('Post created successfully', { postId: post.id });
 
       // Enqueue AI moderation (fire-and-forget — never blocks the user)
-      this.moderationQueue.add('moderate', {
-        contentType: 'feed_post',
-        contentId: post.id,
-        authorId: userId,
-      }, { jobId: `feed_post-${post.id}` }).then(() => {
-        logger.info('Moderation queued', { contentType: 'feed_post', contentId: post.id });
-      }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { postId: post.id, error: mqErr?.message || mqErr, stack: mqErr?.stack });
-      });
+      this.moderationQueue
+        .add(
+          'moderate',
+          {
+            contentType: 'feed_post',
+            contentId: post.id,
+            authorId: userId,
+          },
+          { jobId: `feed_post-${post.id}` },
+        )
+        .then(() => {
+          logger.info('Moderation queued', {
+            contentType: 'feed_post',
+            contentId: post.id,
+          });
+        })
+        .catch((mqErr) => {
+          logger.warn('Failed to enqueue moderation', {
+            postId: post.id,
+            error: mqErr?.message || mqErr,
+            stack: mqErr?.stack,
+          });
+        });
 
       await this.redis.delPattern('feeds:*');
 
@@ -308,7 +322,10 @@ export class FeedPostsService {
       // Filter out hidden posts when viewed by someone else
       const viewerId = requestingUserId || userId;
       if (viewerId !== userId) {
-        const hiddenIds = await this.contentSafety.getHiddenContentIds(viewerId, 'post');
+        const hiddenIds = await this.contentSafety.getHiddenContentIds(
+          viewerId,
+          'post',
+        );
         if (hiddenIds.length > 0) {
           const hiddenSet = new Set(hiddenIds);
           formatted = formatted.filter((p: any) => !hiddenSet.has(p.id));
@@ -483,10 +500,7 @@ export class FeedPostsService {
       }
 
       // 4. Delete post reactions, likes, bookmarks, shares
-      await this.admin
-        .from('feed_reactions')
-        .delete()
-        .eq('content_id', postId);
+      await this.admin.from('feed_reactions').delete().eq('content_id', postId);
       await this.admin
         .from('feed_likes')
         .delete()

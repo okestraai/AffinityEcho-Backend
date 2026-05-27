@@ -41,7 +41,10 @@ export class ReferralLikesService {
       // Create notification for referral post author (if not liking own post)
       if (data && data.user_id !== userId) {
         try {
-          const actorName = await this.identityReveal.resolveNotificationName(userId, data.user_id);
+          const actorName = await this.identityReveal.resolveNotificationName(
+            userId,
+            data.user_id,
+          );
 
           await this.notificationsService.createNotification({
             user_id: data.user_id,

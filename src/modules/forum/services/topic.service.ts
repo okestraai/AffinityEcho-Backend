@@ -195,15 +195,28 @@ export class TopicService {
       );
 
       // Enqueue AI moderation (fire-and-forget — never blocks the user)
-      this.moderationQueue.add('moderate', {
-        contentType: 'forum_topic',
-        contentId: topic.id,
-        authorId: userId,
-      }, { jobId: `forum_topic-${topic.id}` }).then(() => {
-        logger.info('Moderation queued', { contentType: 'forum_topic', contentId: topic.id });
-      }).catch(mqErr => {
-        logger.warn('Failed to enqueue moderation', { topicId: topic.id, error: mqErr });
-      });
+      this.moderationQueue
+        .add(
+          'moderate',
+          {
+            contentType: 'forum_topic',
+            contentId: topic.id,
+            authorId: userId,
+          },
+          { jobId: `forum_topic-${topic.id}` },
+        )
+        .then(() => {
+          logger.info('Moderation queued', {
+            contentType: 'forum_topic',
+            contentId: topic.id,
+          });
+        })
+        .catch((mqErr) => {
+          logger.warn('Failed to enqueue moderation', {
+            topicId: topic.id,
+            error: mqErr,
+          });
+        });
 
       await this.redis.delPattern('topics:*');
 
@@ -228,7 +241,10 @@ export class TopicService {
     if (cached) {
       // Apply hidden content filter post-cache so hides take effect immediately
       if (userId) {
-        const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+        const hiddenIds = await this.contentSafety.getHiddenContentIds(
+          userId,
+          'topic',
+        );
         if (hiddenIds.length > 0) {
           const hiddenSet = new Set(hiddenIds);
           cached.data = cached.data.filter((t: any) => !hiddenSet.has(t.id));
@@ -237,16 +253,19 @@ export class TopicService {
       return cached;
     }
 
-    let query = this.admin.from('forum_topics').select(
-      `
+    let query = this.admin
+      .from('forum_topics')
+      .select(
+        `
       *,
       user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified),
       forum:forum_id(id, name, icon, is_global),
       topic_reactions!topic_id(count)
     `,
-      { count: 'exact' },
-    ).or('is_hidden.is.null,is_hidden.eq.false')
-    .or('is_deleted.is.null,is_deleted.eq.false');
+        { count: 'exact' },
+      )
+      .or('is_hidden.is.null,is_hidden.eq.false')
+      .or('is_deleted.is.null,is_deleted.eq.false');
 
     if (userId) {
       query = query.neq('user_id', userId);
@@ -378,7 +397,10 @@ export class TopicService {
 
     // Apply hidden content filter post-cache so hides take effect immediately
     if (userId) {
-      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(
+        userId,
+        'topic',
+      );
       if (hiddenIds.length > 0) {
         const hiddenSet = new Set(hiddenIds);
         result.data = result.data.filter((t: any) => !hiddenSet.has(t.id));
@@ -584,7 +606,10 @@ export class TopicService {
       // Create notification for topic creator (only if not reacting to own topic)
       if (topic.user_id !== userId) {
         try {
-          const actorName = await this.identityReveal.resolveNotificationName(userId, topic.user_id);
+          const actorName = await this.identityReveal.resolveNotificationName(
+            userId,
+            topic.user_id,
+          );
 
           await this.notificationsService.createNotification({
             user_id: topic.user_id,
@@ -643,7 +668,16 @@ export class TopicService {
     }
   }
 
-  async updateTopic(topicId: string, userId: string, dto: { title?: string; content?: string; tags?: string[]; isAnonymous?: boolean }) {
+  async updateTopic(
+    topicId: string,
+    userId: string,
+    dto: {
+      title?: string;
+      content?: string;
+      tags?: string[];
+      isAnonymous?: boolean;
+    },
+  ) {
     logger.info('Updating topic', { topicId, userId });
 
     try {
@@ -661,8 +695,7 @@ export class TopicService {
         throw new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND);
       if (topic.is_hidden)
         throw new ForbiddenException('This topic is under moderation review');
-      if (topic.is_locked)
-        throw new ForbiddenException('This topic is locked');
+      if (topic.is_locked) throw new ForbiddenException('This topic is locked');
 
       // Build update payload - at least one field required
       const updateData: any = {
@@ -681,7 +714,9 @@ export class TopicService {
         if (!dto.content || dto.content.trim().length === 0)
           throw new BadRequestException('Content cannot be empty');
         if (dto.content.length > 10000)
-          throw new BadRequestException('Content must be 10000 characters or less');
+          throw new BadRequestException(
+            'Content must be 10000 characters or less',
+          );
         updateData.content = dto.content.trim();
       }
       if (dto.tags !== undefined) {
@@ -693,17 +728,20 @@ export class TopicService {
         updateData.is_anonymous = dto.isAnonymous;
       }
 
-      if (Object.keys(updateData).length <= 2) // only updated_at + is_edited
+      if (Object.keys(updateData).length <= 2)
+        // only updated_at + is_edited
         throw new BadRequestException('At least one field is required');
 
       const { data: updated, error: updateError } = await this.admin
         .from('forum_topics')
         .update(updateData)
         .eq('id', topicId)
-        .select(`
+        .select(
+          `
           *,
           user_profile:user_id(id, username, avatar, first_name_encrypted, last_name_encrypted, is_company_verified)
-        `)
+        `,
+        )
         .single();
 
       if (updateError) {
@@ -720,7 +758,12 @@ export class TopicService {
         message: 'Topic updated successfully',
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       logger.error('Unexpected error updating topic', { error });
       throw new BadRequestException('Failed to update topic');
     }
@@ -760,16 +803,10 @@ export class TopicService {
       }
 
       // 2. Delete topic_reactions
-      await this.admin
-        .from('topic_reactions')
-        .delete()
-        .eq('topic_id', id);
+      await this.admin.from('topic_reactions').delete().eq('topic_id', id);
 
       // 3. Delete topic_bookmarks
-      await this.admin
-        .from('topic_bookmarks')
-        .delete()
-        .eq('topic_id', id);
+      await this.admin.from('topic_bookmarks').delete().eq('topic_id', id);
 
       // 4. Soft-delete ALL forum_comments
       await this.admin
@@ -790,7 +827,9 @@ export class TopicService {
 
       // 6. Decrement forum topic_count
       try {
-        await this.admin.rpc('decrement_topic_count', { forum_id_param: topic.forum_id });
+        await this.admin.rpc('decrement_topic_count', {
+          forum_id_param: topic.forum_id,
+        });
       } catch {
         // Fallback: manual decrement
         const { data: forum } = await this.admin
@@ -814,7 +853,12 @@ export class TopicService {
         message: 'Topic and all comments deleted successfully',
       };
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       logger.error('Unexpected error deleting topic', { error });
       throw new BadRequestException('Failed to delete topic');
     }
@@ -828,7 +872,10 @@ export class TopicService {
     const cacheKey = `topics:recent:${JSON.stringify(filters)}:${userId}:${companyName || 'all'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) {
-      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(
+        userId,
+        'topic',
+      );
       if (hiddenIds.length > 0) {
         const hiddenSet = new Set(hiddenIds);
         cached.topics = cached.topics.filter((t: any) => !hiddenSet.has(t.id));
@@ -1057,7 +1104,10 @@ export class TopicService {
       await this.redis.set(cacheKey, result, 180000);
 
       // Filter hidden topics post-cache
-      const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+      const hiddenIds = await this.contentSafety.getHiddenContentIds(
+        userId,
+        'topic',
+      );
       if (hiddenIds.length > 0) {
         const hiddenSet = new Set(hiddenIds);
         result.topics = result.topics.filter((t: any) => !hiddenSet.has(t.id));
@@ -1146,7 +1196,10 @@ export class TopicService {
     let topicIds = (bookmarks || []).map((b: any) => b.content_id);
 
     // Filter out hidden topics
-    const hiddenIds = await this.contentSafety.getHiddenContentIds(userId, 'topic');
+    const hiddenIds = await this.contentSafety.getHiddenContentIds(
+      userId,
+      'topic',
+    );
     if (hiddenIds.length > 0) {
       const hiddenSet = new Set(hiddenIds);
       topicIds = topicIds.filter((id: string) => !hiddenSet.has(id));

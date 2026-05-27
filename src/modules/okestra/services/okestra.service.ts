@@ -43,7 +43,9 @@ export class OkestraService {
       this.redis.get<CachedInsights>(cacheKey),
     ]);
 
-    console.error(`[OKESTRA-SVC] hash=${currentHash}, cached=${!!cached}, cachedHash=${cached?.contentHash}, match=${cached?.contentHash === currentHash}`);
+    console.error(
+      `[OKESTRA-SVC] hash=${currentHash}, cached=${!!cached}, cachedHash=${cached?.contentHash}, match=${cached?.contentHash === currentHash}`,
+    );
 
     if (cached && currentHash && cached.contentHash === currentHash) {
       console.error(`[OKESTRA-SVC] Cache HIT — returning cached insights`);

@@ -126,7 +126,8 @@ export class OkestraLlmService {
       userId || 'anonymous',
     );
 
-    console.error('[OKESTRA]',
+    console.error(
+      '[OKESTRA]',
       `Generating insights for ${contentType}:${contentId} — ` +
         `topic="${topic.title}", comments=${comments.length}, ` +
         `userType=${threadPayload.userContext.userType}`,
@@ -174,7 +175,10 @@ export class OkestraLlmService {
     try {
       return this.parseJsonResponse(data.choices[0].message.content);
     } catch {
-      console.error('[OKESTRA]','Failed to parse LLM response, returning fallback');
+      console.error(
+        '[OKESTRA]',
+        'Failed to parse LLM response, returning fallback',
+      );
       return this.getFallbackResponse();
     }
   }
@@ -189,7 +193,9 @@ export class OkestraLlmService {
   private async fetchTopicData(topicId: string) {
     const { data: topicData, error: topicError } = await this.admin
       .from('forum_topics')
-      .select('id, title, content, tags, user_id, is_anonymous, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, comments_count')
+      .select(
+        'id, title, content, tags, user_id, is_anonymous, reaction_seen_count, reaction_validated_count, reaction_inspired_count, reaction_heard_count, comments_count',
+      )
       .eq('id', topicId)
       .single();
 
@@ -209,7 +215,9 @@ export class OkestraLlmService {
       console.error(`[OKESTRA] Comments fetch error: ${commentsError.message}`);
     }
 
-    console.error(`[OKESTRA] Topic="${topicData?.title?.slice(0, 50)}", comments=${commentsData?.length ?? 0}`);
+    console.error(
+      `[OKESTRA] Topic="${topicData?.title?.slice(0, 50)}", comments=${commentsData?.length ?? 0}`,
+    );
 
     const topic = {
       title: topicData?.title || '',
@@ -260,7 +268,8 @@ export class OkestraLlmService {
       );
     }
 
-    console.error('[OKESTRA]',
+    console.error(
+      '[OKESTRA]',
       `Nook fetch: id=${nookId}, found=${!!nookData}, title="${nookData?.title?.slice(0, 50)}", messages=${messagesData?.length ?? 0}`,
     );
 
