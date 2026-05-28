@@ -79,10 +79,8 @@ export class FeedsService {
       profile.company_alumni_encrypted &&
       Array.isArray(profile.company_alumni_encrypted)
     ) {
-      for (const alumniEncrypted of profile.company_alumni_encrypted) {
-        try {
-          companies.push(this.encryption.decrypt(alumniEncrypted));
-        } catch {}
+      for (const enc of profile.company_alumni_encrypted) {
+        try { companies.push(this.encryption.decrypt(enc)); } catch {}
       }
     }
 
