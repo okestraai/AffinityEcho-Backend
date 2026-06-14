@@ -231,19 +231,26 @@ describe('NooksService', () => {
   });
 
   describe('remove', () => {
-    it('should delete nook', async () => {
+    it('should hard-delete nook and its messages', async () => {
       const fetchChain = createMockQueryChain({
         data: { creator_id: 'u1' },
         error: null,
       });
-      const deleteChain = createMockQueryChain({ data: null, error: null });
+      const msgDeleteChain = createMockQueryChain({ data: null, error: null });
+      const nookDeleteChain = createMockQueryChain({ data: null, error: null });
       mockClient.from
         .mockReturnValueOnce(fetchChain)
-        .mockReturnValueOnce(deleteChain);
+        .mockReturnValueOnce(msgDeleteChain)
+        .mockReturnValueOnce(nookDeleteChain);
 
       const result = await service.remove('nook-1');
       expect(result.success).toBe(true);
       expect(result.message).toBe(MSG.NOOK.DELETED);
+      // User-initiated delete is a true hard delete: messages then nook,
+      // not a soft-delete (no deleted_at update).
+      expect(msgDeleteChain.delete).toHaveBeenCalled();
+      expect(nookDeleteChain.delete).toHaveBeenCalled();
+      expect(nookDeleteChain.update).not.toHaveBeenCalled();
     });
 
     it('should throw if nook not found', async () => {

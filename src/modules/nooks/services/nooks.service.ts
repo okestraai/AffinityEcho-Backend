@@ -388,34 +388,24 @@ export class NooksService {
   async remove(id: string, userId?: string) {
     const { data: nook, error: fetchError } = await this.admin
       .from('nooks')
-      .select('creator_id, deleted_at')
+      .select('creator_id')
       .eq('id', id)
       .single();
 
     if (fetchError || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
-    if (nook.deleted_at) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
     if (userId && nook.creator_id !== userId)
       throw new ForbiddenException('You can only delete your own nooks');
 
-    const now = new Date().toISOString();
+    // User-initiated delete is a true hard delete — the user's data is removed
+    // entirely (unlike natural 24h expiry, which soft-archives for retention).
+    // Delete messages FIRST: their nook_id FK is ON DELETE SET NULL (see
+    // migration 20260413000001_nook_messages_fk_set_null), so deleting the nook
+    // alone would orphan them instead of removing them. Deleting messages here
+    // cascades their replies and message reactions.
+    await this.admin.from('nook_messages').delete().eq('nook_id', id);
 
-    // Soft-delete all nook_messages
-    await this.admin
-      .from('nook_messages')
-      .update({ is_deleted: true, deleted_at: now })
-      .eq('nook_id', id);
-
-    // Delete nook_reactions
-    await this.admin.from('nook_reactions').delete().eq('nook_id', id);
-
-    // Delete nook_members
-    await this.admin.from('nook_members').delete().eq('nook_id', id);
-
-    // Soft-delete the nook (use existing deleted_at column)
-    const { error } = await this.admin
-      .from('nooks')
-      .update({ deleted_at: now })
-      .eq('id', id);
+    // Delete the nook — cascades nook_members and nook_reactions.
+    const { error } = await this.admin.from('nooks').delete().eq('id', id);
 
     if (error) throw new BadRequestException(error.message);
 

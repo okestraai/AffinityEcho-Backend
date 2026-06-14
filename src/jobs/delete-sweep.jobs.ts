@@ -143,24 +143,27 @@ export class DeleteSweepJobs {
         totalDeleted += deletedTopics.length;
       }
 
-      // 8. Hard-delete nooks (deleted_at > 6 months — existing column used by admin + user delete)
-      const { data: deletedNooks } = await this.admin
-        .from('nooks')
-        .select('id')
-        .not('deleted_at', 'is', null)
-        .lt('deleted_at', cutoff);
-
-      if (deletedNooks && deletedNooks.length > 0) {
-        const nookIds = deletedNooks.map((n: any) => n.id);
-        await this.admin.from('nook_reactions').delete().in('nook_id', nookIds);
-        await this.admin.from('nook_members').delete().in('nook_id', nookIds);
-        await this.admin
-          .from('nooks')
-          .delete()
-          .not('deleted_at', 'is', null)
-          .lt('deleted_at', cutoff);
-        totalDeleted += deletedNooks.length;
-      }
+      // 8. Hard-delete nooks — DISABLED 2026-06-14: nooks are now retained
+      // indefinitely for data analysis / LLM training. Admin-soft-deleted nooks
+      // (deleted_at set) are kept; natural expiry soft-archives (is_active=false)
+      // and never sets deleted_at. Re-enable this block to resume the 6-month purge.
+      // const { data: deletedNooks } = await this.admin
+      //   .from('nooks')
+      //   .select('id')
+      //   .not('deleted_at', 'is', null)
+      //   .lt('deleted_at', cutoff);
+      //
+      // if (deletedNooks && deletedNooks.length > 0) {
+      //   const nookIds = deletedNooks.map((n: any) => n.id);
+      //   await this.admin.from('nook_reactions').delete().in('nook_id', nookIds);
+      //   await this.admin.from('nook_members').delete().in('nook_id', nookIds);
+      //   await this.admin
+      //     .from('nooks')
+      //     .delete()
+      //     .not('deleted_at', 'is', null)
+      //     .lt('deleted_at', cutoff);
+      //   totalDeleted += deletedNooks.length;
+      // }
 
       logger.info('Delete sweep completed', {
         module: 'DeleteSweep',
