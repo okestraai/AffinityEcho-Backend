@@ -6,6 +6,7 @@ import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { MentorshipQueryDto } from '../dto/mentorship-query.dto';
+import { AFFINITY_GROUP_LABELS } from '../../../common/constants/affinity-groups';
 import logger from '../../../common/utils/logger.util';
 
 @Injectable()
@@ -559,18 +560,7 @@ export class MentorshipDiscoverService {
             'SaaS',
             'E-commerce',
           ],
-          affinityTags: [
-            'Black Professionals',
-            'Latino Leaders',
-            'Women in Leadership',
-            'LGBTQ+ in Finance',
-            'Asian Entrepreneurs',
-            'First-Gen College Grads',
-            'Working Parents',
-            'Military Veterans',
-            'Disabled Professionals',
-            'Immigrant Professionals',
-          ],
+          affinityTags: AFFINITY_GROUP_LABELS,
           availabilityOptions: [
             'Immediate',
             'Within 1 week',

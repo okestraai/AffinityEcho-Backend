@@ -56,7 +56,7 @@ describe('OnboardingService', () => {
       careerLevel: 'Senior',
       company: 'Google',
       companyType: 'static',
-      affinityTags: ['black-professionals', 'immigrant-professionals'],
+      affinityTags: ['Black Professionals', 'Immigrant Professionals'],
     };
 
     it('should save onboarding data and send welcome email', async () => {
@@ -106,6 +106,29 @@ describe('OnboardingService', () => {
 
       const result = await service.saveOnboardingData('u1', dto as any);
       expect(result.has_completed_onboarding).toBe(true); // Still succeeds
+    });
+
+    it('should reject invalid affinity tags', async () => {
+      await expect(
+        service.saveOnboardingData('u1', {
+          ...dto,
+          affinityTags: ['Black Professionals', 'not-a-real-group'],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should accept legacy kebab-case and retired affinity tags', async () => {
+      const updateChain = createMockQueryChain({
+        data: { username: 'Test', email: 'test@test.com' },
+        error: null,
+      });
+      mockClient.from.mockReturnValueOnce(updateChain);
+
+      const result = await service.saveOnboardingData('u1', {
+        ...dto,
+        affinityTags: ['black-professionals', 'Black Women in Tech'],
+      } as any);
+      expect(result.has_completed_onboarding).toBe(true);
     });
 
     it('should throw on update error', async () => {

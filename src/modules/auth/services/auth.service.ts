@@ -1413,6 +1413,35 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  // Safely decrypt a single encrypted field; returns null on any failure.
+  private decryptField(value: string | null | undefined): string | null {
+    if (!value) return null;
+    try {
+      return this.encryption.decrypt(value);
+    } catch {
+      return null;
+    }
+  }
+
+  // Decrypt the JSON-encoded affinity tags array, tolerating legacy formats.
+  private decryptAffinityTags(value: string | null | undefined): string[] {
+    if (!value) return [];
+    try {
+      const decrypted = this.encryption.decrypt(value);
+      const parsed = JSON.parse(decrypted);
+      if (typeof parsed === 'string') return JSON.parse(parsed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      try {
+        const parsed = JSON.parse(value);
+        if (typeof parsed === 'string') return JSON.parse(parsed);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
   private cleanUserData(profile: any): UserProfileResponse {
     // Supabase returns `any` from .single(), so we cast safely
     const p = profile;
@@ -1422,10 +1451,22 @@ export class AuthService {
       username: p.username,
       email: p.email,
       first_name: p.first_name_encrypted
-        ? (() => { try { return this.encryption.decrypt(p.first_name_encrypted); } catch { return null; } })()
+        ? (() => {
+            try {
+              return this.encryption.decrypt(p.first_name_encrypted);
+            } catch {
+              return null;
+            }
+          })()
         : null,
       last_name: p.last_name_encrypted
-        ? (() => { try { return this.encryption.decrypt(p.last_name_encrypted); } catch { return null; } })()
+        ? (() => {
+            try {
+              return this.encryption.decrypt(p.last_name_encrypted);
+            } catch {
+              return null;
+            }
+          })()
         : null,
       avatar: p.avatar ?? null,
       bio: p.bio ?? null,
@@ -1454,6 +1495,22 @@ export class AuthService {
       career_level_encrypted: p.career_level_encrypted,
       company_encrypted: p.company_encrypted,
       affinity_tags_encrypted: p.affinity_tags_encrypted,
+
+      basicProfile: {
+        bio: p.bio ?? null,
+        jobTitle: p.job_title ?? null,
+        location: p.location ?? null,
+        yearsExperience: p.years_experience ?? null,
+        skills: p.skills || [],
+        linkedinUrl: p.linkedin_url ?? null,
+      },
+      demographics: {
+        race: this.decryptField(p.race_encrypted),
+        gender: this.decryptField(p.gender_encrypted),
+        careerLevel: this.decryptField(p.career_level_encrypted),
+        company: this.decryptField(p.company_encrypted),
+        affinityTags: this.decryptAffinityTags(p.affinity_tags_encrypted),
+      },
     };
   }
 
