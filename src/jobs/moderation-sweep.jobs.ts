@@ -59,7 +59,9 @@ export class ModerationSweepJobs {
     try {
       const pool = getPool();
       let totalEnqueued = 0;
-      const perType = Math.ceil(this.maxPerSweep / ModerationSweepJobs.CONTENT_TABLES.length);
+      const perType = Math.ceil(
+        this.maxPerSweep / ModerationSweepJobs.CONTENT_TABLES.length,
+      );
 
       // Fetch all content types in parallel
       const allResults = await Promise.all(

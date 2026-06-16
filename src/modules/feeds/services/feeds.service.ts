@@ -80,7 +80,9 @@ export class FeedsService {
       Array.isArray(profile.company_alumni_encrypted)
     ) {
       for (const enc of profile.company_alumni_encrypted) {
-        try { companies.push(this.encryption.decrypt(enc)); } catch {}
+        try {
+          companies.push(this.encryption.decrypt(enc));
+        } catch {}
       }
     }
 
