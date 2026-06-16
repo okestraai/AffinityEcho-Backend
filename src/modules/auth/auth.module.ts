@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
+import { AffinityGroupsController } from './controllers/affinity-groups.controller';
 import { AuthService } from './services/auth.service';
 import { OnboardingService } from './services/onboarding.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -26,7 +27,7 @@ import { PassportModule } from '@nestjs/passport';
     }),
     ConfigModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AffinityGroupsController],
   providers: [
     AuthService,
     JwtAuthGuard,

@@ -106,11 +106,26 @@ export class AdminReportsService {
     // Summary counts via head-count queries instead of full table scan
     const [submitted, underReview, resolved, declined, critical] =
       await Promise.all([
-        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'submitted'),
-        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'under_review'),
-        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'resolved'),
-        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('status', 'declined'),
-        this.admin.from('harassment_reports').select('id', { count: 'exact', head: true }).eq('immediate_risk', true),
+        this.admin
+          .from('harassment_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'submitted'),
+        this.admin
+          .from('harassment_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'under_review'),
+        this.admin
+          .from('harassment_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'resolved'),
+        this.admin
+          .from('harassment_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'declined'),
+        this.admin
+          .from('harassment_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('immediate_risk', true),
       ]);
 
     const summary = {

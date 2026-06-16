@@ -224,7 +224,8 @@ export class UserDiscoveryService {
 
       const enhancedUsers = filteredUsers.map((user: any) => {
         // Mutual = I follow them AND they follow me
-        const mutual = (iFollow.has(user.id) ? 1 : 0) + (followMe.has(user.id) ? 1 : 0);
+        const mutual =
+          (iFollow.has(user.id) ? 1 : 0) + (followMe.has(user.id) ? 1 : 0);
         const commonSkills = user.skills || [];
 
         let company = null;

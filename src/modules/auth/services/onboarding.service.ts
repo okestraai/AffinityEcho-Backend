@@ -11,6 +11,7 @@ import logger from '../../../common/utils/logger.util';
 import { EmailService } from '../../../common/utils/email/email.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { MSG } from '../../../common/constants/messages';
+import { isValidAffinityTag } from '../../../common/constants/affinity-groups';
 
 @Injectable()
 export class OnboardingService {
@@ -67,6 +68,14 @@ export class OnboardingService {
         encryptedData.company_type = data.companyType;
       }
       if (data.affinityTags && data.affinityTags.length > 0) {
+        const invalidTags = data.affinityTags.filter(
+          (tag) => !isValidAffinityTag(tag),
+        );
+        if (invalidTags.length > 0) {
+          throw new BadRequestException(
+            `Invalid affinity group(s): ${invalidTags.join(', ')}`,
+          );
+        }
         encryptedData.affinity_tags_encrypted = this.encryption.encrypt(
           JSON.stringify(data.affinityTags),
         );

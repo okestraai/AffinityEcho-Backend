@@ -56,7 +56,7 @@ export class AdminNooksService {
 
     // Batch enrich with message stats — 2 queries instead of 2×N
     const nookIds = (data ?? []).map((n: any) => n.id);
-    let msgStatsMap = new Map<string, { total: number; thisWeek: number }>();
+    const msgStatsMap = new Map<string, { total: number; thisWeek: number }>();
     if (nookIds.length > 0) {
       const [allMsgs, weekMsgs] = await Promise.all([
         this.admin
@@ -82,19 +82,38 @@ export class AdminNooksService {
     }
     const nooks = (data ?? []).map((n: any) => {
       const stats = msgStatsMap.get(n.id) || { total: 0, thisWeek: 0 };
-      return { ...n, message_count: stats.total, messages_this_week: stats.thisWeek };
+      return {
+        ...n,
+        message_count: stats.total,
+        messages_this_week: stats.thisWeek,
+      };
     });
 
     // Summary — 4 head-count queries instead of full table scan
     const [publicCount, companyCount, lockedCount] = await Promise.all([
-      this.admin.from('nooks').select('id', { count: 'exact', head: true }).eq('scope', 'public').is('deleted_at', null),
-      this.admin.from('nooks').select('id', { count: 'exact', head: true }).eq('scope', 'company').is('deleted_at', null),
-      this.admin.from('nooks').select('id', { count: 'exact', head: true }).eq('is_locked', true).is('deleted_at', null),
+      this.admin
+        .from('nooks')
+        .select('id', { count: 'exact', head: true })
+        .eq('scope', 'public')
+        .is('deleted_at', null),
+      this.admin
+        .from('nooks')
+        .select('id', { count: 'exact', head: true })
+        .eq('scope', 'company')
+        .is('deleted_at', null),
+      this.admin
+        .from('nooks')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_locked', true)
+        .is('deleted_at', null),
     ]);
     const summary = {
       total: count ?? 0,
       public: publicCount.count ?? 0,
-      private: Math.max(0, (count ?? 0) - (publicCount.count ?? 0) - (companyCount.count ?? 0)),
+      private: Math.max(
+        0,
+        (count ?? 0) - (publicCount.count ?? 0) - (companyCount.count ?? 0),
+      ),
       company: companyCount.count ?? 0,
       locked: lockedCount.count ?? 0,
     };

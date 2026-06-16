@@ -26,13 +26,30 @@ export interface UserProfileResponse {
   last_active_at: string;
   role: string;
 
-  // Encrypted sensitive fields (sent to frontend as-is)
+  // Encrypted sensitive fields (sent to frontend as-is, kept for backward compat)
   company_type: string | null;
   race_encrypted: string | null;
   gender_encrypted: string | null;
   career_level_encrypted: string | null;
   company_encrypted: string | null;
   affinity_tags_encrypted: string | null;
+
+  // Server-decrypted profile data so the client can hydrate without decrypting.
+  basicProfile: {
+    bio: string | null;
+    jobTitle: string | null;
+    location: string | null;
+    yearsExperience: number | null;
+    skills: string[];
+    linkedinUrl: string | null;
+  };
+  demographics: {
+    race: string | null;
+    gender: string | null;
+    careerLevel: string | null;
+    company: string | null;
+    affinityTags: string[];
+  };
 
   // Admin permissions (only present for admin role; null for super_admin; undefined for other roles)
   permissions?: string[] | null;
