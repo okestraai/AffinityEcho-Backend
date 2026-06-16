@@ -98,6 +98,12 @@ export class OkestraLlmService {
   private cfClientId: string;
   private cfClientSecret: string;
 
+  // Resilience for the vLLM call: the endpoint occasionally has cold-connect/DNS
+  // blips that undici aborts with UND_ERR_CONNECT_TIMEOUT. Without a retry a single
+  // blip makes insights look "unreachable", so we retry with backoff + a hard timeout.
+  private readonly VLLM_MAX_RETRIES = 3;
+  private readonly VLLM_TIMEOUT_MS = 20000;
+
   constructor(private config: ConfigService) {
     this.admin = supabaseAdmin(config);
 
@@ -133,36 +139,20 @@ export class OkestraLlmService {
         `userType=${threadPayload.userContext.userType}`,
     );
 
-    // Call vLLM directly (OpenAI-compatible /v1/chat/completions)
-    const response = await fetch(`${this.vllmChatUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'CF-Access-Client-Id': this.cfClientId,
-        'CF-Access-Client-Secret': this.cfClientSecret,
-      },
-      body: JSON.stringify({
-        model: 'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4',
-        messages: [
-          { role: 'system', content: OKESTRA_SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: JSON.stringify(threadPayload),
-          },
-        ],
-        max_tokens: 1024,
-        temperature: 0.3,
-      }),
+    // Call vLLM directly (OpenAI-compatible /v1/chat/completions) with
+    // bounded timeout + retry so transient connect blips don't surface as outages.
+    const data = await this.callVllmChat({
+      model: 'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4',
+      messages: [
+        { role: 'system', content: OKESTRA_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: JSON.stringify(threadPayload),
+        },
+      ],
+      max_tokens: 1024,
+      temperature: 0.3,
     });
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: 'Unknown error' }));
-      throw new Error(`vLLM error: ${errorData.error || response.status}`);
-    }
-
-    const data = await response.json();
 
     if (data.error) {
       throw new Error(`LLM Error: ${data.error.message || String(data.error)}`);
@@ -181,6 +171,59 @@ export class OkestraLlmService {
       );
       return this.getFallbackResponse();
     }
+  }
+
+  /**
+   * POST to the vLLM /v1/chat/completions endpoint with a bounded per-attempt
+   * timeout and bounded retries. Mirrors the resilience used by the seed scripts.
+   * Returns the parsed JSON body on success; throws after the final attempt.
+   */
+  private async callVllmChat(payload: Record<string, unknown>): Promise<any> {
+    let lastErr: unknown;
+
+    for (let attempt = 1; attempt <= this.VLLM_MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.VLLM_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(`${this.vllmChatUrl}/v1/chat/completions`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'CF-Access-Client-Id': this.cfClientId,
+            'CF-Access-Client-Secret': this.cfClientSecret,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response
+            .json()
+            .catch(() => ({ error: 'Unknown error' }));
+          throw new Error(`vLLM error: ${errorData.error || response.status}`);
+        }
+
+        return await response.json();
+      } catch (err: any) {
+        lastErr = err;
+        const reason = err?.name === 'AbortError'
+          ? `timeout after ${this.VLLM_TIMEOUT_MS}ms`
+          : err?.message || String(err);
+        this.logger.warn(
+          `vLLM attempt ${attempt}/${this.VLLM_MAX_RETRIES} failed: ${reason}`,
+        );
+        if (attempt < this.VLLM_MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    throw lastErr instanceof Error
+      ? lastErr
+      : new Error(`vLLM request failed: ${String(lastErr)}`);
   }
 
   private async fetchContentData(contentType: ContentType, contentId: string) {
