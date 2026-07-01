@@ -34,6 +34,7 @@ import { AdminHealthService } from './modules/admin/services/admin-health.servic
 import { EmailService } from './common/utils/email/email.service';
 import { OkestraModule } from './modules/okestra/okestra.module';
 import { ContentSafetyModule } from './modules/content-safety/content-safety.module';
+import { CoachingModule } from './modules/coaching/coaching.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { ContentSafetyModule } from './modules/content-safety/content-safety.mod
     AdminModule,
     OkestraModule,
     ContentSafetyModule,
+    CoachingModule,
   ],
   controllers: [AppController],
   providers: [

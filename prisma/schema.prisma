@@ -1333,3 +1333,189 @@ model mentions {
   @@index([content_type, content_id])
   @@map("mentions")
 }
+
+//
+// COACHING AGENT (Echo) — standalone GROW coaching feature.
+// user_id is a plain UUID (no FK relation to user_profiles) to keep this module
+// self-contained; relations are only between coaching tables. Content columns
+// ending in _encrypted hold AES-256-GCM ciphertext.
+//
+model coaching_engagements {
+  id                         String   @id @default(uuid()) @db.Uuid
+  user_id                    String   @db.Uuid
+  status                     String   @default("active") @db.VarChar(20)
+  focus_encrypted            String?  @db.Text
+  current_stage              String    @default("OPENING") @db.VarChar(16)
+  semantic_summary_encrypted String?   @db.Text
+  profile_encrypted          String?   @db.Text
+  profile_refreshed_at       DateTime? @db.Timestamptz(3)
+  consent_collect            Boolean   @default(false)
+  consent_share              Boolean   @default(false)
+  created_at                 DateTime  @default(now()) @db.Timestamptz(3)
+  updated_at                 DateTime  @default(now()) @db.Timestamptz(3)
+
+  sessions    coaching_sessions[]
+  messages    coaching_messages[]
+  memory      coaching_memory[]
+  commitments coaching_commitments[]
+
+  @@index([user_id, status])
+  @@map("coaching_engagements")
+}
+
+model coaching_sessions {
+  id                   String    @id @default(uuid()) @db.Uuid
+  engagement_id        String    @db.Uuid
+  user_id              String    @db.Uuid
+  status               String    @default("active") @db.VarChar(20)
+  stage                String    @default("OPENING") @db.VarChar(16)
+  modality             String    @default("text") @db.VarChar(10)
+  goal_encrypted       String?   @db.Text
+  summary_encrypted    String?   @db.Text
+  commitment_encrypted String?   @db.Text
+  opened_at            DateTime  @default(now()) @db.Timestamptz(3)
+  closed_at            DateTime? @db.Timestamptz(3)
+  created_at           DateTime  @default(now()) @db.Timestamptz(3)
+
+  engagement  coaching_engagements   @relation(fields: [engagement_id], references: [id], onDelete: Cascade)
+  messages    coaching_messages[]
+  memory      coaching_memory[]
+  commitments coaching_commitments[]
+
+  @@index([engagement_id])
+  @@index([user_id, status])
+  @@map("coaching_sessions")
+}
+
+model coaching_messages {
+  id                String   @id @default(uuid()) @db.Uuid
+  session_id        String   @db.Uuid
+  engagement_id     String   @db.Uuid
+  role              String   @db.VarChar(10)
+  content_encrypted String   @db.Text
+  stage             String   @default("OPENING") @db.VarChar(16)
+  modality          String   @default("text") @db.VarChar(10)
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+
+  session    coaching_sessions    @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  engagement coaching_engagements @relation(fields: [engagement_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id, created_at])
+  @@map("coaching_messages")
+}
+
+model coaching_memory {
+  id                String   @id @default(uuid()) @db.Uuid
+  engagement_id     String   @db.Uuid
+  user_id           String   @db.Uuid
+  kind              String   @db.VarChar(12)
+  content_encrypted String   @db.Text
+  source_session_id String?  @db.Uuid
+  salience          Float    @default(0.5) @db.Real
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+
+  engagement coaching_engagements @relation(fields: [engagement_id], references: [id], onDelete: Cascade)
+  session    coaching_sessions?   @relation(fields: [source_session_id], references: [id], onDelete: SetNull)
+
+  @@index([engagement_id, kind])
+  @@map("coaching_memory")
+}
+
+model coaching_commitments {
+  id                String    @id @default(uuid()) @db.Uuid
+  engagement_id     String    @db.Uuid
+  session_id        String?   @db.Uuid
+  user_id           String    @db.Uuid
+  content_encrypted String    @db.Text
+  status            String    @default("open") @db.VarChar(12)
+  due_at            DateTime? @db.Timestamptz(3)
+  follow_up_at      DateTime? @db.Timestamptz(3)
+  created_at        DateTime  @default(now()) @db.Timestamptz(3)
+
+  engagement coaching_engagements @relation(fields: [engagement_id], references: [id], onDelete: Cascade)
+  session    coaching_sessions?   @relation(fields: [session_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, status])
+  @@index([follow_up_at])
+  @@map("coaching_commitments")
+}
+
+model coaching_safety_events {
+  id               String   @id @default(uuid()) @db.Uuid
+  user_id          String   @db.Uuid
+  session_id       String?  @db.Uuid
+  category         String   @db.VarChar(16)
+  severity         String   @db.VarChar(10)
+  action           String   @default("none") @db.VarChar(12)
+  detail_encrypted String?  @db.Text
+  created_at       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([user_id, created_at])
+  @@map("coaching_safety_events")
+}
+
+model coaching_feedback {
+  id                String   @id @default(uuid()) @db.Uuid
+  session_id        String?  @unique @db.Uuid
+  user_id           String   @db.Uuid
+  rating            Int      @db.SmallInt
+  comment_encrypted String?  @db.Text
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([rating, created_at])
+  @@map("coaching_feedback")
+}
+
+model coaching_learnings {
+  id               String   @id @default(uuid()) @db.Uuid
+  lesson_encrypted String   @db.Text
+  source_rating    Int?     @db.SmallInt
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([is_active, created_at(sort: Desc)])
+  @@map("coaching_learnings")
+}
+
+model coaching_safety_evals {
+  id                  String   @id @default(uuid()) @db.Uuid
+  session_id          String?  @db.Uuid
+  kind                String   @db.VarChar(20)
+  regex_category      String?  @db.VarChar(16)
+  classifier_category String?  @db.VarChar(16)
+  classifier_severity String?  @db.VarChar(10)
+  message_encrypted   String?  @db.Text
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([kind, created_at(sort: Desc)])
+  @@map("coaching_safety_evals")
+}
+
+model coaching_support_tickets {
+  id                   String   @id @default(uuid()) @db.Uuid
+  reference_number     String   @unique @db.VarChar(24)
+  user_id              String   @db.Uuid
+  handle               String?  @db.VarChar(60)
+  category             String   @db.VarChar(16)
+  severity             String   @db.VarChar(10)
+  session_id           String?  @db.Uuid
+  transcript_encrypted String?  @db.Text
+  status               String   @default("open") @db.VarChar(16)
+  created_at           DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([status, created_at(sort: Desc)])
+  @@index([user_id])
+  @@map("coaching_support_tickets")
+}
+
+model coaching_rulebook {
+  id             String   @id @default(uuid()) @db.Uuid
+  rule_encrypted String   @db.Text
+  weight         Int      @default(1)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now()) @db.Timestamptz(3)
+  updated_at     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([is_active, weight(sort: Desc)])
+  @@map("coaching_rulebook")
+}
