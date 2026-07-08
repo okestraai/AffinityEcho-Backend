@@ -15,6 +15,11 @@ import { CoachRepositoryService } from './coach-repository.service';
 import { CoachLlmRouterService, ChatMessage } from './coach-llm-router.service';
 import { CoachSafetyService } from './coach-safety.service';
 import { CoachProfileService } from './coach-profile.service';
+import {
+  CoachResourceService,
+  formatResources,
+  pickMentioned,
+} from './coach-resource.service';
 import { Engagement } from '../interfaces/coaching.types';
 import { buildStagePrompt } from '../state-machine/stage-prompts';
 import { parseControlTokens } from '../state-machine/control-tokens';
@@ -37,9 +42,22 @@ export class CoachSessionService {
     private readonly safety: CoachSafetyService,
     private readonly profile: CoachProfileService,
     private readonly learning: CoachLearningService,
+    private readonly resources: CoachResourceService,
   ) {}
 
   private readonly PROFILE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /**
+   * Whether to retrieve + inject in-product resources this turn. Only in the
+   * "doing" stages (where recommendations belong) or when the client explicitly
+   * asks — so we don't pay for the search or the prompt block on every turn.
+   */
+  private wantsResources(stage: CoachStage, message: string): boolean {
+    if (stage === 'OPTIONS' || stage === 'WILL') return true;
+    return /\b(resource|mentor|coach|forum|post|article|guide|connect|recommend|refer|where can i|who (can|could)|anyone (who|that)|community|group|support)\b/i.test(
+      message,
+    );
+  }
 
   /**
    * Ensure we have a reasonably fresh coaching profile for the user, generating
@@ -258,7 +276,18 @@ export class CoachSessionService {
       session.engagementId,
       session.id,
     ));
-    const learnings = await this.learning.getRules(8);
+    const learnings = await this.learning.getRules(6);
+    // Ground the coach in REAL, accessible resources — but only when they're
+    // actually useful (the doing stages, or when the client asks). Skipping this
+    // on early/irrelevant turns saves both the DB search and the prompt tokens.
+    const doResources = this.wantsResources(session.stage, clientMessage);
+    const foundResources = doResources
+      ? await this.resources.find(
+          userId,
+          [session.goal, clientMessage].filter(Boolean).join(' '),
+        )
+      : { mentors: [], topics: [], posts: [] };
+    const resources = doResources ? formatResources(foundResources) : '';
     const systemPrompt = buildStagePrompt(session.stage, {
       clientName,
       focus: engagement.focus,
@@ -269,11 +298,14 @@ export class CoachSessionService {
       learnings,
       sessionGoal: session.goal,
       referral: safety.referral,
+      resources,
       stageTurnCount,
     });
 
-    // 4) Build conversation history (coach→assistant, client→user).
-    const turns = await this.repo.getTurns(session.id, 20);
+    // 4) Build conversation history (coach→assistant, client→user). Capped at the
+    //    recent window; the goal anchor + session memory carry older context, so
+    //    we don't pay to resend the whole transcript every turn.
+    const turns = await this.repo.getTurns(session.id, 12);
     const history: ChatMessage[] = turns.map((t) => ({
       role: t.role === 'coach' ? ('assistant' as const) : ('user' as const),
       content: t.content,
@@ -349,6 +381,7 @@ export class CoachSessionService {
       isComplete,
       advicePending: parsed.adviceRequest,
       askFeedback,
+      resources: pickMentioned(foundResources, coachMessage),
       safety,
     };
   }

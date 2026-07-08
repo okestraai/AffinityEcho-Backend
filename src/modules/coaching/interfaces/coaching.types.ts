@@ -56,6 +56,13 @@ export interface CoachSession {
   goal: string | null;
 }
 
+/** Real, clickable in-product resources the coach recommended this turn. */
+export interface CoachResourceLinks {
+  mentors: { handle: string; expertise: string; userId: string }[];
+  topics: { title: string; forum: string; topicId: string }[];
+  posts: { snippet: string; postId: string }[];
+}
+
 /** Result of a single client→coach turn, returned to any client (web/mobile). */
 export interface TurnResult {
   sessionId: string;
@@ -67,6 +74,8 @@ export interface TurnResult {
   advicePending: boolean;
   /** When the session just ended, whether to ask this user for feedback. */
   askFeedback?: boolean;
+  /** Clickable in-product resources the coach recommended this turn (if any). */
+  resources?: CoachResourceLinks;
   safety: SafetyResult;
 }
 

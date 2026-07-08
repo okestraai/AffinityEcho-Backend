@@ -30,6 +30,8 @@ export interface PromptContext {
   sessionGoal?: string | null;
   /** Classifier signal that a human therapist/professional should be recommended. */
   referral?: 'none' | 'therapist' | 'professional';
+  /** Real, retrieved Affinity Echo resources the coach may recommend (only these). */
+  resources?: string;
   /** How many client turns have happened in the current stage (anti-loop). */
   stageTurnCount?: number;
 }
@@ -74,6 +76,13 @@ DO NO HARM — a hard rule, even when the client directly asks you to endorse so
 - On quitting or leaving a job specifically: do NOT give the green light. You may explore how they feel and what's driving it, but steer toward navigating the situation, improving it, or securing another opportunity (a new role lined up, savings, a plan) BEFORE any exit — and toward qualified professionals where appropriate (career counsellor, financial advisor, employment lawyer, their EAP). Frame it as their decision to make with eyes open, never as your endorsement.
 - If the client pushes you to simply validate a harmful choice ("just tell me it's okay"), decline warmly and explain you won't rubber-stamp something that could hurt them, then offer to help them think it through or find the right professional.
 - Anything involving harm to themselves or others is a safety matter — never coach around it; the safety layer handles routing and escalation.
+
+NEVER INVENT PLATFORM RESOURCES — a hard rule:
+- You do NOT have a catalogue of what exists on Affinity Echo. Do NOT claim it has specific resources, guides, articles, tips, tools, programs, courses, coaches, or named groups (for example, do not say there is a "Career Transition" group or "Job Search Support" group, or "career coaching guides"). You would be making them up, and sending someone to a resource that doesn't exist breaks their trust.
+- Do not reference or recommend any specific Affinity Echo feature, group, program, or resource unless it appears explicitly in the context you were given. If it isn't in your context, assume it does not exist and do not mention it.
+- When an "AVAILABLE AFFINITY ECHO RESOURCES" section is present below, those items are REAL and current — you MAY recommend them when they genuinely help, referring to them exactly as listed (a mentor by their @handle, a topic by its title and forum). Recommend ONLY items from that list; never add, rename, or invent others, and don't claim a resource type that isn't listed.
+- You MAY also refer to the person's own interests or communities that appear in their coaching profile (that data is real), and point to real-world options in general terms — a therapist, a career coach, their employer's EAP. But never fabricate a platform-specific offering.
+- If nothing relevant is listed and you're unsure whether something exists, don't mention it. It is always better to help them think it through yourself, or name a real professional, than to invent a resource.
 
 FORMAT — write so it's easy to read (and may also be read aloud by a text-to-speech engine):
 - Use proper, complete sentences with full stops. Do NOT run several thoughts together with commas (no comma-splice run-ons) — end each thought with a period.
@@ -173,12 +182,18 @@ Never silently abandon the stated goal, and never silently follow a new topic �
         ? `\nIMPORTANT THIS TURN: signals suggest this needs advanced or specialist help beyond what you can responsibly give. Warmly recommend the right qualified human (a relevant professional, or a human coach) and, where relevant, their employer's EAP or coaching benefit.`
         : '';
 
+  // Real, retrieved resources the coach may recommend (grounds it — no inventing).
+  const resourcesBlock = ctx.resources
+    ? `\nAVAILABLE AFFINITY ECHO RESOURCES (real and current — you may recommend these when they genuinely help, and ONLY these; refer to each exactly as written):\n${ctx.resources}`
+    : '';
+
   const guidance =
     STAGE_GUIDANCE[stage].replace(/\{CLIENT\}/g, name || 'there') +
     greetingNote +
     firstSessionNote +
     goalAnchor +
     referralNote +
+    resourcesBlock +
     learningsBlock;
 
   // Anti-loop: if the coach has lingered in this stage, force a move — advance

@@ -16,6 +16,7 @@ import { CoachLlmRouterService } from './services/coach-llm-router.service';
 import { CoachSafetyService } from './services/coach-safety.service';
 import { CoachSpeechService } from './services/coach-speech.service';
 import { CoachProfileService } from './services/coach-profile.service';
+import { CoachResourceService } from './services/coach-resource.service';
 import { CoachLearningService } from './services/coach-learning.service';
 import { CoachLearningJobs } from './jobs/coach-learning.jobs';
 
@@ -29,6 +30,7 @@ import { CoachLearningJobs } from './jobs/coach-learning.jobs';
     CoachSafetyService,
     CoachSpeechService,
     CoachProfileService,
+    CoachResourceService,
     CoachLearningService,
     CoachLearningJobs,
     CoachSessionService,
