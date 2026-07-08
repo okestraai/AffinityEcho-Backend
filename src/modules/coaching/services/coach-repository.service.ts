@@ -12,6 +12,7 @@ import { getPool } from '../../../database/pg-client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import {
   CoachModality,
+  CoachResourceLinks,
   CoachRole,
   CoachSession,
   CoachStage,
@@ -301,15 +302,32 @@ export class CoachRepositoryService {
     content: string,
     stage: CoachStage,
     modality: CoachModality,
+    resources?: CoachResourceLinks | null,
   ): Promise<string> {
     // content_encrypted is NOT NULL; never let an empty message reach the DB.
     const safeContent = content && content.trim() ? content : ' ';
+    const hasResources =
+      resources &&
+      (resources.mentors.length ||
+        resources.topics.length ||
+        resources.posts.length);
+    const resourcesJson = hasResources
+      ? this.enc(JSON.stringify(resources))
+      : null;
     const res = await this.pool.query(
       `INSERT INTO coaching_messages
-         (session_id, engagement_id, role, content_encrypted, stage, modality)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (session_id, engagement_id, role, content_encrypted, resources_json, stage, modality)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [sessionId, engagementId, role, this.enc(safeContent), stage, modality],
+      [
+        sessionId,
+        engagementId,
+        role,
+        this.enc(safeContent),
+        resourcesJson,
+        stage,
+        modality,
+      ],
     );
     return res.rows[0].id;
   }
@@ -317,7 +335,7 @@ export class CoachRepositoryService {
   /** Decrypted turns for a session, oldest first, capped to `limit` most recent. */
   async getTurns(sessionId: string, limit = 20): Promise<CoachTurn[]> {
     const res = await this.pool.query(
-      `SELECT role, content_encrypted, stage
+      `SELECT role, content_encrypted, resources_json, stage
          FROM coaching_messages
         WHERE session_id = $1
         ORDER BY created_at DESC
@@ -326,11 +344,23 @@ export class CoachRepositoryService {
     );
     return res.rows
       .reverse()
-      .map((r: any) => ({
-        role: r.role as CoachRole,
-        content: this.dec(r.content_encrypted) ?? '',
-        stage: r.stage as CoachStage,
-      }))
+      .map((r: any) => {
+        let resources: CoachResourceLinks | undefined;
+        const raw = this.dec(r.resources_json ?? null);
+        if (raw) {
+          try {
+            resources = JSON.parse(raw);
+          } catch {
+            resources = undefined;
+          }
+        }
+        return {
+          role: r.role as CoachRole,
+          content: this.dec(r.content_encrypted) ?? '',
+          stage: r.stage as CoachStage,
+          resources,
+        };
+      })
       .filter((t: CoachTurn) => t.content.length > 0);
   }
 

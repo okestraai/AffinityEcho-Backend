@@ -34,6 +34,8 @@ export interface ParsedTurn {
   goal: string | null;
   /** A captured client commitment, if any. */
   commitment: string | null;
+  /** Which kinds of in-product resource cards the coach chose to surface. */
+  show: { mentors: boolean; topics: boolean; posts: boolean };
   /** The session should end. */
   done: boolean;
 }
@@ -52,6 +54,14 @@ export function parseControlTokens(raw: string): ParsedTurn {
       nextStage = candidate;
     }
   }
+
+  const showMatch = text.match(/\[SHOW:\s*([^\]]*)\]/i);
+  const showRaw = showMatch ? showMatch[1].toLowerCase() : '';
+  const show = {
+    mentors: /\bmentors?\b/.test(showRaw),
+    topics: /\btopics?\b/.test(showRaw),
+    posts: /\bposts?\b/.test(showRaw),
+  };
 
   let commitment: string | null = null;
   const commitMatch = text.match(/\[COMMIT:\s*([\s\S]*?)\]/i);
@@ -72,6 +82,7 @@ export function parseControlTokens(raw: string): ParsedTurn {
     .replace(/\[ADVICE_REQUEST\]/gi, '')
     .replace(/\[GOAL:[^\]]*\]/gi, '')
     .replace(/\[COMMIT:[^\]]*\]/gi, '')
+    .replace(/\[SHOW:[^\]]*\]/gi, '')
     .replace(/\[DONE\]/gi, '')
     // collapse a comma/semicolon/colon that now sits before sentence-ending punctuation
     .replace(/[,;:]\s*([.!?])/g, '$1')
@@ -86,5 +97,13 @@ export function parseControlTokens(raw: string): ParsedTurn {
     .replace(/[\s,;:]+$/, '')
     .trim();
 
-  return { cleanText: text, nextStage, adviceRequest, goal, commitment, done };
+  return {
+    cleanText: text,
+    nextStage,
+    adviceRequest,
+    goal,
+    commitment,
+    show,
+    done,
+  };
 }

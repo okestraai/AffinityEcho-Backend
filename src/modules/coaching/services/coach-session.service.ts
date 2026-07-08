@@ -18,7 +18,6 @@ import { CoachProfileService } from './coach-profile.service';
 import {
   CoachResourceService,
   formatResources,
-  pickMentioned,
 } from './coach-resource.service';
 import { Engagement } from '../interfaces/coaching.types';
 import { buildStagePrompt } from '../state-machine/stage-prompts';
@@ -27,6 +26,7 @@ import { resolveStage } from '../state-machine/grow.machine';
 import { CoachLearningService } from './coach-learning.service';
 import {
   CoachModality,
+  CoachResourceLinks,
   CoachSession,
   CoachStage,
   TurnResult,
@@ -54,7 +54,9 @@ export class CoachSessionService {
    */
   private wantsResources(stage: CoachStage, message: string): boolean {
     if (stage === 'OPTIONS' || stage === 'WILL') return true;
-    return /\b(resource|mentor|coach|forum|post|article|guide|connect|recommend|refer|where can i|who (can|could)|anyone (who|that)|community|group|support)\b/i.test(
+    // NB: prefix matches (no trailing \b) so plurals count — "mentors", "posts",
+    // "resources", "guides" etc. An earlier \bword\b version missed all plurals.
+    return /\b(resource|mentor|coach|forum|post|article|guide|discussion|thread|connect|recommend|refer|where can i|who (can|could)|anyone (who|that)|communit|group|support)/i.test(
       message,
     );
   }
@@ -352,7 +354,56 @@ export class CoachSessionService {
     // [DONE] — we honour that (the prompt forbids ending for any other reason).
     const isComplete = parsed.done;
 
-    // 9) Persist the coach turn + new stage.
+    // Attach the REAL retrieved resources as clickable cards — robustly, so the
+    // coach never promises "cards below" that don't appear. A kind is surfaced if
+    // the model emitted [SHOW: kind], OR named a specific item, OR simply gestured
+    // at that kind in the reply ("a couple of mentors", "some discussions"), as
+    // long as retrieval actually returned items of that kind.
+    const msgLower = coachMessage.toLowerCase();
+    const nameMatch = (s: string) => {
+      const t = s.toLowerCase();
+      return msgLower.includes(t) || msgLower.includes(t.slice(0, 24));
+    };
+    const gesturesMentors = /\bmentor/.test(msgLower);
+    const gesturesTopics = /\b(topic|discussion|forum|thread|conversation)/.test(
+      msgLower,
+    );
+    const gesturesPosts = /\bpost/.test(msgLower);
+    const attachedResources: CoachResourceLinks = {
+      mentors:
+        parsed.show.mentors ||
+        gesturesMentors ||
+        foundResources.mentors.some((m) =>
+          msgLower.includes(m.handle.toLowerCase()),
+        )
+          ? foundResources.mentors.slice(0, 3).map((m) => ({
+              handle: m.handle,
+              expertise: m.expertise,
+              userId: m.userId,
+            }))
+          : [],
+      topics:
+        parsed.show.topics ||
+        gesturesTopics ||
+        foundResources.topics.some((t) => nameMatch(t.title))
+          ? foundResources.topics.slice(0, 4).map((t) => ({
+              title: t.title,
+              forum: t.forum,
+              topicId: t.topicId,
+            }))
+          : [],
+      posts:
+        parsed.show.posts ||
+        gesturesPosts ||
+        foundResources.posts.some((p) => nameMatch(p.snippet))
+          ? foundResources.posts
+              .slice(0, 2)
+              .map((p) => ({ snippet: p.snippet, postId: p.postId }))
+          : [],
+    };
+
+    // 9) Persist the coach turn + new stage (with its resource cards, so they
+    //    survive session resume/reload).
     await this.repo.addMessage(
       session.id,
       session.engagementId,
@@ -360,6 +411,7 @@ export class CoachSessionService {
       coachMessage,
       resolvedStage,
       modality,
+      attachedResources,
     );
     if (resolvedStage !== session.stage) {
       await this.repo.updateSessionStage(session.id, resolvedStage);
@@ -381,7 +433,7 @@ export class CoachSessionService {
       isComplete,
       advicePending: parsed.adviceRequest,
       askFeedback,
-      resources: pickMentioned(foundResources, coachMessage),
+      resources: attachedResources,
       safety,
     };
   }
@@ -396,7 +448,11 @@ export class CoachSessionService {
     stage: string;
     status: string;
     resumable: boolean;
-    messages: { role: string; content: string }[];
+    messages: {
+      role: string;
+      content: string;
+      resources?: CoachResourceLinks;
+    }[];
   } | null> {
     const session = await this.repo.getLatestSession(userId);
     if (!session) return null;
@@ -408,7 +464,11 @@ export class CoachSessionService {
       stage: session.stage,
       status: session.status,
       resumable: !hadCrisis,
-      messages: turns.map((t) => ({ role: t.role, content: t.content })),
+      messages: turns.map((t) => ({
+        role: t.role,
+        content: t.content,
+        resources: t.resources,
+      })),
     };
   }
 

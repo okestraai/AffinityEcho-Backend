@@ -28,6 +28,7 @@ export interface CoachTurn {
   role: CoachRole;
   content: string;
   stage: CoachStage;
+  resources?: CoachResourceLinks;
 }
 
 /** Engagement = the ongoing relationship between a user and the AI coach. */
