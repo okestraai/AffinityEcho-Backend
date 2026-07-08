@@ -35,6 +35,7 @@ import { EmailService } from './common/utils/email/email.service';
 import { OkestraModule } from './modules/okestra/okestra.module';
 import { ContentSafetyModule } from './modules/content-safety/content-safety.module';
 import { CoachingModule } from './modules/coaching/coaching.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { CoachingModule } from './modules/coaching/coaching.module';
     OkestraModule,
     ContentSafetyModule,
     CoachingModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [

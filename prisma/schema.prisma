@@ -1520,3 +1520,65 @@ model coaching_rulebook {
   @@index([is_active, weight(sort: Desc)])
   @@map("coaching_rulebook")
 }
+
+//
+// ANALYTICS — admin-only visitor tracking.
+// Additive and deliberately DECOUPLED: user_id is a plain nullable UUID with no
+// relation to user_profiles, so analytics never cascades into or couples with
+// core user data. Populated by the public /analytics/collect ingest endpoint.
+//
+model analytics_sessions {
+  id              String   @id @default(uuid()) @db.Uuid
+  session_key     String   @unique @db.Text // client-generated per session/device
+  user_id         String?  @db.Uuid // attributed when authed; intentionally no FK relation
+  platform        String   @db.Text // web | ios | android
+  device_type     String?  @db.Text // desktop | mobile | tablet | bot
+  os              String?  @db.Text
+  os_version      String?  @db.Text
+  browser         String?  @db.Text
+  device_model    String?  @db.Text
+  app_version     String?  @db.Text
+  country         String?  @db.Text
+  region          String?  @db.Text
+  city            String?  @db.Text
+  referrer_source String?  @db.Text // e.g. google, twitter, direct
+  referrer_url    String?  @db.Text
+  utm_source      String?  @db.Text
+  utm_medium      String?  @db.Text
+  utm_campaign    String?  @db.Text
+  utm_term        String?  @db.Text
+  utm_content     String?  @db.Text
+  landing_path    String?  @db.Text
+  locale          String?  @db.Text
+  timezone        String?  @db.Text
+  ip_hash         String?  @db.Text // hashed IP only — raw IP is never stored
+  is_bot          Boolean  @default(false)
+  event_count     Int      @default(0)
+  first_seen      DateTime @default(now()) @db.Timestamptz(3)
+  last_seen       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([first_seen])
+  @@index([platform, first_seen])
+  @@index([referrer_source])
+  @@index([country])
+  @@index([user_id])
+  @@map("analytics_sessions")
+}
+
+model analytics_events {
+  id          String   @id @default(uuid()) @db.Uuid
+  session_key String   @db.Text
+  user_id     String?  @db.Uuid
+  type        String   @db.Text // page_view | screen_view | app_open | custom
+  path        String?  @db.Text
+  name        String?  @db.Text
+  referrer    String?  @db.Text
+  platform    String?  @db.Text
+  metadata    Json?
+  created_at  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([created_at])
+  @@index([type, created_at])
+  @@index([session_key])
+  @@map("analytics_events")
+}
