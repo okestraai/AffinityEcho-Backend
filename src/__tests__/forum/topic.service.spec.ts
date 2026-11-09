@@ -253,6 +253,23 @@ describe('TopicService', () => {
     });
   });
 
+  describe('author names', () => {
+    it('shows the username on an anonymous topic, never the real name', async () => {
+      const topic = {
+        ...mockTopic,
+        user_id: 'u2',
+        is_anonymous: true,
+        user_profile: { id: 'u2', username: 'quiet_owl', avatar: '🦉', first_name_encrypted: 'Ada', last_name_encrypted: 'L' },
+      };
+      mockClient.from.mockReturnValue(createMockQueryChain({ data: [topic], error: null, count: 1 }));
+
+      const result: any = await service.findAllTopics({ page: 1, limit: 10 } as any, 'u1');
+
+      expect(result.data[0].user_profile.display_name).toBe('quiet_owl');
+      expect(result.data[0].user_profile.first_name_encrypted).toBeUndefined();
+    });
+  });
+
   describe('who sees which topics', () => {
     // The caller works at "Acme" (the test decrypt adds "_dec").
     const withCompany = (company: string | null) => {

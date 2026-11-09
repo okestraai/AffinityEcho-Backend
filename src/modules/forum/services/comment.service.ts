@@ -1221,7 +1221,8 @@ export class CommentService {
       const isOwnContent = authorId === userId;
       const isRevealed = revealedIds.has(authorId);
 
-      let displayName = item.is_anonymous ? 'Anonymous User' : profile.username;
+      // Anonymous hides the real name, not the username.
+      let displayName = profile.username || 'Anonymous';
 
       if (isOwnContent || isRevealed) {
         if (!nameCache.has(authorId)) {

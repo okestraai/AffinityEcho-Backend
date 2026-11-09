@@ -723,11 +723,10 @@ export class FeedPostsService {
       created_at: post.created_at,
       updated_at: post.updated_at,
       author: {
-        display_name: post.is_anonymous
-          ? 'Anonymous User'
-          : post.user_profile?.username || 'Unknown',
+        // Anonymous hides the real name, not the username.
+        display_name: post.user_profile?.username || 'Anonymous',
         bio: post.is_anonymous ? null : post.user_profile?.bio || null,
-        avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || 'User',
+        avatar: post.user_profile?.avatar || '👤',
         is_company_verified: post.is_anonymous
           ? false
           : post.user_profile?.is_company_verified || false,
