@@ -726,7 +726,7 @@ export class FeedPostsService {
         // Anonymous hides the real name, not the username.
         display_name: post.user_profile?.username || 'Anonymous',
         bio: post.is_anonymous ? null : post.user_profile?.bio || null,
-        avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || '👤',
+        avatar: post.user_profile?.avatar || '👤',
         is_company_verified: post.is_anonymous
           ? false
           : post.user_profile?.is_company_verified || false,
