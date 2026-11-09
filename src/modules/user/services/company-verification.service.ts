@@ -3,6 +3,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -14,8 +15,18 @@ import {
   isEmailDomainValid,
 } from '../../../common/constants/company-domains';
 import { MSG } from '../../../common/constants/messages';
+import { RedisService } from '../../../common/services/redis.service';
 
-export type VerificationFailure = 'invalid_token' | 'expired' | 'server_error';
+export type VerificationFailure =
+  | 'invalid_token'
+  | 'expired'
+  | 'server_error'
+  | 'no_code'
+  | 'wrong_code'
+  | 'too_many_tries';
+
+// Wrong codes allowed per emailed code before a new one must be sent.
+export const MAX_CODE_TRIES = 5;
 
 export interface VerificationOutcome {
   success: boolean;
@@ -27,9 +38,11 @@ export interface VerificationOutcome {
 const VERIFICATION_MESSAGES: Record<VerificationFailure | 'success', string> = {
   success: 'Your company has been verified! You now have a verified badge.',
   invalid_token: 'This verification link is invalid or has already been used.',
-  expired:
-    'This verification link has expired. Request a new one from your profile.',
+  expired: 'This code has expired. Send a new code from your profile.',
   server_error: 'Something went wrong. Please try again.',
+  no_code: "There's no code waiting. Send a new code from your profile.",
+  wrong_code: "That code isn't right. Check the email and try again.",
+  too_many_tries: 'Too many wrong codes. Send a new code from your profile.',
 };
 
 @Injectable()
@@ -41,6 +54,7 @@ export class CompanyVerificationService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private emailService: EmailService,
+    @Optional() private redis?: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -203,7 +217,7 @@ export class CompanyVerificationService {
         email,
         userData?.username || 'User',
         companyName,
-        token,
+        this.codeFor(token),
       );
 
       return {
@@ -334,7 +348,7 @@ export class CompanyVerificationService {
         newEmail,
         userData?.username || 'User',
         companyName,
-        token,
+        this.codeFor(token),
       );
 
       return {
@@ -390,7 +404,7 @@ export class CompanyVerificationService {
       email,
       userData?.username || 'User',
       companyName,
-      token,
+      this.codeFor(token),
     );
 
     return {
@@ -431,74 +445,163 @@ export class CompanyVerificationService {
         return this.outcome('expired');
       }
 
-      // Mark token as used
-      const { error: updateTokenError } = await this.admin
-        .from('company_verification_tokens')
-        .update({ used_at: new Date().toISOString() })
-        .eq('token', token);
-
-      if (updateTokenError) {
-        this.logger.error('Failed to mark token as used', updateTokenError);
-        return this.outcome('server_error');
-      }
-
-      // Fetch user's hash + encrypted email for permanent record
-      const { data: profile } = await this.admin
-        .from('user_profiles')
-        .select('verification_email_hash, company_verification_email')
-        .eq('id', tokenData.user_id)
-        .single();
-
-      // Write permanent dedup record — survives account deletion
-      if (
-        profile?.verification_email_hash &&
-        profile?.company_verification_email
-      ) {
-        const { error: usedEmailError } = await this.admin
-          .from('used_verification_emails')
-          .insert({
-            email_hash: profile.verification_email_hash,
-            email_encrypted: profile.company_verification_email,
-            user_id: tokenData.user_id,
-            verified_at: new Date().toISOString(),
-          });
-
-        if (usedEmailError) {
-          this.logger.error(
-            'Failed to record used verification email',
-            usedEmailError,
-          );
-          // Non-fatal: verification still succeeds
-        }
-      }
-
-      // Mark user as verified
-      const { error: updateProfileError } = await this.admin
-        .from('user_profiles')
-        .update({
-          is_company_verified: true,
-          company_verified_at: new Date().toISOString(),
-        })
-        .eq('id', tokenData.user_id);
-
-      if (updateProfileError) {
-        this.logger.error(
-          'Failed to update user profile verification status',
-          updateProfileError,
-        );
-        // Give the token back so the person can try the same link again.
-        await this.admin
-          .from('company_verification_tokens')
-          .update({ used_at: null })
-          .eq('token', token);
-        return this.outcome('server_error');
-      }
-
-      return this.outcome();
+      return await this.completeVerification(token, tokenData.user_id);
     } catch (error) {
       this.logger.error('Unexpected error in confirmVerification', error);
       return this.outcome('server_error');
     }
+  }
+
+  // Shared by the emailed code and older emailed links.
+  private async completeVerification(
+    token: string,
+    userId: string,
+  ): Promise<VerificationOutcome> {
+    // Mark token as used
+    const { error: updateTokenError } = await this.admin
+      .from('company_verification_tokens')
+      .update({ used_at: new Date().toISOString() })
+      .eq('token', token);
+
+    if (updateTokenError) {
+      this.logger.error('Failed to mark token as used', updateTokenError);
+      return this.outcome('server_error');
+    }
+
+    // Fetch user's hash + encrypted email for permanent record
+    const { data: profile } = await this.admin
+      .from('user_profiles')
+      .select('verification_email_hash, company_verification_email')
+      .eq('id', userId)
+      .single();
+
+    // Write permanent dedup record — survives account deletion
+    if (
+      profile?.verification_email_hash &&
+      profile?.company_verification_email
+    ) {
+      const { error: usedEmailError } = await this.admin
+        .from('used_verification_emails')
+        .insert({
+          email_hash: profile.verification_email_hash,
+          email_encrypted: profile.company_verification_email,
+          user_id: userId,
+          verified_at: new Date().toISOString(),
+        });
+
+      if (usedEmailError) {
+        this.logger.error(
+          'Failed to record used verification email',
+          usedEmailError,
+        );
+        // Non-fatal: verification still succeeds
+      }
+    }
+
+    // Mark user as verified
+    const { error: updateProfileError } = await this.admin
+      .from('user_profiles')
+      .update({
+        is_company_verified: true,
+        company_verified_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (updateProfileError) {
+      this.logger.error(
+        'Failed to update user profile verification status',
+        updateProfileError,
+      );
+      // Give the token back so the person can try the same link again.
+      await this.admin
+        .from('company_verification_tokens')
+        .update({ used_at: null })
+        .eq('token', token);
+      return this.outcome('server_error');
+    }
+
+    return this.outcome();
+  }
+
+  // The 6-digit code emailed for a token. Derived from it, so nothing new is stored.
+  codeFor(token: string): string {
+    const hex = this.encryption.hmac(`company-verification:${token}`);
+    return String(parseInt(hex.slice(0, 12), 16) % 1_000_000).padStart(6, '0');
+  }
+
+  async verifyCode(userId: string, code: string): Promise<VerificationOutcome> {
+    try {
+      const { data: tokenData } = await this.admin
+        .from('company_verification_tokens')
+        .select('*')
+        .eq('user_id', userId)
+        .is('used_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!tokenData) return this.outcome('no_code');
+      if (new Date(tokenData.expires_at) < new Date()) {
+        return this.outcome('expired');
+      }
+      if ((await this.wrongTries(tokenData.id)) >= MAX_CODE_TRIES) {
+        return this.outcome('too_many_tries');
+      }
+
+      const expected = Buffer.from(this.codeFor(tokenData.token));
+      const given = Buffer.from(String(code));
+      const matches =
+        given.length === expected.length &&
+        crypto.timingSafeEqual(given, expected);
+      if (!matches) {
+        const tries = await this.addWrongTry(tokenData.id);
+        return this.outcome(
+          tries >= MAX_CODE_TRIES ? 'too_many_tries' : 'wrong_code',
+        );
+      }
+
+      return await this.completeVerification(tokenData.token, userId);
+    } catch (error) {
+      this.logger.error('Unexpected error in verifyCode', error);
+      return this.outcome('server_error');
+    }
+  }
+
+  // Wrong-code counts live in Redis, or in memory when Redis is down.
+  private readonly localTries = new Map<string, number>();
+
+  private triesKey(tokenId: string): string {
+    return `company-verification:tries:${tokenId}`;
+  }
+
+  private async wrongTries(tokenId: string): Promise<number> {
+    const key = this.triesKey(tokenId);
+    const client = this.redis?.getClient();
+    if (client) {
+      try {
+        return Number(await client.get(key)) || 0;
+      } catch {
+        // Fall through to the local count.
+      }
+    }
+    return this.localTries.get(key) ?? 0;
+  }
+
+  private async addWrongTry(tokenId: string): Promise<number> {
+    const key = this.triesKey(tokenId);
+    const client = this.redis?.getClient();
+    if (client) {
+      try {
+        const tries = await client.incr(key);
+        if (tries === 1) await client.pexpire(key, 24 * 60 * 60 * 1000);
+        return tries;
+      } catch {
+        // Fall through to the local count.
+      }
+    }
+    const tries = (this.localTries.get(key) ?? 0) + 1;
+    this.localTries.set(key, tries);
+    return tries;
   }
 
   private async wasVerifiedWith(token: string): Promise<boolean> {

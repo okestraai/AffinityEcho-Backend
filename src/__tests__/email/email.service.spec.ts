@@ -78,11 +78,12 @@ describe('EmailService', () => {
       expect(true).toBe(true);
     });
 
-    it('links to the web page the mobile app opens, not the API', async () => {
+    it('sends the code to type into the profile, with no link', async () => {
       const send = jest.spyOn(service as any, 'sendEmail').mockResolvedValue(undefined);
-      await service.sendCompanyVerificationEmail('user@google.com', 'TestUser', 'Google', 'tok/123');
-      const data = send.mock.calls[0][3] as { verificationUrl: string };
-      expect(data.verificationUrl).toBe('https://app.test.com/verify-company?token=tok%2F123');
+      await service.sendCompanyVerificationEmail('user@google.com', 'TestUser', 'Google', '482913');
+      const data = send.mock.calls[0][3] as Record<string, unknown>;
+      expect(data.code).toBe('482913');
+      expect(data).not.toHaveProperty('verificationUrl');
     });
   });
 

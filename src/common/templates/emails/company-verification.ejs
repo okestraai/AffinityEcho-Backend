@@ -36,21 +36,16 @@
         <tr><td style="padding: 40px;">
             <h2 style="color: #111827; margin: 0 0 10px;">Company Email Verification</h2>
             <p style="color: #4b5563;">Hello <strong style="color: #9333ea;"><%= username %></strong>,</p>
-            <p style="color: #4b5563;">We received a request to verify your association with <strong style="color: #4f46e5;"><%= company %></strong>. Click the button below to confirm your company email and complete the verification.</p>
+            <p style="color: #4b5563;">We received a request to verify your association with <strong style="color: #4f46e5;"><%= company %></strong>. Enter this code in <strong>Profile &rsaquo; Settings &rsaquo; Company verification</strong> in the AffinityEcho app or on the website.</p>
 
-            <!-- Button -->
+            <!-- Code -->
             <table cellpadding="0" cellspacing="0" border="0" style="margin: 30px auto;">
-            <tr><td align="center" bgcolor="#9333ea" style="background-color: #9333ea; border-radius: 8px; padding: 14px 36px;">
-                <a href="<%= verificationUrl %>" style="color: white; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">Verify Company Email</a>
+            <tr><td align="center" bgcolor="#faf5ff" style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 16px 32px;">
+                <span style="font-family: 'Courier New', monospace; font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #111827;"><%= code %></span>
             </td></tr>
             </table>
 
-            <p style="text-align: center; font-size: 14px; color: #9ca3af; margin: 10px 0 20px;">If the button doesn't work, copy and paste this link into your browser:</p>
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 0 0 20px;">
-            <tr><td style="text-align: center; font-size: 13px; word-break: break-all;">
-                <a href="<%= verificationUrl %>" style="color: #4f46e5;"><%= verificationUrl %></a>
-            </td></tr>
-            </table>
+            <p style="text-align: center; font-size: 14px; color: #9ca3af; margin: 10px 0 20px;">The code works for 24 hours. Never share it with anyone.</p>
 
             <!-- Info Box -->
             <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 25px 0;">
@@ -70,8 +65,8 @@
             <tr><td style="background-color: #fef3c7; border: 1px solid #fde68a; padding: 20px; border-radius: 8px;" bgcolor="#fef3c7">
                 <p style="margin: 0 0 10px; color: #92400e; font-weight: 600;">Security Information</p>
                 <ul style="margin: 0; color: #92400e; padding-left: 20px;">
-                    <li>This verification link will expire in 24 hours</li>
-                    <li>Do not share this link with anyone</li>
+                    <li>This code expires in 24 hours</li>
+                    <li>Do not share this code with anyone</li>
                     <li>AffinityEcho will never ask you to verify via phone or chat</li>
                     <li>If you didn't request this verification, please ignore this email</li>
                 </ul>

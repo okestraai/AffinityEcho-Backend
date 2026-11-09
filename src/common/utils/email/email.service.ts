@@ -294,12 +294,9 @@ export class EmailService {
     email: string,
     username: string,
     company: string,
-    verificationToken: string,
+    code: string,
   ) {
-    // A page the mobile app claims, so a phone with the app opens it there.
-    const frontendUrl = this.config.get('FRONTEND_URL');
-    const verificationUrl = `${frontendUrl}/verify-company?token=${encodeURIComponent(verificationToken)}`;
-
+    // The person types this code into their profile; the email has no link to open.
     return this.sendEmail(
       email,
       'Verify Your Company Email - AffinityEcho',
@@ -307,7 +304,7 @@ export class EmailService {
       {
         username,
         company,
-        verificationUrl,
+        code,
         supportEmail:
           this.config.get('SUPPORT_EMAIL') || 'support@affinityecho.com',
       },

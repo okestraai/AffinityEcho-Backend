@@ -11,7 +11,11 @@ import {
   Query,
   UseGuards,
   Req,
+  HttpCode,
+  BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserService } from '../services/user.service';
 import { UserProfileService } from '../services/user-profile.service';
 import { UserSettingsService } from '../services/user-settings.service';
@@ -24,6 +28,7 @@ import { CompanyVerificationService } from '../services/company-verification.ser
 import { UnifiedProfileService } from '../services/unified-profile.service';
 import {
   VerifyCompanyEmailDto,
+  VerifyCompanyCodeDto,
   UpdateVerificationEmailDto,
 } from '../dto/company-verification.dto';
 import { UnifiedProfileEditDto } from '../dto/unified-profile-edit.dto';
@@ -391,6 +396,25 @@ export class UserController {
       req.user.sub,
       dto.email,
     );
+  }
+
+  @Post('verify-company-code')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({
+    summary:
+      'Confirm company verification with the 6-digit code from the email',
+  })
+  async confirmCompanyCode(@Req() req: any, @Body() dto: VerifyCompanyCodeDto) {
+    const outcome = await this.companyVerificationService.verifyCode(
+      req.user.sub,
+      dto.code,
+    );
+    if (outcome.reason === 'server_error') {
+      throw new InternalServerErrorException(outcome.message);
+    }
+    if (!outcome.success) throw new BadRequestException(outcome.message);
+    return { success: true, message: outcome.message };
   }
 
   @Put('company-verification-email')
