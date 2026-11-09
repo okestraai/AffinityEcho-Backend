@@ -960,7 +960,9 @@ export class FeedEngagementService {
               display_name: post.user_profile?.username || 'Anonymous',
               username: post.user_profile?.username,
               bio: post.is_anonymous ? null : post.user_profile?.bio || null,
-              avatar: post.is_anonymous ? '👤' : post.user_profile?.avatar || '👤',
+              avatar: post.is_anonymous
+                ? '👤'
+                : post.user_profile?.avatar || '👤',
               first_name_encrypted: post.user_profile?.first_name_encrypted,
               last_name_encrypted: post.user_profile?.last_name_encrypted,
               is_company_verified: post.is_anonymous
@@ -1011,7 +1013,9 @@ export class FeedEngagementService {
               display_name: topic.user_profile?.username || 'Anonymous',
               username: topic.user_profile?.username,
               bio: topic.is_anonymous ? null : topic.user_profile?.bio || null,
-              avatar: topic.is_anonymous ? '👤' : topic.user_profile?.avatar || '👤',
+              avatar: topic.is_anonymous
+                ? '👤'
+                : topic.user_profile?.avatar || '👤',
               first_name_encrypted: topic.user_profile?.first_name_encrypted,
               last_name_encrypted: topic.user_profile?.last_name_encrypted,
               is_company_verified: topic.is_anonymous
@@ -1391,7 +1395,9 @@ export class FeedEngagementService {
       author: {
         // Anonymous hides the real name, not the username.
         display_name: comment.user_profile?.username || 'Anonymous',
-        avatar: comment.is_anonymous ? '👤' : comment.user_profile?.avatar || '👤',
+        avatar: comment.is_anonymous
+          ? '👤'
+          : comment.user_profile?.avatar || '👤',
         is_company_verified: comment.is_anonymous
           ? false
           : comment.user_profile?.is_company_verified || false,
