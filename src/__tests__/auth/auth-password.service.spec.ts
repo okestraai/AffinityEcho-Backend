@@ -263,23 +263,30 @@ describe('AuthService – password', () => {
         );
       });
 
-      it('stops for the day after 10 wrong codes, and a new code does not reset it', async () => {
-        for (let i = 0; i < 10; i++) {
+      it('never locks the email for a day, so a stranger cannot block a reset', async () => {
+        for (let i = 0; i < 12; i++) {
           if (i > 0 && i % 3 === 0) now += 5 * 60 * 1000 + 1000;
           (service as any).otpStore.get('user@example.com').expires =
             now + 60_000;
           await guess('000000').catch(() => {});
         }
         now += 5 * 60 * 1000 + 1000;
-        (service as any).otpStore.set('user@example.com', {
-          otp: '111222',
-          expires: now + 15 * 60 * 1000,
-          attempts: 2,
-          lastSent: now,
-          type: 'password_reset',
-        });
-        await expect(guess('111222')).rejects.toThrow(
-          'Please try again in 24 hours',
+        (service as any).otpStore.get('user@example.com').expires =
+          now + 60_000;
+        mockAdminSupabase.client.from
+          .mockReturnValueOnce(
+            createMockQueryChain({
+              data: { id: 'user-123', username: 'u' },
+              error: null,
+            }),
+          )
+          .mockReturnValueOnce(
+            createMockQueryChain({ data: null, error: null }),
+          );
+        await expect(guess('654321')).resolves.toEqual(
+          expect.objectContaining({
+            message: expect.stringContaining('reset successfully'),
+          }),
         );
       });
 

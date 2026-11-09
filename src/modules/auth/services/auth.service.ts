@@ -47,7 +47,6 @@ export class AuthService {
   private readonly OTP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
   // Wrong guesses per email, kept apart from the code so a new code doesn't reset them.
   private readonly otpGuesses: AttemptCounter;
-  private readonly MAX_WRONG_PER_DAY = 10;
 
   constructor(
     private config: ConfigService,
@@ -141,7 +140,8 @@ export class AuthService {
     return isValid;
   }
 
-  // 3 wrong codes, then a 5-minute wait; at most 10 wrong a day. Throws while waiting.
+  // 3 wrong codes, then a 5-minute wait. No daily cap: the key is an email anyone can type, so a
+  // cap would let a stranger lock someone out of password reset for a day.
   private async checkOtp(
     key: string,
     token: string,
@@ -151,13 +151,6 @@ export class AuthService {
     const stored = this.otpStore.get(key);
     const live = !!stored && stored.expires >= now;
     const burstKey = `otp:burst:${key}`;
-    const dayKey = `otp:day:${key}`;
-
-    if ((await this.otpGuesses.count(dayKey)).n >= this.MAX_WRONG_PER_DAY) {
-      throw new BadRequestException(
-        'Too many wrong codes. Please try again in 24 hours.',
-      );
-    }
     // Only a real guess at a live code counts; it is counted before the check.
     if (live) {
       const tryNumber = await this.otpGuesses.bump(
@@ -182,10 +175,9 @@ export class AuthService {
       timingSafeEqual(given, expected);
 
     if (matches) {
-      await this.otpGuesses.clear(burstKey, dayKey);
+      await this.otpGuesses.clear(burstKey);
       return true;
     }
-    if (live) await this.otpGuesses.bump(dayKey, 24 * 60 * 60 * 1000);
     return false;
   }
 

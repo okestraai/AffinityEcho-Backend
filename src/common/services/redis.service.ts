@@ -19,12 +19,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.client = new Redis({
         ...config,
         maxRetriesPerRequest: 3,
+        // Keep trying in the background; code-attempt limits rely on Redis being back.
         retryStrategy: (times: number) => {
-          if (times > 3) {
+          if (times === 4) {
             this.logger.warn('Redis unavailable — running without cache');
-            return null; // Stop retrying
           }
-          return Math.min(times * 200, 2000);
+          return Math.min(times * 200, 30_000);
         },
         lazyConnect: true, // Don't connect immediately
       });

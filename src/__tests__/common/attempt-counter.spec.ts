@@ -29,10 +29,19 @@ describe('AttemptCounter', () => {
     expect((await counter.count('k')).n).toBe(2);
   });
 
-  it('uses Redis while it is connected', async () => {
+  it('uses Redis while it is connected, setting the count and its expiry together', async () => {
+    const calls: unknown[][] = [];
+    const tx: any = {
+      set: (...a: unknown[]) => (calls.push(['set', ...a]), tx),
+      incr: (...a: unknown[]) => (calls.push(['incr', ...a]), tx),
+      pexpire: (...a: unknown[]) => (calls.push(['pexpire', ...a]), tx),
+      exec: jest.fn().mockResolvedValue([
+        [null, 'OK'],
+        [null, 1],
+      ]),
+    };
     const client = {
-      incr: jest.fn().mockResolvedValue(1),
-      pexpire: jest.fn(),
+      multi: () => tx,
       get: jest.fn().mockResolvedValue('1'),
       pttl: jest.fn().mockResolvedValue(500),
       del: jest.fn(),
@@ -42,7 +51,10 @@ describe('AttemptCounter', () => {
       getClient: () => client,
     } as any);
     expect(await counter.bump('k', 1000)).toBe(1);
-    expect(client.pexpire).toHaveBeenCalledWith('k', 1000);
+    expect(calls).toEqual([
+      ['set', 'k', 0, 'PX', 1000, 'NX'],
+      ['incr', 'k'],
+    ]);
     expect(await counter.count('k')).toEqual({ n: 1, msLeft: 500 });
     await counter.clear('k');
     expect(client.del).toHaveBeenCalledWith('k');

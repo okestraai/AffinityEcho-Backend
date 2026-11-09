@@ -227,13 +227,14 @@ export class CompanyVerificationService {
         .eq('id', userId)
         .single();
 
+      await this.reserveCodeSend(userId);
+
       await this.emailService.sendCompanyVerificationEmail(
         email,
         userData?.username || 'User',
         companyName,
         this.codeFor(token),
       );
-      await this.noteCodeSent(userId);
 
       return {
         success: true,
@@ -360,13 +361,14 @@ export class CompanyVerificationService {
         .eq('id', userId)
         .single();
 
+      await this.reserveCodeSend(userId);
+
       await this.emailService.sendCompanyVerificationEmail(
         newEmail,
         userData?.username || 'User',
         companyName,
         this.codeFor(token),
       );
-      await this.noteCodeSent(userId);
 
       return {
         success: true,
@@ -417,13 +419,14 @@ export class CompanyVerificationService {
       .eq('id', userId)
       .single();
 
+    await this.reserveCodeSend(userId);
+
     await this.emailService.sendCompanyVerificationEmail(
       email,
       userData?.username || 'User',
       companyName,
       this.codeFor(token),
     );
-    await this.noteCodeSent(userId);
 
     return {
       success: true,
@@ -630,12 +633,22 @@ export class CompanyVerificationService {
     }
   }
 
-  private async noteCodeSent(userId: string): Promise<void> {
-    await this.counter.bump(this.sendsKey(userId), CODE_RULES.waitMs, true);
-    await this.counter.bump(
+  // Counted before the email goes out, so parallel requests can't send more than the rules allow.
+  private async reserveCodeSend(userId: string): Promise<void> {
+    const gap = await this.counter.bump(
       this.gapKey(userId),
       CODE_RULES.secondsBetweenSends * 1000,
     );
+    if (gap > 1) throw new BadRequestException(MSG.AUTH.WAIT_RATE_LIMIT);
+    const sends = await this.counter.bump(
+      this.sendsKey(userId),
+      CODE_RULES.waitMs,
+      true,
+    );
+    if (sends > CODE_RULES.sendsBeforeWait) {
+      const { msLeft } = await this.counter.count(this.sendsKey(userId));
+      throw new BadRequestException(this.waitMessage(msLeft));
+    }
   }
 
   private waitMessage(msLeft: number): string {

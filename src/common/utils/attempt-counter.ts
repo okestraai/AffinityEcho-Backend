@@ -31,8 +31,12 @@ export class AttemptCounter {
     const client = this.client();
     if (client) {
       try {
-        const n = await client.incr(key);
-        if (n === 1 || slide) await client.pexpire(key, ttlMs);
+        // The key and its expiry are made in one step, so a count can never outlive its window.
+        const tx = client.multi().set(key, 0, 'PX', ttlMs, 'NX').incr(key);
+        if (slide) tx.pexpire(key, ttlMs);
+        const results = await tx.exec();
+        const n = Number(results?.[1]?.[1]);
+        if (!Number.isFinite(n)) throw new Error('Counter update failed');
         return n;
       } catch {
         // Fall through to the local count.
