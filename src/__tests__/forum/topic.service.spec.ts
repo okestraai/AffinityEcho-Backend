@@ -253,6 +253,58 @@ describe('TopicService', () => {
     });
   });
 
+  describe('who sees which topics', () => {
+    // The caller works at "Acme" (the test decrypt adds "_dec").
+    const withCompany = (company: string | null) => {
+      const topics = createMockQueryChain({ data: [], error: null, count: 0 });
+      const profile = createMockQueryChain({
+        data: { company_encrypted: company, company_alumni_encrypted: null },
+        error: null,
+      });
+      mockClient.from.mockImplementation((table: string) =>
+        table === 'user_profiles' ? profile : topics,
+      );
+      return topics;
+    };
+
+    it('shows your own topics on a forum page, but not in the overview', async () => {
+      const inForum = withCompany('Acme');
+      await service.findAllTopics({ forumId: 'f1' } as any, 'u1');
+      expect(inForum.neq).not.toHaveBeenCalledWith('user_id', 'u1');
+
+      const overview = withCompany('Acme');
+      await service.findAllTopics({} as any, 'u1');
+      expect(overview.neq).toHaveBeenCalledWith('user_id', 'u1');
+    });
+
+    it('shows only global topics to someone with no company', async () => {
+      const topics = withCompany(null);
+      await service.findAllTopics({ forumId: 'f1' } as any, 'u1');
+      expect(topics.eq).toHaveBeenCalledWith('scope', 'global');
+    });
+
+    it('ignores a company name that is not yours', async () => {
+      const topics = withCompany('Acme');
+      await service.findAllTopics({ companyName: 'Globex' } as any, 'u1');
+      expect(topics.eq).not.toHaveBeenCalledWith('company_name', expect.anything());
+      expect(topics.ilike).not.toHaveBeenCalled();
+      expect(topics.or).toHaveBeenCalledWith('scope.eq.global,company_name.in.("Acme_dec")');
+    });
+
+    it('filters to your own company when you ask for it', async () => {
+      const topics = withCompany('Acme');
+      await service.findAllTopics({ companyName: 'acme_DEC' } as any, 'u1');
+      expect(topics.eq).toHaveBeenCalledWith('company_name', 'Acme_dec');
+    });
+
+    it('recent discussions ignore a company in the address that is not yours', async () => {
+      const forums = withCompany('Acme');
+      await service.findRecentDiscussions({} as any, 'u1', 'Globex');
+      expect(forums.or).toHaveBeenCalledWith('is_global.eq.true,company_name.in.("Acme_dec")');
+      expect(forums.or).not.toHaveBeenCalledWith(expect.stringContaining('Globex'));
+    });
+  });
+
   describe('addReaction', () => {
     it('should add reaction to topic', async () => {
       const topicChain = createMockQueryChain({

@@ -267,7 +267,8 @@ export class TopicService {
       .or('is_hidden.is.null,is_hidden.eq.false')
       .or('is_deleted.is.null,is_deleted.eq.false');
 
-    if (userId) {
+    // The overview leaves out your own topics; a forum's own page shows them.
+    if (userId && !filters.forumId) {
       query = query.neq('user_id', userId);
     }
 
@@ -283,19 +284,21 @@ export class TopicService {
     `);
     }
 
-    if (filters.companyName) {
-      // If a specific company name is provided, use it directly
-      query = query.ilike('company_name', `%${filters.companyName}%`);
-    } else if (userId) {
-      // For logged-in users without a specific company filter,
-      // expand company-scoped topics to include alumni companies
-      const userCompanyList = await this.getUserCompanyList(userId);
-      if (userCompanyList.length > 0) {
-        // Show global topics OR topics from user's companies (current + alumni)
-        query = query.or(
-          `scope.eq.global,company_name.in.(${userCompanyList.map((c) => `"${c}"`).join(',')})`,
-        );
-      }
+    // Company topics are only for people at that company (current or alumni).
+    const userCompanyList = userId ? await this.getUserCompanyList(userId) : [];
+    const ownCompany = filters.companyName
+      ? userCompanyList.find(
+          (c) => c.toLowerCase() === filters.companyName!.trim().toLowerCase(),
+        )
+      : undefined;
+    if (ownCompany) {
+      query = query.eq('company_name', ownCompany);
+    } else if (userCompanyList.length > 0) {
+      query = query.or(
+        `scope.eq.global,company_name.in.(${userCompanyList.map((c) => `"${c.replace(/"/g, '\\"')}"`).join(',')})`,
+      );
+    } else {
+      query = query.eq('scope', 'global');
     }
 
     if (filters.hashtag) {
@@ -901,44 +904,24 @@ export class TopicService {
 
       const skip = (page - 1) * limit;
 
-      // Fetch company list + forums in PARALLEL
-      const [userCompanyList, forumsResult] = await Promise.all([
-        this.getUserCompanyList(userId),
-        // We'll re-query forums after we have companyNames if needed
-        companyName
-          ? this.admin
-              .from('forums')
-              .select('id')
-              .or(`is_global.eq.true,company_name.in.("${companyName}")`)
-              .then((r: any) => (category ? { ...r } : r)) // category filter applied below
-          : Promise.resolve(null),
-      ]);
+      // Company forums are only for people at that company (current or alumni), whatever the address says.
+      const userCompanyList = await this.getUserCompanyList(userId);
+      const asked = companyName?.trim().toLowerCase();
+      const ownCompany = asked
+        ? userCompanyList.find((c) => c.toLowerCase() === asked)
+        : undefined;
+      const companyNames = ownCompany ? [ownCompany] : userCompanyList;
 
-      const companyNames = companyName ? [companyName] : userCompanyList;
-
-      // If we didn't have companyName upfront, query forums now with the resolved list
-      let forumsData = forumsResult;
-      if (!forumsData) {
-        const companyFilter =
-          companyNames.length > 0
-            ? `,company_name.in.(${companyNames.map((c: any) => `"${c}"`).join(',')})`
-            : '';
-        let forumQuery = this.admin
-          .from('forums')
-          .select('id')
-          .or(`is_global.eq.true${companyFilter}`);
-        if (category) forumQuery = forumQuery.eq('category', category);
-        forumsData = await forumQuery;
-      } else if (category) {
-        // Apply category filter to already-fetched forums
-        const companyFilter = `,company_name.in.("${companyName}")`;
-        const forumQuery = this.admin
-          .from('forums')
-          .select('id')
-          .or(`is_global.eq.true${companyFilter}`)
-          .eq('category', category);
-        forumsData = await forumQuery;
-      }
+      const companyFilter =
+        companyNames.length > 0
+          ? `,company_name.in.(${companyNames.map((c) => `"${c.replace(/"/g, '\\"')}"`).join(',')})`
+          : '';
+      let forumQuery = this.admin
+        .from('forums')
+        .select('id')
+        .or(`is_global.eq.true${companyFilter}`);
+      if (category) forumQuery = forumQuery.eq('category', category);
+      const forumsData = await forumQuery;
 
       const { data: forums, error: forumsError } = forumsData;
 
