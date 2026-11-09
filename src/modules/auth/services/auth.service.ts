@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   InternalServerErrorException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -25,6 +26,8 @@ import { UserProfileResponse } from '../interfaces/user-profile.interface';
 import { OnboardingService } from './onboarding.service';
 import { MSG } from '../../../common/constants/messages';
 import { timingSafeEqual } from 'crypto';
+import { RedisService } from '../../../common/services/redis.service';
+import { AttemptCounter } from '../../../common/utils/attempt-counter';
 
 @Injectable()
 export class AuthService {
@@ -43,10 +46,7 @@ export class AuthService {
   private readonly MAX_OTP_ATTEMPTS = 3;
   private readonly OTP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
   // Wrong guesses per email, kept apart from the code so a new code doesn't reset them.
-  private otpGuesses = new Map<
-    string,
-    { wrong: number; lockedUntil: number; today: number; dayStart: number }
-  >();
+  private readonly otpGuesses: AttemptCounter;
   private readonly MAX_WRONG_PER_DAY = 10;
 
   constructor(
@@ -55,9 +55,11 @@ export class AuthService {
     private encryption: EncryptionUtil,
     private emailService: EmailService,
     private onboardingService: OnboardingService,
+    @Optional() redis?: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
     this.otpStore = new Map();
+    this.otpGuesses = new AttemptCounter(redis);
   }
 
   // Validate email format before sending to Supabase
@@ -132,7 +134,7 @@ export class AuthService {
     email: string,
     token: string,
   ): Promise<boolean> {
-    const isValid = this.checkOtp(email.toLowerCase(), token);
+    const isValid = await this.checkOtp(email.toLowerCase(), token);
     if (isValid) {
       this.otpStore.delete(email.toLowerCase());
     }
@@ -140,50 +142,50 @@ export class AuthService {
   }
 
   // 3 wrong codes, then a 5-minute wait; at most 10 wrong a day. Throws while waiting.
-  private checkOtp(key: string, token: string, type?: string): boolean {
+  private async checkOtp(
+    key: string,
+    token: string,
+    type?: string,
+  ): Promise<boolean> {
     const now = Date.now();
-    let guesses = this.otpGuesses.get(key);
-    if (guesses && now - guesses.dayStart > 24 * 60 * 60 * 1000) {
-      this.otpGuesses.delete(key);
-      guesses = undefined;
-    }
-    if (guesses && guesses.today >= this.MAX_WRONG_PER_DAY) {
+    const stored = this.otpStore.get(key);
+    const live = !!stored && stored.expires >= now;
+    const burstKey = `otp:burst:${key}`;
+    const dayKey = `otp:day:${key}`;
+
+    if ((await this.otpGuesses.count(dayKey)).n >= this.MAX_WRONG_PER_DAY) {
       throw new BadRequestException(
         'Too many wrong codes. Please try again in 24 hours.',
       );
     }
-    if (guesses && guesses.lockedUntil > now) {
-      const minutes = Math.ceil((guesses.lockedUntil - now) / 60_000);
-      throw new BadRequestException(
-        `Too many attempts. Try again in ${minutes} minute(s).`,
+    // Only a real guess at a live code counts; it is counted before the check.
+    if (live) {
+      const tryNumber = await this.otpGuesses.bump(
+        burstKey,
+        this.OTP_COOLDOWN_MS,
       );
+      if (tryNumber > this.MAX_OTP_ATTEMPTS) {
+        const { msLeft } = await this.otpGuesses.count(burstKey);
+        const minutes = Math.max(1, Math.ceil(msLeft / 60_000));
+        throw new BadRequestException(
+          `Too many attempts. Try again in ${minutes} minute(s).`,
+        );
+      }
     }
 
-    const stored = this.otpStore.get(key);
     const given = Buffer.from(String(token ?? ''));
     const expected = Buffer.from(stored?.otp ?? '');
     const matches =
-      !!stored &&
-      stored.expires >= now &&
+      live &&
       (type === undefined || stored.type === type) &&
       given.length === expected.length &&
       timingSafeEqual(given, expected);
 
     if (matches) {
-      this.otpGuesses.delete(key);
+      await this.otpGuesses.clear(burstKey, dayKey);
       return true;
     }
-    // Only a real guess at a live code counts.
-    if (stored && stored.expires >= now) {
-      guesses ??= { wrong: 0, lockedUntil: 0, today: 0, dayStart: now };
-      this.otpGuesses.set(key, guesses);
-      guesses.wrong += 1;
-      guesses.today += 1;
-      if (guesses.wrong >= this.MAX_OTP_ATTEMPTS) {
-        guesses.wrong = 0;
-        guesses.lockedUntil = now + this.OTP_COOLDOWN_MS;
-      }
-    }
+    if (live) await this.otpGuesses.bump(dayKey, 24 * 60 * 60 * 1000);
     return false;
   }
 
@@ -917,7 +919,7 @@ export class AuthService {
 
     try {
       // Verify OTP
-      if (!this.checkOtp(dto.email, dto.otp, 'password_reset')) {
+      if (!(await this.checkOtp(dto.email, dto.otp, 'password_reset'))) {
         throw new BadRequestException(MSG.AUTH.INVALID_OTP);
       }
 

@@ -284,9 +284,25 @@ describe('AuthService – password', () => {
       });
 
       it('does not count a guess when no code is waiting', async () => {
+        const waiting = (service as any).otpStore.get('user@example.com');
         (service as any).otpStore.clear();
         for (let i = 0; i < 5; i++) await guess('000000').catch(() => {});
-        expect((service as any).otpGuesses.size).toBe(0);
+        (service as any).otpStore.set('user@example.com', waiting);
+        mockAdminSupabase.client.from
+          .mockReturnValueOnce(
+            createMockQueryChain({
+              data: { id: 'user-123', username: 'u' },
+              error: null,
+            }),
+          )
+          .mockReturnValueOnce(
+            createMockQueryChain({ data: null, error: null }),
+          );
+        await expect(guess('654321')).resolves.toEqual(
+          expect.objectContaining({
+            message: expect.stringContaining('reset successfully'),
+          }),
+        );
       });
     });
   });

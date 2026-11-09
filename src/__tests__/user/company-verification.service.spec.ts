@@ -624,7 +624,7 @@ describe('CompanyVerificationService', () => {
         },
         error: null,
       });
-      const defaultChain = createMockQueryChain({ data: null, error: null });
+      const defaultChain = createMockQueryChain({ data: [{ id: "t1" }], error: null });
 
       mockClient.from
         .mockReturnValueOnce(tokenChain)
@@ -664,7 +664,7 @@ describe('CompanyVerificationService', () => {
         },
         error: null,
       });
-      const updateTokenChain = createMockQueryChain({ data: null, error: null });
+      const updateTokenChain = createMockQueryChain({ data: [{ id: 't1' }], error: null });
       const profileChain = createMockQueryChain({
         data: { verification_email_hash: 'h', company_verification_email: 'e' },
         error: null,
@@ -696,7 +696,7 @@ describe('CompanyVerificationService', () => {
         },
         error: null,
       });
-      const updateTokenChain = createMockQueryChain({ data: null, error: null });
+      const updateTokenChain = createMockQueryChain({ data: [{ id: 't1' }], error: null });
       const profileChain = createMockQueryChain({
         data: { verification_email_hash: 'h', company_verification_email: 'e' },
         error: null,
@@ -724,7 +724,7 @@ describe('CompanyVerificationService', () => {
         },
         error: null,
       });
-      const updateTokenChain = createMockQueryChain({ data: null, error: null });
+      const updateTokenChain = createMockQueryChain({ data: [{ id: 't1' }], error: null });
       const profileChain = createMockQueryChain({
         data: { verification_email_hash: null, company_verification_email: null },
         error: null,

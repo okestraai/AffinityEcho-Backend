@@ -61,6 +61,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  isConnected(): boolean {
+    return !!this.client && this.connected;
+  }
+
   getClient(): Redis | null {
     return this.client;
   }

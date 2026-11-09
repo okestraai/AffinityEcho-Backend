@@ -49,7 +49,7 @@ describe('CompanyVerificationService code check', () => {
 
   it('verifies the person with the right code', async () => {
     const token = pendingToken();
-    const done = createMockQueryChain({ data: null, error: null });
+    const done = createMockQueryChain({ data: [{ id: 't1' }], error: null });
     mockClient.from
       .mockReturnValueOnce(createMockQueryChain({ data: token, error: null }))
       .mockReturnValue(done);
@@ -64,6 +64,19 @@ describe('CompanyVerificationService code check', () => {
     mockClient.from.mockReturnValueOnce(chain).mockReturnValue(createMockQueryChain({ data: null, error: null }));
     await service.verifyCode('u1', '000000');
     expect(chain.eq).toHaveBeenCalledWith('user_id', 'u1');
+  });
+
+  it('never verifies twice when two requests claim the same code at once', async () => {
+    const token = pendingToken();
+    mockClient.from
+      .mockReturnValueOnce(createMockQueryChain({ data: token, error: null }))
+      // The claim finds the token already used by the other request.
+      .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+      .mockReturnValueOnce(createMockQueryChain({ data: { user_id: 'u1', used_at: 'now' }, error: null }))
+      .mockReturnValueOnce(createMockQueryChain({ data: { is_company_verified: true }, error: null }));
+    const result = await service.verifyCode('u1', service.codeFor(token.token));
+    expect(result).toMatchObject({ success: true });
+    expect(mockClient.from).toHaveBeenCalledTimes(4);
   });
 
   it('says when no code is waiting', async () => {
@@ -119,13 +132,24 @@ describe('CompanyVerificationService code check', () => {
       expect((await service.verifyCode('u1', wrongFor(token.token))).reason).toBe('wrong_code');
     });
 
+    it('lets only 3 of many parallel guesses be checked', async () => {
+      const token = pendingToken();
+      mockClient.from.mockReturnValue(createMockQueryChain({ data: token, error: null }));
+      const answers = await Promise.all(
+        Array.from({ length: 6 }, () => service.verifyCode('u1', wrongFor(token.token))),
+      );
+      const checked = answers.filter((a) => a.reason === 'wrong_code').length;
+      expect(checked).toBeLessThanOrEqual(CODE_RULES.triesBeforeWait);
+      expect(answers.filter((a) => a.reason === 'cooling_down').length).toBeGreaterThanOrEqual(3);
+    });
+
     it("counts each person's wrong codes separately", async () => {
       mockClient.from.mockReturnValue(createMockQueryChain({ data: pendingToken(), error: null }));
       for (let i = 0; i < CODE_RULES.triesBeforeWait; i++) await service.verifyCode('u1', '000000');
       const other = pendingToken({ user_id: 'u2' });
       mockClient.from
         .mockReturnValueOnce(createMockQueryChain({ data: other, error: null }))
-        .mockReturnValue(createMockQueryChain({ data: null, error: null }));
+        .mockReturnValue(createMockQueryChain({ data: [{ id: 't1' }], error: null }));
       expect(await service.verifyCode('u2', service.codeFor(other.token))).toMatchObject({ success: true });
     });
 
