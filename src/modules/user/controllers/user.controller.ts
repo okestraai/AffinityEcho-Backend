@@ -387,7 +387,6 @@ export class UserController {
   // ============ COMPANY VERIFICATION ============
 
   @Post('verify-company-email')
-  @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } })
   @ApiOperation({ summary: 'Request company email verification' })
   async requestCompanyVerification(
     @Req() req: any,
@@ -419,7 +418,6 @@ export class UserController {
   }
 
   @Put('company-verification-email')
-  @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } })
   @ApiOperation({
     summary:
       'Update verification email for a pending request (before verification is confirmed)',

@@ -23,10 +23,19 @@ export type VerificationFailure =
   | 'server_error'
   | 'no_code'
   | 'wrong_code'
-  | 'too_many_tries';
+  | 'too_many_tries'
+  | 'cooling_down';
 
-// Wrong codes allowed per person in 24 hours. Counted per person, so sending a new code doesn't reset it.
-export const MAX_CODE_TRIES = 10;
+// Same rules as the login code: 3 tries, then a 5-minute wait; 30 seconds between sends.
+export const CODE_RULES = {
+  triesBeforeWait: 3,
+  waitMs: 5 * 60 * 1000,
+  // A daily cap on top, counted per person, so new codes can't be used to guess forever.
+  maxTriesPerDay: 10,
+  sendsBeforeWait: 3,
+  secondsBetweenSends: 30,
+};
+export const MAX_CODE_TRIES = CODE_RULES.maxTriesPerDay;
 
 export interface VerificationOutcome {
   success: boolean;
@@ -43,6 +52,7 @@ const VERIFICATION_MESSAGES: Record<VerificationFailure | 'success', string> = {
   no_code: "There's no code waiting. Send a new code from your profile.",
   wrong_code: "That code isn't right. Check the email and try again.",
   too_many_tries: 'Too many wrong codes. Please try again in 24 hours.',
+  cooling_down: 'Too many attempts. Try again in 5 minute(s).',
 };
 
 @Injectable()
@@ -103,6 +113,7 @@ export class CompanyVerificationService {
   }
 
   async requestVerification(userId: string, email: string) {
+    await this.assertCanSendCode(userId);
     try {
       const { data: profile, error: profileError } = await this.admin
         .from('user_profiles')
@@ -219,6 +230,7 @@ export class CompanyVerificationService {
         companyName,
         this.codeFor(token),
       );
+      await this.noteCodeSent(userId);
 
       return {
         success: true,
@@ -243,6 +255,7 @@ export class CompanyVerificationService {
    * Clears the old hash, validates the new email, and resends the verification email.
    */
   async updateVerificationEmail(userId: string, newEmail: string) {
+    await this.assertCanSendCode(userId);
     try {
       const { data: profile, error: profileError } = await this.admin
         .from('user_profiles')
@@ -350,6 +363,7 @@ export class CompanyVerificationService {
         companyName,
         this.codeFor(token),
       );
+      await this.noteCodeSent(userId);
 
       return {
         success: true,
@@ -406,6 +420,7 @@ export class CompanyVerificationService {
       companyName,
       this.codeFor(token),
     );
+    await this.noteCodeSent(userId);
 
     return {
       success: true,
@@ -414,13 +429,16 @@ export class CompanyVerificationService {
   }
 
   // The answer for the app and website, plus the page a browser lands on for an old email link.
-  private outcome(reason?: VerificationFailure): VerificationOutcome {
+  private outcome(
+    reason?: VerificationFailure,
+    message?: string,
+  ): VerificationOutcome {
     const frontendUrl = this.config.get<string>('FRONTEND_URL');
     const query = reason ? `status=error&reason=${reason}` : 'status=success';
     return {
       success: !reason,
       reason,
-      message: VERIFICATION_MESSAGES[reason ?? 'success'],
+      message: message ?? VERIFICATION_MESSAGES[reason ?? 'success'],
       redirectUrl: `${frontendUrl}/verify-company?${query}`,
     };
   }
@@ -544,9 +562,8 @@ export class CompanyVerificationService {
       if (new Date(tokenData.expires_at) < new Date()) {
         return this.outcome('expired');
       }
-      if ((await this.wrongTries(userId)) >= MAX_CODE_TRIES) {
-        return this.outcome('too_many_tries');
-      }
+      const blocked = await this.codeTriesBlocked(userId);
+      if (blocked) return blocked;
 
       const expected = Buffer.from(this.codeFor(tokenData.token));
       const given = Buffer.from(String(code));
@@ -554,9 +571,10 @@ export class CompanyVerificationService {
         given.length === expected.length &&
         crypto.timingSafeEqual(given, expected);
       if (!matches) {
-        const tries = await this.addWrongTry(userId);
-        return this.outcome(
-          tries >= MAX_CODE_TRIES ? 'too_many_tries' : 'wrong_code',
+        await this.bump(this.dayKey(userId), 24 * 60 * 60 * 1000);
+        await this.bump(this.burstKey(userId), CODE_RULES.waitMs);
+        return (
+          (await this.codeTriesBlocked(userId)) ?? this.outcome('wrong_code')
         );
       }
 
@@ -567,41 +585,97 @@ export class CompanyVerificationService {
     }
   }
 
-  // Wrong-code counts live in Redis, or in memory when Redis is down.
-  private readonly localTries = new Map<string, number>();
+  // Refuses a code check that breaks the rules, or returns null when it may go ahead.
+  private async codeTriesBlocked(
+    userId: string,
+  ): Promise<VerificationOutcome | null> {
+    if (
+      (await this.count(this.dayKey(userId))).n >= CODE_RULES.maxTriesPerDay
+    ) {
+      return this.outcome('too_many_tries');
+    }
+    const burst = await this.count(this.burstKey(userId));
+    if (burst.n >= CODE_RULES.triesBeforeWait) {
+      return this.outcome('cooling_down', this.waitMessage(burst.msLeft));
+    }
+    return null;
+  }
 
-  private triesKey(userId: string): string {
+  // Called before sending a code: 30 seconds apart, and a 5-minute wait after 3 sends.
+  async assertCanSendCode(userId: string): Promise<void> {
+    const sends = await this.count(this.sendsKey(userId));
+    if (sends.n >= CODE_RULES.sendsBeforeWait) {
+      throw new BadRequestException(this.waitMessage(sends.msLeft));
+    }
+    if ((await this.count(this.gapKey(userId))).n > 0) {
+      throw new BadRequestException(MSG.AUTH.WAIT_RATE_LIMIT);
+    }
+  }
+
+  private async noteCodeSent(userId: string): Promise<void> {
+    await this.bump(this.sendsKey(userId), CODE_RULES.waitMs, true);
+    await this.bump(this.gapKey(userId), CODE_RULES.secondsBetweenSends * 1000);
+  }
+
+  private waitMessage(msLeft: number): string {
+    const minutes = Math.max(1, Math.ceil(msLeft / 60_000));
+    return `Too many attempts. Try again in ${minutes} minute(s).`;
+  }
+
+  private dayKey(userId: string) {
     return `company-verification:tries:user:${userId}`;
   }
-
-  private async wrongTries(userId: string): Promise<number> {
-    const key = this.triesKey(userId);
-    const client = this.redis?.getClient();
-    if (client) {
-      try {
-        return Number(await client.get(key)) || 0;
-      } catch {
-        // Fall through to the local count.
-      }
-    }
-    return this.localTries.get(key) ?? 0;
+  private burstKey(userId: string) {
+    return `company-verification:burst:user:${userId}`;
+  }
+  private sendsKey(userId: string) {
+    return `company-verification:sends:user:${userId}`;
+  }
+  private gapKey(userId: string) {
+    return `company-verification:gap:user:${userId}`;
   }
 
-  private async addWrongTry(userId: string): Promise<number> {
-    const key = this.triesKey(userId);
+  // Counters live in Redis, or in memory (expiring the same way) when Redis is down.
+  private readonly localCounts = new Map<
+    string,
+    { n: number; until: number }
+  >();
+
+  private async count(key: string): Promise<{ n: number; msLeft: number }> {
     const client = this.redis?.getClient();
     if (client) {
       try {
-        const tries = await client.incr(key);
-        if (tries === 1) await client.pexpire(key, 24 * 60 * 60 * 1000);
-        return tries;
+        const [n, ttl] = await Promise.all([client.get(key), client.pttl(key)]);
+        return { n: Number(n) || 0, msLeft: Math.max(0, ttl) };
       } catch {
         // Fall through to the local count.
       }
     }
-    const tries = (this.localTries.get(key) ?? 0) + 1;
-    this.localTries.set(key, tries);
-    return tries;
+    const local = this.localCounts.get(key);
+    if (!local || local.until <= Date.now()) return { n: 0, msLeft: 0 };
+    return { n: local.n, msLeft: local.until - Date.now() };
+  }
+
+  // Adds one. The window starts at the first one, or restarts each time when `slide` is set.
+  private async bump(key: string, ttlMs: number, slide = false): Promise<void> {
+    const client = this.redis?.getClient();
+    if (client) {
+      try {
+        const n = await client.incr(key);
+        if (n === 1 || slide) await client.pexpire(key, ttlMs);
+        return;
+      } catch {
+        // Fall through to the local count.
+      }
+    }
+    const now = Date.now();
+    const local = this.localCounts.get(key);
+    const live =
+      local && local.until > now ? local : { n: 0, until: now + ttlMs };
+    this.localCounts.set(key, {
+      n: live.n + 1,
+      until: slide ? now + ttlMs : live.until,
+    });
   }
 
   private async wasVerifiedWith(token: string): Promise<boolean> {
