@@ -432,6 +432,24 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
       expect(mockEmail.sendWelcomeEmail).not.toHaveBeenCalled();
     });
 
+    it('asks for a 5-minute wait after 3 wrong sign-up codes', async () => {
+      (service as any).otpStore.set('user@example.com', {
+        otp: '123456',
+        expires: Date.now() + 15 * 60 * 1000,
+        attempts: 1,
+        lastSent: Date.now(),
+        type: 'signup',
+      });
+      for (let i = 0; i < 3; i++) {
+        await expect(service.verifyOtp(email, '000000')).rejects.toThrow(
+          UnauthorizedException,
+        );
+      }
+      await expect(service.verifyOtp(email, token)).rejects.toThrow(
+        'Too many attempts. Try again in 5 minute(s).',
+      );
+    });
+
     it('should throw UnauthorizedException for invalid OTP', async () => {
       (service as any).otpStore.set('user@example.com', {
         otp: '999999',

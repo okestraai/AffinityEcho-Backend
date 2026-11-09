@@ -24,6 +24,7 @@ import logger from '../../../common/utils/logger.util';
 import { UserProfileResponse } from '../interfaces/user-profile.interface';
 import { OnboardingService } from './onboarding.service';
 import { MSG } from '../../../common/constants/messages';
+import { timingSafeEqual } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -41,6 +42,12 @@ export class AuthService {
   >;
   private readonly MAX_OTP_ATTEMPTS = 3;
   private readonly OTP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+  // Wrong guesses per email, kept apart from the code so a new code doesn't reset them.
+  private otpGuesses = new Map<
+    string,
+    { wrong: number; lockedUntil: number; today: number; dayStart: number }
+  >();
+  private readonly MAX_WRONG_PER_DAY = 10;
 
   constructor(
     private config: ConfigService,
@@ -125,15 +132,59 @@ export class AuthService {
     email: string,
     token: string,
   ): Promise<boolean> {
-    const stored = this.otpStore.get(email.toLowerCase());
-    if (!stored || stored.expires < Date.now()) {
-      return false;
-    }
-    const isValid = stored.otp === token;
+    const isValid = this.checkOtp(email.toLowerCase(), token);
     if (isValid) {
       this.otpStore.delete(email.toLowerCase());
     }
     return isValid;
+  }
+
+  // 3 wrong codes, then a 5-minute wait; at most 10 wrong a day. Throws while waiting.
+  private checkOtp(key: string, token: string, type?: string): boolean {
+    const now = Date.now();
+    let guesses = this.otpGuesses.get(key);
+    if (guesses && now - guesses.dayStart > 24 * 60 * 60 * 1000) {
+      this.otpGuesses.delete(key);
+      guesses = undefined;
+    }
+    if (guesses && guesses.today >= this.MAX_WRONG_PER_DAY) {
+      throw new BadRequestException(
+        'Too many wrong codes. Please try again in 24 hours.',
+      );
+    }
+    if (guesses && guesses.lockedUntil > now) {
+      const minutes = Math.ceil((guesses.lockedUntil - now) / 60_000);
+      throw new BadRequestException(
+        `Too many attempts. Try again in ${minutes} minute(s).`,
+      );
+    }
+
+    const stored = this.otpStore.get(key);
+    const given = Buffer.from(String(token ?? ''));
+    const expected = Buffer.from(stored?.otp ?? '');
+    const matches =
+      !!stored &&
+      stored.expires >= now &&
+      (type === undefined || stored.type === type) &&
+      given.length === expected.length &&
+      timingSafeEqual(given, expected);
+
+    if (matches) {
+      this.otpGuesses.delete(key);
+      return true;
+    }
+    // Only a real guess at a live code counts.
+    if (stored && stored.expires >= now) {
+      guesses ??= { wrong: 0, lockedUntil: 0, today: 0, dayStart: now };
+      this.otpGuesses.set(key, guesses);
+      guesses.wrong += 1;
+      guesses.today += 1;
+      if (guesses.wrong >= this.MAX_OTP_ATTEMPTS) {
+        guesses.wrong = 0;
+        guesses.lockedUntil = now + this.OTP_COOLDOWN_MS;
+      }
+    }
+    return false;
   }
 
   // EMAIL + PASSWORD SIGNUP
@@ -866,13 +917,7 @@ export class AuthService {
 
     try {
       // Verify OTP
-      const stored = this.otpStore.get(dto.email);
-      if (
-        !stored ||
-        stored.expires < Date.now() ||
-        stored.otp !== dto.otp ||
-        stored.type !== 'password_reset'
-      ) {
+      if (!this.checkOtp(dto.email, dto.otp, 'password_reset')) {
         throw new BadRequestException(MSG.AUTH.INVALID_OTP);
       }
 

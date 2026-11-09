@@ -65,6 +65,8 @@ function createMockOnboardingService() {
   };
 }
 
+const MSG_INVALID = 'The code you entered is incorrect or expired';
+
 describe('AuthService – password', () => {
   let service: AuthService;
   let mockEmail: ReturnType<typeof createMockEmailService>;
@@ -217,6 +219,75 @@ describe('AuthService – password', () => {
 
       await service.resetPasswordWithOtp(dto);
       expect((service as any).otpStore.has('user@example.com')).toBe(false);
+    });
+
+    describe('wrong codes', () => {
+      let now: number;
+      beforeEach(() => {
+        now = Date.now();
+        jest.spyOn(Date, 'now').mockImplementation(() => now);
+      });
+      afterEach(() => jest.restoreAllMocks());
+
+      const guess = (otp: string) =>
+        service.resetPasswordWithOtp({ ...dto, otp });
+
+      it('asks for a 5-minute wait after 3 wrong codes, even for the right one', async () => {
+        for (let i = 0; i < 3; i++) {
+          await expect(guess('000000')).rejects.toThrow(MSG_INVALID);
+        }
+        await expect(guess('654321')).rejects.toThrow(
+          'Too many attempts. Try again in 5 minute(s).',
+        );
+      });
+
+      it('lets the person try again after the wait', async () => {
+        for (let i = 0; i < 3; i++) await guess('000000').catch(() => {});
+        now += 5 * 60 * 1000 + 1000;
+        (service as any).otpStore.get('user@example.com').expires =
+          now + 60_000;
+        mockAdminSupabase.client.from
+          .mockReturnValueOnce(
+            createMockQueryChain({
+              data: { id: 'user-123', username: 'u' },
+              error: null,
+            }),
+          )
+          .mockReturnValueOnce(
+            createMockQueryChain({ data: null, error: null }),
+          );
+        await expect(guess('654321')).resolves.toEqual(
+          expect.objectContaining({
+            message: expect.stringContaining('reset successfully'),
+          }),
+        );
+      });
+
+      it('stops for the day after 10 wrong codes, and a new code does not reset it', async () => {
+        for (let i = 0; i < 10; i++) {
+          if (i > 0 && i % 3 === 0) now += 5 * 60 * 1000 + 1000;
+          (service as any).otpStore.get('user@example.com').expires =
+            now + 60_000;
+          await guess('000000').catch(() => {});
+        }
+        now += 5 * 60 * 1000 + 1000;
+        (service as any).otpStore.set('user@example.com', {
+          otp: '111222',
+          expires: now + 15 * 60 * 1000,
+          attempts: 2,
+          lastSent: now,
+          type: 'password_reset',
+        });
+        await expect(guess('111222')).rejects.toThrow(
+          'Please try again in 24 hours',
+        );
+      });
+
+      it('does not count a guess when no code is waiting', async () => {
+        (service as any).otpStore.clear();
+        for (let i = 0; i < 5; i++) await guess('000000').catch(() => {});
+        expect((service as any).otpGuesses.size).toBe(0);
+      });
     });
   });
 
