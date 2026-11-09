@@ -25,8 +25,8 @@ export type VerificationFailure =
   | 'wrong_code'
   | 'too_many_tries';
 
-// Wrong codes allowed per emailed code before a new one must be sent.
-export const MAX_CODE_TRIES = 5;
+// Wrong codes allowed per person in 24 hours. Counted per person, so sending a new code doesn't reset it.
+export const MAX_CODE_TRIES = 10;
 
 export interface VerificationOutcome {
   success: boolean;
@@ -38,11 +38,11 @@ export interface VerificationOutcome {
 const VERIFICATION_MESSAGES: Record<VerificationFailure | 'success', string> = {
   success: 'Your company has been verified! You now have a verified badge.',
   invalid_token: 'This verification link is invalid or has already been used.',
-  expired: 'This code has expired. Send a new code from your profile.',
+  expired: 'This code or link has expired. Send a new one from your profile.',
   server_error: 'Something went wrong. Please try again.',
   no_code: "There's no code waiting. Send a new code from your profile.",
   wrong_code: "That code isn't right. Check the email and try again.",
-  too_many_tries: 'Too many wrong codes. Send a new code from your profile.',
+  too_many_tries: 'Too many wrong codes. Please try again in 24 hours.',
 };
 
 @Injectable()
@@ -544,7 +544,7 @@ export class CompanyVerificationService {
       if (new Date(tokenData.expires_at) < new Date()) {
         return this.outcome('expired');
       }
-      if ((await this.wrongTries(tokenData.id)) >= MAX_CODE_TRIES) {
+      if ((await this.wrongTries(userId)) >= MAX_CODE_TRIES) {
         return this.outcome('too_many_tries');
       }
 
@@ -554,7 +554,7 @@ export class CompanyVerificationService {
         given.length === expected.length &&
         crypto.timingSafeEqual(given, expected);
       if (!matches) {
-        const tries = await this.addWrongTry(tokenData.id);
+        const tries = await this.addWrongTry(userId);
         return this.outcome(
           tries >= MAX_CODE_TRIES ? 'too_many_tries' : 'wrong_code',
         );
@@ -570,12 +570,12 @@ export class CompanyVerificationService {
   // Wrong-code counts live in Redis, or in memory when Redis is down.
   private readonly localTries = new Map<string, number>();
 
-  private triesKey(tokenId: string): string {
-    return `company-verification:tries:${tokenId}`;
+  private triesKey(userId: string): string {
+    return `company-verification:tries:user:${userId}`;
   }
 
-  private async wrongTries(tokenId: string): Promise<number> {
-    const key = this.triesKey(tokenId);
+  private async wrongTries(userId: string): Promise<number> {
+    const key = this.triesKey(userId);
     const client = this.redis?.getClient();
     if (client) {
       try {
@@ -587,8 +587,8 @@ export class CompanyVerificationService {
     return this.localTries.get(key) ?? 0;
   }
 
-  private async addWrongTry(tokenId: string): Promise<number> {
-    const key = this.triesKey(tokenId);
+  private async addWrongTry(userId: string): Promise<number> {
+    const key = this.triesKey(userId);
     const client = this.redis?.getClient();
     if (client) {
       try {

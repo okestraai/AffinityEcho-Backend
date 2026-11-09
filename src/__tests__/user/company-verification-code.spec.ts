@@ -92,4 +92,27 @@ describe('CompanyVerificationService code check', () => {
       reason: 'too_many_tries',
     });
   });
+
+  it('does not reset the count when a new code is sent', async () => {
+    const first = pendingToken();
+    const wrong = '000000';
+    mockClient.from.mockReturnValue(createMockQueryChain({ data: first, error: null }));
+    for (let i = 0; i < MAX_CODE_TRIES; i++) await service.verifyCode('u1', wrong);
+
+    // A resend replaces the token with a new one.
+    const second = pendingToken({ id: 'tok-id-2', token: '99999999-2222-3333-4444-555555555555' });
+    mockClient.from.mockReturnValue(createMockQueryChain({ data: second, error: null }));
+    expect(await service.verifyCode('u1', service.codeFor(second.token))).toMatchObject({
+      reason: 'too_many_tries',
+    });
+  });
+
+  it("counts each person's wrong codes separately", async () => {
+    mockClient.from.mockReturnValue(createMockQueryChain({ data: pendingToken(), error: null }));
+    for (let i = 0; i < MAX_CODE_TRIES; i++) await service.verifyCode('u1', '000000');
+    const other = pendingToken({ user_id: 'u2' });
+    mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: other, error: null }))
+      .mockReturnValue(createMockQueryChain({ data: null, error: null }));
+    expect(await service.verifyCode('u2', service.codeFor(other.token))).toMatchObject({ success: true });
+  });
 });
