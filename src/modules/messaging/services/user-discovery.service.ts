@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import logger from '../../../common/utils/logger.util';
 import { MSG } from '../../../common/constants/messages';
-import { searchValue } from '../../../database/query-builder';
+import { searchValue, likeText } from '../../../database/query-builder';
 
 @Injectable()
 export class UserDiscoveryService {
@@ -49,7 +49,7 @@ export class UserDiscoveryService {
         .eq('is_deleted', false)
         .eq('is_deactivated', false)
         .eq('has_completed_onboarding', true)
-        .ilike('username', `${term}%`)
+        .ilike('username', `${likeText(term)}%`)
         .order('username', { ascending: true })
         .limit(limit + blockedIds.size); // over-fetch to compensate for block filtering
 

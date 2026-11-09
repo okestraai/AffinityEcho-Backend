@@ -223,7 +223,7 @@ describe('MentorshipDiscoverService', () => {
       const result = await service.discoverProfiles('u1', {} as any);
       expect(result.success).toBe(true);
       // u3 should be excluded via .not('id', 'in', ...)
-      expect(mainChain.not).toHaveBeenCalledWith('id', 'in', expect.stringContaining('u3'));
+      expect(mainChain.not).toHaveBeenCalledWith('id', 'in', expect.arrayContaining(['u3']));
     });
   });
 
@@ -503,7 +503,7 @@ describe('MentorshipDiscoverService', () => {
 
       const result = await service.discoverProfiles('u1', {} as any);
       expect(result.success).toBe(true);
-      expect(mainChain.not).toHaveBeenCalledWith('id', 'in', expect.stringContaining('u5'));
+      expect(mainChain.not).toHaveBeenCalledWith('id', 'in', expect.arrayContaining(['u5']));
     });
 
     it('should handle activity score calculation with response time variants', async () => {

@@ -10,6 +10,7 @@ import { AdminForumQueryDto } from '../dto/admin-forum-query.dto';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import { AdminUsersService } from './admin-users.service';
 import PDFDocument from 'pdfkit';
+import { likeText } from '../../../database/query-builder';
 
 @Injectable()
 export class AdminForumsService {
@@ -39,7 +40,7 @@ export class AdminForumsService {
 
     if (query.type === 'global') q = q.eq('is_global', true);
     else if (query.type === 'company') q = q.eq('is_global', false);
-    if (query.search) q = q.ilike('name', `%${query.search}%`);
+    if (query.search) q = q.ilike('name', `%${likeText(query.search)}%`);
 
     const { data, error, count } = await q;
     if (error) throw new BadRequestException(error.message);
@@ -240,7 +241,7 @@ export class AdminForumsService {
 
     if (query.type === 'global') q = q.eq('is_global', true);
     else if (query.type === 'company') q = q.eq('is_global', false);
-    if (query.search) q = q.ilike('name', `%${query.search}%`);
+    if (query.search) q = q.ilike('name', `%${likeText(query.search)}%`);
 
     const { data, error } = await q;
     if (error) throw new BadRequestException(error.message);

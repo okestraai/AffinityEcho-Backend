@@ -65,9 +65,14 @@ export function filterValue(text: string): string {
   return `"${String(text).replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 }
 
-// A "contains" search value: the text matches literally, so % and _ typed by a user are not wildcards.
+// Escapes \, % and _ so text typed by a user matches literally in LIKE and ILIKE.
+export function likeText(text: string): string {
+  return String(text).replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// A "contains" search value for or() filters, matched literally.
 export function searchValue(text: string): string {
-  return filterValue(`%${String(text).replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+  return filterValue(`%${likeText(text)}%`);
 }
 
 const FILTER_OPS = new Set([

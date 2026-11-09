@@ -8,6 +8,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import { AdminUsersService } from './admin-users.service';
 import PDFDocument from 'pdfkit';
+import { likeText } from '../../../database/query-builder';
 
 @Injectable()
 export class AdminNooksService {
@@ -44,7 +45,7 @@ export class AdminNooksService {
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1);
 
-    if (query.search) q = q.ilike('title', `%${query.search}%`);
+    if (query.search) q = q.ilike('title', `%${likeText(query.search)}%`);
     if (query.scope) q = q.eq('scope', query.scope);
     if (query.is_locked !== undefined)
       q = q.eq('is_locked', query.is_locked === 'true');
@@ -275,7 +276,7 @@ export class AdminNooksService {
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
-    if (query.search) q = q.ilike('title', `%${query.search}%`);
+    if (query.search) q = q.ilike('title', `%${likeText(query.search)}%`);
     if (query.scope) q = q.eq('scope', query.scope);
     if (query.is_locked !== undefined)
       q = q.eq('is_locked', query.is_locked === 'true');

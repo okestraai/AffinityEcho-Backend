@@ -8,7 +8,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { MentorshipQueryDto } from '../dto/mentorship-query.dto';
 import { AFFINITY_GROUP_LABELS } from '../../../common/constants/affinity-groups';
 import logger from '../../../common/utils/logger.util';
-import { searchValue } from '../../../database/query-builder';
+import { searchValue, likeText } from '../../../database/query-builder';
 
 @Injectable()
 export class MentorshipDiscoverService {
@@ -134,11 +134,7 @@ export class MentorshipDiscoverService {
 
       // Exclude existing mentor-mentee pairs
       if (excludeIds.size > 0) {
-        supabaseQuery = supabaseQuery.not(
-          'id',
-          'in',
-          `(${Array.from(excludeIds).join(',')})`,
-        );
+        supabaseQuery = supabaseQuery.not('id', 'in', Array.from(excludeIds));
       }
 
       // Search filter
@@ -163,7 +159,10 @@ export class MentorshipDiscoverService {
 
       // Location filter
       if (location) {
-        supabaseQuery = supabaseQuery.ilike('location', `%${location}%`);
+        supabaseQuery = supabaseQuery.ilike(
+          'location',
+          `%${likeText(location)}%`,
+        );
       }
 
       // Availability filter
