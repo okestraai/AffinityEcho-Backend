@@ -122,7 +122,7 @@ describe('AdminUsersService', () => {
       await service.listUsers({ search: 'john' });
 
       expect(chain.or).toHaveBeenCalledWith(
-        'username.ilike.%john%,email.ilike.%john%',
+        'username.ilike."%john%",email.ilike."%john%"',
       );
     });
 
@@ -955,7 +955,7 @@ describe('AdminUsersService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(usersChain.or).toHaveBeenCalledWith(
-        'username.ilike.%test%,email.ilike.%test%',
+        'username.ilike."%test%",email.ilike."%test%"',
       );
     });
 

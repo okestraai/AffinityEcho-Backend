@@ -8,6 +8,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { MentorshipQueryDto } from '../dto/mentorship-query.dto';
 import { AFFINITY_GROUP_LABELS } from '../../../common/constants/affinity-groups';
 import logger from '../../../common/utils/logger.util';
+import { filterValue } from '../../../database/query-builder';
 
 @Injectable()
 export class MentorshipDiscoverService {
@@ -143,7 +144,7 @@ export class MentorshipDiscoverService {
       // Search filter
       if (search) {
         supabaseQuery = supabaseQuery.or(
-          `username.ilike.%${search}%,bio.ilike.%${search}%,mentor_bio.ilike.%${search}%,job_title.ilike.%${search}%`,
+          `username.ilike.${filterValue(`%${search}%`)},bio.ilike.${filterValue(`%${search}%`)},mentor_bio.ilike.${filterValue(`%${search}%`)},job_title.ilike.${filterValue(`%${search}%`)}`,
         );
       }
 

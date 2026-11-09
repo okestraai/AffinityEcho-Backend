@@ -19,6 +19,7 @@ import { ContentSafetyService } from '../../content-safety/content-safety.servic
 import { MSG } from '../../../common/constants/messages';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { filterValue } from '../../../database/query-builder';
 
 interface UserReaction {
   seen: boolean;
@@ -279,8 +280,8 @@ export class TopicService {
 
     if (filters.search) {
       query = query.or(`
-      title.ilike.%${filters.search}%,
-      content.ilike.%${filters.search}%
+      title.ilike.${filterValue(`%${filters.search}%`)},
+      content.ilike.${filterValue(`%${filters.search}%`)}
     `);
     }
 
@@ -295,7 +296,7 @@ export class TopicService {
       query = query.eq('company_name', ownCompany);
     } else if (userCompanyList.length > 0) {
       query = query.or(
-        `scope.eq.global,company_name.in.(${userCompanyList.map((c) => `"${c.replace(/"/g, '\\"')}"`).join(',')})`,
+        `scope.eq.global,company_name.in.(${userCompanyList.map(filterValue).join(',')})`,
       );
     } else {
       query = query.eq('scope', 'global');
@@ -914,7 +915,7 @@ export class TopicService {
 
       const companyFilter =
         companyNames.length > 0
-          ? `,company_name.in.(${companyNames.map((c) => `"${c.replace(/"/g, '\\"')}"`).join(',')})`
+          ? `,company_name.in.(${companyNames.map(filterValue).join(',')})`
           : '';
       let forumQuery = this.admin
         .from('forums')
@@ -976,7 +977,9 @@ export class TopicService {
 
       // Apply filters
       if (search) {
-        query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+        query = query.or(
+          `title.ilike.${filterValue(`%${search}%`)},content.ilike.${filterValue(`%${search}%`)}`,
+        );
       }
 
       if (filters.hashtag) {

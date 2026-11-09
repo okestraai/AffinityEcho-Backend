@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import logger from '../../../common/utils/logger.util';
 import { MSG } from '../../../common/constants/messages';
+import { filterValue } from '../../../database/query-builder';
 
 @Injectable()
 export class UserDiscoveryService {
@@ -132,7 +133,7 @@ export class UserDiscoveryService {
       // Apply search filter
       if (search) {
         query = query.or(
-          `username.ilike.%${search}%,job_title.ilike.%${search}%,bio.ilike.%${search}%`,
+          `username.ilike.${filterValue(`%${search}%`)},job_title.ilike.${filterValue(`%${search}%`)},bio.ilike.${filterValue(`%${search}%`)}`,
         );
       }
 

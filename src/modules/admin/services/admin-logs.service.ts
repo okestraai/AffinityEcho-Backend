@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { buildMeta, parsePagination } from '../admin.helpers';
 import PDFDocument from 'pdfkit';
+import { filterValue } from '../../../database/query-builder';
 
 @Injectable()
 export class AdminLogsService {
@@ -48,7 +49,7 @@ export class AdminLogsService {
     if (query.to) q = q.lte('created_at', query.to);
     if (query.search) {
       q = q.or(
-        `admin_username.ilike.%${query.search}%,action.ilike.%${query.search}%,reason.ilike.%${query.search}%`,
+        `admin_username.ilike.${filterValue(`%${query.search}%`)},action.ilike.${filterValue(`%${query.search}%`)},reason.ilike.${filterValue(`%${query.search}%`)}`,
       );
     }
 
@@ -87,7 +88,7 @@ export class AdminLogsService {
     if (query.to) q = q.lte('created_at', query.to);
     if (query.search) {
       q = q.or(
-        `admin_username.ilike.%${query.search}%,action.ilike.%${query.search}%,reason.ilike.%${query.search}%`,
+        `admin_username.ilike.${filterValue(`%${query.search}%`)},action.ilike.${filterValue(`%${query.search}%`)},reason.ilike.${filterValue(`%${query.search}%`)}`,
       );
     }
 

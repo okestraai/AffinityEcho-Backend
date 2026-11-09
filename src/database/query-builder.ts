@@ -26,7 +26,18 @@ function splitTopLevel(expr: string): string[] {
   let depth = 0;
   let quoted = false;
   let current = '';
+  let escaped = false;
   for (const ch of expr) {
+    if (escaped) {
+      escaped = false;
+      current += ch;
+      continue;
+    }
+    if (quoted && ch === '\\') {
+      escaped = true;
+      current += ch;
+      continue;
+    }
     if (ch === '"') quoted = !quoted;
     else if (!quoted && ch === '(') depth++;
     else if (!quoted && ch === ')') depth--;
@@ -45,9 +56,28 @@ function splitTopLevel(expr: string): string[] {
 function unquote(value: string): string {
   const v = value.trim();
   return v.length >= 2 && v.startsWith('"') && v.endsWith('"')
-    ? v.slice(1, -1).replace(/\\"/g, '"')
+    ? v.slice(1, -1).replace(/\\(.)/g, '$1')
     : v;
 }
+
+// Wraps request text so a filter string treats it as one value, whatever it contains.
+export function filterValue(text: string): string {
+  return `"${String(text).replace(/[\\"]/g, (c) => `\\${c}`)}"`;
+}
+
+const FILTER_OPS = new Set([
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'like',
+  'ilike',
+  'is',
+  'in',
+]);
+const COLUMN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function escapeLiteral(val: any): string {
   if (val === null || val === undefined) return 'NULL';
@@ -798,17 +828,17 @@ export class QueryChain {
       return `(${parts.join(' AND ')})`;
     }
 
-    // Standard: col.op.value
+    // Standard: col.op.value. Anything else is refused, never passed through as SQL.
     const dotIdx = expr.indexOf('.');
-    if (dotIdx === -1) return expr;
-
-    const col = expr.substring(0, dotIdx);
-    const rest = expr.substring(dotIdx + 1);
+    const col = dotIdx === -1 ? '' : expr.substring(0, dotIdx).trim();
+    const rest = dotIdx === -1 ? '' : expr.substring(dotIdx + 1);
     const opIdx = rest.indexOf('.');
-    if (opIdx === -1) return expr;
-
-    const op = rest.substring(0, opIdx);
-    const val = rest.substring(opIdx + 1);
+    const op = opIdx === -1 ? '' : rest.substring(0, opIdx);
+    if (!COLUMN.test(col) || !FILTER_OPS.has(op)) {
+      throw new Error('Unsupported filter expression');
+    }
+    const raw = rest.substring(opIdx + 1);
+    const val = op === 'in' ? raw : unquote(raw);
 
     const colEsc = escapeIdentifier(col);
     switch (op) {
@@ -842,7 +872,7 @@ export class QueryChain {
         return `${colEsc} IN (${inVals.join(', ')})`;
       }
       default:
-        return `${colEsc} ${op} ${escapeLiteral(val)}`;
+        throw new Error('Unsupported filter expression');
     }
   }
 

@@ -18,6 +18,7 @@ import {
 } from '../admin.helpers';
 import logger from '../../../common/utils/logger.util';
 import PDFDocument from 'pdfkit';
+import { filterValue } from '../../../database/query-builder';
 
 // Define interfaces for type safety
 interface ExportResult {
@@ -68,7 +69,7 @@ export class AdminUsersService {
 
       if (query.search) {
         q = q.or(
-          `username.ilike.%${query.search}%,email.ilike.%${query.search}%`,
+          `username.ilike.${filterValue(`%${query.search}%`)},email.ilike.${filterValue(`%${query.search}%`)}`,
         );
       }
       if (query.role) q = q.eq('role', query.role);
@@ -561,7 +562,7 @@ export class AdminUsersService {
       // Apply filters
       if (params.search) {
         q = q.or(
-          `username.ilike.%${params.search}%,email.ilike.%${params.search}%`,
+          `username.ilike.${filterValue(`%${params.search}%`)},email.ilike.${filterValue(`%${params.search}%`)}`,
         );
       }
       if (params.role) q = q.eq('role', params.role);

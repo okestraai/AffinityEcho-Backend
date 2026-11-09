@@ -1,4 +1,4 @@
-import { QueryChain, SupabaseAdapter } from '../../database/query-builder';
+import { QueryChain, SupabaseAdapter, filterValue } from '../../database/query-builder';
 
 // Create a mock Pool that captures SQL queries
 function createMockPool(returnRows: any[] = [], rowCount = 0) {
@@ -411,6 +411,47 @@ describe('QueryChain', () => {
     it('escapes a quote inside a value', async () => {
       const sql = await whereOf(`company_name.in.("O'Brien Ltd")`);
       expect(sql).toContain(`IN ('O''Brien Ltd')`);
+    });
+  });
+
+  describe('request text in filters', () => {
+    const run = async (expr: string) => {
+      const { pool } = createMockPool([]);
+      const result: any = await new QueryChain(pool as any, 't').select('*').or(expr);
+      return { result, sql: pool.query.mock.calls[0]?.[0] as string | undefined };
+    };
+    const attack = 'x,title.IS NOT NULL OR true);SELECT pg_sleep(5);--';
+
+    it('keeps a quoted search as one escaped value', async () => {
+      const { sql } = await run(
+        `title.ilike.${filterValue(`%${attack}%`)},content.ilike.${filterValue('%x%')}`,
+      );
+      expect(sql).toBe(
+        `SELECT "t".* FROM "t" WHERE ("title" ILIKE '%x,title.IS NOT NULL OR true);SELECT pg_sleep(5);--%' OR "content" ILIKE '%x%')`,
+      );
+    });
+
+    it('keeps quotes and backslashes inside a quoted value', async () => {
+      const { sql } = await run(`company_name.in.(${filterValue('A "B" \\ C, D')})`);
+      expect(sql).toContain(`IN ('A "B" \\ C, D')`);
+    });
+
+    it('refuses a filter part that is not column.op.value, without running anything', async () => {
+      const { result, sql } = await run('scope.eq.global,1=1);DROP TABLE t;--');
+      expect(sql).toBeUndefined();
+      expect(result.error).toBeTruthy();
+    });
+
+    it('refuses an unknown operator, the old raw-SQL path', async () => {
+      const { result, sql } = await run(`title.ilike.%x%,title.IS NOT NULL OR true);SELECT 1;--`);
+      expect(sql).toBeUndefined();
+      expect(result.error).toBeTruthy();
+    });
+
+    it('refuses a column name that is not a plain identifier', async () => {
+      const { result, sql } = await run('ti"tle.eq.x');
+      expect(sql).toBeUndefined();
+      expect(result.error).toBeTruthy();
     });
   });
 

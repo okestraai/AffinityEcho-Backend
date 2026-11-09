@@ -13,6 +13,7 @@ import { ForumFiltersDto } from '../dto/forum-filters.dto';
 import logger from '../../../common/utils/logger.util';
 import { FORUM_FIELDS } from '../../../common/constants/select-fields';
 import { MSG } from '../../../common/constants/messages';
+import { filterValue } from '../../../database/query-builder';
 
 interface Forum {
   id: string;
@@ -146,7 +147,7 @@ export class ForumService {
       // Apply filters
       if (search) {
         query = query.or(
-          `name.ilike.%${search}%,description.ilike.%${search}%`,
+          `name.ilike.${filterValue(`%${search}%`)},description.ilike.${filterValue(`%${search}%`)}`,
         );
       }
 
