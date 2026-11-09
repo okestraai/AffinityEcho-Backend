@@ -385,6 +385,35 @@ describe('QueryChain', () => {
     });
   });
 
+  describe('quoted list values', () => {
+    const whereOf = async (expr: string) => {
+      const { pool } = createMockPool([]);
+      await new QueryChain(pool as any, 't').select('*').or(expr);
+      return pool.query.mock.calls[0][0] as string;
+    };
+
+    it('drops the double quotes around in() values', async () => {
+      const sql = await whereOf('is_global.eq.true,company_name.in.("Acme")');
+      expect(sql).toContain(`"company_name" IN ('Acme')`);
+      expect(sql).not.toContain(`'"Acme"'`);
+    });
+
+    it('keeps a comma inside a quoted value', async () => {
+      const sql = await whereOf('scope.eq.global,company_name.in.("Acme, Inc","Globex")');
+      expect(sql).toContain(`"company_name" IN ('Acme, Inc', 'Globex')`);
+    });
+
+    it('keeps an in() list together inside and()', async () => {
+      const sql = await whereOf('and(blocker_id.eq.u1,blocked_id.in.(u2,u3)),c.eq.3');
+      expect(sql).toContain(`"blocked_id" IN ('u2', 'u3')`);
+    });
+
+    it('escapes a quote inside a value', async () => {
+      const sql = await whereOf(`company_name.in.("O'Brien Ltd")`);
+      expect(sql).toContain(`IN ('O''Brien Ltd')`);
+    });
+  });
+
   describe('or with nested and()', () => {
     it('should parse nested and() in or()', async () => {
       const { pool } = createMockPool([]);

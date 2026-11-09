@@ -20,6 +20,35 @@ function escapeIdentifier(id: string): string {
   return '"' + id.replace(/"/g, '""') + '"';
 }
 
+// Splits on commas that sit outside double quotes and brackets, as PostgREST does.
+function splitTopLevel(expr: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let current = '';
+  for (const ch of expr) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && ch === '(') depth++;
+    else if (!quoted && ch === ')') depth--;
+    if (ch === ',' && depth === 0 && !quoted) {
+      parts.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+// PostgREST lets list values be wrapped in double quotes; the quotes are not part of the value.
+function unquote(value: string): string {
+  const v = value.trim();
+  return v.length >= 2 && v.startsWith('"') && v.endsWith('"')
+    ? v.slice(1, -1).replace(/\\"/g, '"')
+    : v;
+}
+
 function escapeLiteral(val: any): string {
   if (val === null || val === undefined) return 'NULL';
   if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
@@ -750,23 +779,9 @@ export class QueryChain {
 
   /** Parse Supabase .or() expression: "col1.eq.val1,col2.gt.val2" */
   private parseOrExpr(expr: string): string {
-    // Split on commas NOT inside parentheses
-    const parts: string[] = [];
-    let depth = 0;
-    let current = '';
-    for (const ch of expr) {
-      if (ch === '(') depth++;
-      if (ch === ')') depth--;
-      if (ch === ',' && depth === 0) {
-        parts.push(current.trim());
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    if (current.trim()) parts.push(current.trim());
-
-    return parts.map((part) => this.parseFilterExpr(part)).join(' OR ');
+    return splitTopLevel(expr)
+      .map((part) => this.parseFilterExpr(part))
+      .join(' OR ');
   }
 
   /** Parse a single filter expression like "col.eq.value" */
@@ -777,9 +792,9 @@ export class QueryChain {
 
     const andMatch = expr.match(/^and\((.+)\)$/);
     if (andMatch) {
-      const parts = andMatch[1]
-        .split(',')
-        .map((p) => this.parseFilterExpr(p.trim()));
+      const parts = splitTopLevel(andMatch[1]).map((p) =>
+        this.parseFilterExpr(p),
+      );
       return `(${parts.join(' AND ')})`;
     }
 
@@ -821,10 +836,9 @@ export class QueryChain {
         if (val === 'false') return `${colEsc} IS FALSE`;
         return `${colEsc} IS ${escapeLiteral(val)}`;
       case 'in': {
-        const inVals = val
-          .replace(/^\(|\)$/g, '')
-          .split(',')
-          .map((v) => escapeLiteral(v.trim()));
+        const inVals = splitTopLevel(val.replace(/^\(|\)$/g, '')).map((v) =>
+          escapeLiteral(unquote(v)),
+        );
         return `${colEsc} IN (${inVals.join(', ')})`;
       }
       default:
