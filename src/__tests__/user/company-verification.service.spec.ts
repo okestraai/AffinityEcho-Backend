@@ -572,6 +572,30 @@ describe('CompanyVerificationService', () => {
       expect(result.redirectUrl).toContain('reason=invalid_token');
     });
 
+    it('counts a second open of a used link as success when the person is verified', async () => {
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: { code: 'PGRST116' } }))
+        .mockReturnValueOnce(
+          createMockQueryChain({ data: { user_id: 'u1', used_at: new Date().toISOString() }, error: null }),
+        )
+        .mockReturnValueOnce(createMockQueryChain({ data: { is_company_verified: true }, error: null }));
+
+      const result = await service.confirmVerification('used-token');
+      expect(result).toMatchObject({ success: true });
+    });
+
+    it('still refuses a used link when the person is not verified', async () => {
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: { code: 'PGRST116' } }))
+        .mockReturnValueOnce(
+          createMockQueryChain({ data: { user_id: 'u1', used_at: new Date().toISOString() }, error: null }),
+        )
+        .mockReturnValueOnce(createMockQueryChain({ data: { is_company_verified: false }, error: null }));
+
+      const result = await service.confirmVerification('used-token');
+      expect(result).toMatchObject({ success: false, reason: 'invalid_token' });
+    });
+
     it('should return error redirect for expired token', async () => {
       const chain = createMockQueryChain({
         data: {
@@ -654,9 +678,13 @@ describe('CompanyVerificationService', () => {
         .mockReturnValueOnce(profileChain)
         .mockReturnValueOnce(usedEmailChain)
         .mockReturnValueOnce(updateProfileChain);
+      const releaseChain = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(releaseChain);
 
       const result = await service.confirmVerification('tok-1');
       expect(result.redirectUrl).toContain('reason=server_error');
+      // The token is given back so the same link can be tried again.
+      expect(releaseChain.update).toHaveBeenCalledWith({ used_at: null });
     });
 
     it('should handle used_verification_emails insert error gracefully', async () => {

@@ -421,7 +421,10 @@ export class CompanyVerificationService {
         .single();
 
       if (tokenError || !tokenData) {
-        return this.outcome('invalid_token');
+        // A second open of the same link (another device, a link scanner) is still a success.
+        return (await this.wasVerifiedWith(token))
+          ? this.outcome()
+          : this.outcome('invalid_token');
       }
 
       if (new Date(tokenData.expires_at) < new Date()) {
@@ -483,6 +486,11 @@ export class CompanyVerificationService {
           'Failed to update user profile verification status',
           updateProfileError,
         );
+        // Give the token back so the person can try the same link again.
+        await this.admin
+          .from('company_verification_tokens')
+          .update({ used_at: null })
+          .eq('token', token);
         return this.outcome('server_error');
       }
 
@@ -491,6 +499,21 @@ export class CompanyVerificationService {
       this.logger.error('Unexpected error in confirmVerification', error);
       return this.outcome('server_error');
     }
+  }
+
+  private async wasVerifiedWith(token: string): Promise<boolean> {
+    const { data: used } = await this.admin
+      .from('company_verification_tokens')
+      .select('user_id, used_at')
+      .eq('token', token)
+      .maybeSingle();
+    if (!used?.used_at) return false;
+    const { data: profile } = await this.admin
+      .from('user_profiles')
+      .select('is_company_verified')
+      .eq('id', used.user_id)
+      .maybeSingle();
+    return profile?.is_company_verified === true;
   }
 
   async getVerificationStatus(userId: string) {
