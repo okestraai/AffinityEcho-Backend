@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import logger from '../../../common/utils/logger.util';
 import { MSG } from '../../../common/constants/messages';
-import { filterValue } from '../../../database/query-builder';
+import { searchValue } from '../../../database/query-builder';
 
 @Injectable()
 export class UserDiscoveryService {
@@ -133,7 +133,7 @@ export class UserDiscoveryService {
       // Apply search filter
       if (search) {
         query = query.or(
-          `username.ilike.${filterValue(`%${search}%`)},job_title.ilike.${filterValue(`%${search}%`)},bio.ilike.${filterValue(`%${search}%`)}`,
+          `username.ilike.${searchValue(search)},job_title.ilike.${searchValue(search)},bio.ilike.${searchValue(search)}`,
         );
       }
 
@@ -322,7 +322,7 @@ export class UserDiscoveryService {
           conv.user1_id === userId ? conv.user2_id : conv.user1_id,
         );
         if (existingUserIds.length > 0) {
-          query = query.not('id', 'in', `(${existingUserIds.join(',')})`);
+          query = query.not('id', 'in', existingUserIds);
         }
       }
 

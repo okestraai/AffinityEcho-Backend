@@ -65,6 +65,11 @@ export function filterValue(text: string): string {
   return `"${String(text).replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 }
 
+// A "contains" search value: the text matches literally, so % and _ typed by a user are not wildcards.
+export function searchValue(text: string): string {
+  return filterValue(`%${String(text).replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+}
+
 const FILTER_OPS = new Set([
   'eq',
   'neq',
@@ -817,10 +822,10 @@ export class QueryChain {
   /** Parse a single filter expression like "col.eq.value" */
   private parseFilterExpr(expr: string): string {
     // Handle nested .or() and .and()
-    const orMatch = expr.match(/^or\((.+)\)$/);
+    const orMatch = expr.match(/^or\(([\s\S]+)\)$/);
     if (orMatch) return `(${this.parseOrExpr(orMatch[1])})`;
 
-    const andMatch = expr.match(/^and\((.+)\)$/);
+    const andMatch = expr.match(/^and\(([\s\S]+)\)$/);
     if (andMatch) {
       const parts = splitTopLevel(andMatch[1]).map((p) =>
         this.parseFilterExpr(p),
@@ -839,11 +844,13 @@ export class QueryChain {
     }
     const raw = rest.substring(opIdx + 1);
     const val = op === 'in' ? raw : unquote(raw);
+    // A quoted "null" or "true" is text, not the keyword.
+    const keyword = raw.trim().startsWith('"') ? undefined : val;
 
     const colEsc = escapeIdentifier(col);
     switch (op) {
       case 'eq':
-        return val === 'null'
+        return keyword === 'null'
           ? `${colEsc} IS NULL`
           : `${colEsc} = ${escapeLiteral(val)}`;
       case 'neq':
@@ -861,9 +868,9 @@ export class QueryChain {
       case 'ilike':
         return `${colEsc} ILIKE ${escapeLiteral(val)}`;
       case 'is':
-        if (val === 'null') return `${colEsc} IS NULL`;
-        if (val === 'true') return `${colEsc} IS TRUE`;
-        if (val === 'false') return `${colEsc} IS FALSE`;
+        if (keyword === 'null') return `${colEsc} IS NULL`;
+        if (keyword === 'true') return `${colEsc} IS TRUE`;
+        if (keyword === 'false') return `${colEsc} IS FALSE`;
         return `${colEsc} IS ${escapeLiteral(val)}`;
       case 'in': {
         const inVals = splitTopLevel(val.replace(/^\(|\)$/g, '')).map((v) =>

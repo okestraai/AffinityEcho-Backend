@@ -1,4 +1,4 @@
-import { QueryChain, SupabaseAdapter, filterValue } from '../../database/query-builder';
+import { QueryChain, SupabaseAdapter, filterValue, searchValue } from '../../database/query-builder';
 
 // Create a mock Pool that captures SQL queries
 function createMockPool(returnRows: any[] = [], rowCount = 0) {
@@ -448,10 +448,34 @@ describe('QueryChain', () => {
       expect(result.error).toBeTruthy();
     });
 
+    it('treats % and _ in a search as plain characters', async () => {
+      const { sql } = await run(`title.ilike.${searchValue('50%_off')}`);
+      expect(sql).toContain(`"title" ILIKE '%50\\%\\_off%'`);
+    });
+
+    it('keeps a quoted "null" as text', async () => {
+      const { sql } = await run(`name.eq.${filterValue('null')},name.is.null`);
+      expect(sql).toContain(`"name" = 'null'`);
+      expect(sql).toContain(`"name" IS NULL`);
+    });
+
+    it('accepts a value with a line break inside a nested group', async () => {
+      const { sql } = await run(`and(a.eq.1,b.ilike.${searchValue('two\nlines')}),c.eq.3`);
+      expect(sql).toContain(`"b" ILIKE '%two\nlines%'`);
+    });
+
     it('refuses a column name that is not a plain identifier', async () => {
       const { result, sql } = await run('ti"tle.eq.x');
       expect(sql).toBeUndefined();
       expect(result.error).toBeTruthy();
+    });
+  });
+
+  describe('not in', () => {
+    it('excludes a list of ids', async () => {
+      const { pool } = createMockPool([]);
+      await new QueryChain(pool as any, 't').select('*').not('id', 'in', ['a1', 'b2']);
+      expect(pool.query.mock.calls[0][0]).toContain(`"id" NOT IN ('a1', 'b2')`);
     });
   });
 

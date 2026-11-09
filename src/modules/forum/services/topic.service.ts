@@ -19,7 +19,7 @@ import { ContentSafetyService } from '../../content-safety/content-safety.servic
 import { MSG } from '../../../common/constants/messages';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { filterValue } from '../../../database/query-builder';
+import { filterValue, searchValue } from '../../../database/query-builder';
 
 interface UserReaction {
   seen: boolean;
@@ -280,8 +280,8 @@ export class TopicService {
 
     if (filters.search) {
       query = query.or(`
-      title.ilike.${filterValue(`%${filters.search}%`)},
-      content.ilike.${filterValue(`%${filters.search}%`)}
+      title.ilike.${searchValue(filters.search)},
+      content.ilike.${searchValue(filters.search)}
     `);
     }
 
@@ -978,7 +978,7 @@ export class TopicService {
       // Apply filters
       if (search) {
         query = query.or(
-          `title.ilike.${filterValue(`%${search}%`)},content.ilike.${filterValue(`%${search}%`)}`,
+          `title.ilike.${searchValue(search)},content.ilike.${searchValue(search)}`,
         );
       }
 
