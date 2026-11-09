@@ -296,8 +296,9 @@ export class EmailService {
     company: string,
     verificationToken: string,
   ) {
-    const backendUrl = this.config.get('BACKEND_URL');
-    const verificationUrl = `${backendUrl}/api/v1/user/verify-company/${verificationToken}`;
+    // A page the mobile app claims, so a phone with the app opens it there.
+    const frontendUrl = this.config.get('FRONTEND_URL');
+    const verificationUrl = `${frontendUrl}/verify-company?token=${encodeURIComponent(verificationToken)}`;
 
     return this.sendEmail(
       email,

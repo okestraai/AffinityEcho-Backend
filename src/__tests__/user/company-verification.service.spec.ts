@@ -566,6 +566,8 @@ describe('CompanyVerificationService', () => {
       mockClient.from.mockReturnValueOnce(chain);
 
       const result = await service.confirmVerification('bad-token');
+      expect(result).toMatchObject({ success: false, reason: 'invalid_token' });
+      expect(result.message).toMatch(/invalid/);
       expect(result.redirectUrl).toContain('status=error');
       expect(result.redirectUrl).toContain('reason=invalid_token');
     });
@@ -606,6 +608,8 @@ describe('CompanyVerificationService', () => {
 
       const result = await service.confirmVerification('valid-token');
       expect(result.redirectUrl).toContain('status=success');
+      expect(result.redirectUrl).toContain('/verify-company?');
+      expect(result).toMatchObject({ success: true, reason: undefined });
     });
 
     it('should return error redirect on token update failure', async () => {

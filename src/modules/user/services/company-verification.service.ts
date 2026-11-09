@@ -15,6 +15,23 @@ import {
 } from '../../../common/constants/company-domains';
 import { MSG } from '../../../common/constants/messages';
 
+export type VerificationFailure = 'invalid_token' | 'expired' | 'server_error';
+
+export interface VerificationOutcome {
+  success: boolean;
+  reason?: VerificationFailure;
+  message: string;
+  redirectUrl: string;
+}
+
+const VERIFICATION_MESSAGES: Record<VerificationFailure | 'success', string> = {
+  success: 'Your company has been verified! You now have a verified badge.',
+  invalid_token: 'This verification link is invalid or has already been used.',
+  expired:
+    'This verification link has expired. Request a new one from your profile.',
+  server_error: 'Something went wrong. Please try again.',
+};
+
 @Injectable()
 export class CompanyVerificationService {
   private readonly logger = new Logger(CompanyVerificationService.name);
@@ -382,10 +399,20 @@ export class CompanyVerificationService {
     };
   }
 
-  async confirmVerification(token: string) {
-    try {
-      const frontendUrl = this.config.get<string>('FRONTEND_URL');
+  // The answer for the app and website, plus the page a browser lands on for an old email link.
+  private outcome(reason?: VerificationFailure): VerificationOutcome {
+    const frontendUrl = this.config.get<string>('FRONTEND_URL');
+    const query = reason ? `status=error&reason=${reason}` : 'status=success';
+    return {
+      success: !reason,
+      reason,
+      message: VERIFICATION_MESSAGES[reason ?? 'success'],
+      redirectUrl: `${frontendUrl}/verify-company?${query}`,
+    };
+  }
 
+  async confirmVerification(token: string): Promise<VerificationOutcome> {
+    try {
       const { data: tokenData, error: tokenError } = await this.admin
         .from('company_verification_tokens')
         .select('*')
@@ -394,15 +421,11 @@ export class CompanyVerificationService {
         .single();
 
       if (tokenError || !tokenData) {
-        return {
-          redirectUrl: `${frontendUrl}/settings/verification?status=error&reason=invalid_token`,
-        };
+        return this.outcome('invalid_token');
       }
 
       if (new Date(tokenData.expires_at) < new Date()) {
-        return {
-          redirectUrl: `${frontendUrl}/settings/verification?status=error&reason=expired`,
-        };
+        return this.outcome('expired');
       }
 
       // Mark token as used
@@ -413,9 +436,7 @@ export class CompanyVerificationService {
 
       if (updateTokenError) {
         this.logger.error('Failed to mark token as used', updateTokenError);
-        return {
-          redirectUrl: `${frontendUrl}/settings/verification?status=error&reason=server_error`,
-        };
+        return this.outcome('server_error');
       }
 
       // Fetch user's hash + encrypted email for permanent record
@@ -462,20 +483,13 @@ export class CompanyVerificationService {
           'Failed to update user profile verification status',
           updateProfileError,
         );
-        return {
-          redirectUrl: `${frontendUrl}/settings/verification?status=error&reason=server_error`,
-        };
+        return this.outcome('server_error');
       }
 
-      return {
-        redirectUrl: `${frontendUrl}/settings/verification?status=success`,
-      };
+      return this.outcome();
     } catch (error) {
       this.logger.error('Unexpected error in confirmVerification', error);
-      const frontendUrl = this.config.get<string>('FRONTEND_URL');
-      return {
-        redirectUrl: `${frontendUrl}/settings/verification?status=error&reason=server_error`,
-      };
+      return this.outcome('server_error');
     }
   }
 
