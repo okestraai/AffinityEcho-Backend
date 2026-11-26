@@ -495,7 +495,7 @@ export class EventsService {
     const now = Date.now();
     const { data: regs } = await this.admin
       .from('event_registrations')
-      .select('event_id, attendance, status')
+      .select('event_id, attendance, share_email, status')
       .eq('user_id', userId)
       .eq('status', 'registered');
     const ids = (regs ?? []).map((r: any) => r.event_id);
@@ -518,9 +518,13 @@ export class EventsService {
     const attendanceOf = new Map(
       (regs ?? []).map((r: any) => [r.event_id, r.attendance]),
     );
+    const sharingOf = new Map(
+      (regs ?? []).map((r: any) => [r.event_id, !!r.share_email]),
+    );
     const card = (e: any) => ({
       ...this.publicShape(e),
       attendance: attendanceOf.get(e.id) ?? null,
+      shareEmail: sharingOf.get(e.id) ?? null,
     });
     const isActive = (e: any) =>
       e.status === 'published' && new Date(e.ends_at).getTime() > now;
