@@ -282,8 +282,8 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     });
 
     it('should throw BadRequestException when max attempts reached and cooldown not passed', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '123456',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '123456'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 3,
         lastSent: Date.now(),
@@ -295,8 +295,8 @@ describe('AuthService – tokens & profile (refresh, sendOtp, resendOtp, updateP
     });
 
     it('should throw BadRequestException when resend within 30 seconds', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '123456',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '123456'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 1,
         lastSent: Date.now(),

@@ -396,8 +396,8 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     const token = '123456';
 
     it('should return tokens for a valid OTP', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '123456',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '123456'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 1,
         lastSent: Date.now(),
@@ -433,8 +433,8 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     });
 
     it('asks for a 5-minute wait after 3 wrong sign-up codes', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '123456',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '123456'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 1,
         lastSent: Date.now(),
@@ -451,8 +451,8 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     });
 
     it('should throw UnauthorizedException for invalid OTP', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '999999',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '999999'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 1,
         lastSent: Date.now(),
@@ -468,8 +468,8 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     });
 
     it('should throw UnauthorizedException for expired OTP', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '123456',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '123456'),
         expires: Date.now() - 1000,
         attempts: 1,
         lastSent: Date.now(),
@@ -509,8 +509,8 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
     });
 
     it('should remove OTP from store after successful verification', async () => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '123456',
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '123456'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 1,
         lastSent: Date.now(),
@@ -530,7 +530,9 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
 
       await service.verifyOtp(email, token);
 
-      expect((service as any).otpStore.has('user@example.com')).toBe(false);
+      expect(
+        await (service as any).otpStore.get('user@example.com'),
+      ).toBeNull();
     });
   });
 });

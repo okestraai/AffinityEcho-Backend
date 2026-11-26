@@ -153,9 +153,9 @@ describe('AuthService – password', () => {
       otp: '654321',
     };
 
-    beforeEach(() => {
-      (service as any).otpStore.set('user@example.com', {
-        otp: '654321',
+    beforeEach(async () => {
+      await (service as any).otpStore.set('user@example.com', {
+        hash: (service as any).otpStore.hash('user@example.com', '654321'),
         expires: Date.now() + 15 * 60 * 1000,
         attempts: 1,
         lastSent: Date.now(),
@@ -218,7 +218,9 @@ describe('AuthService – password', () => {
       mockAdminSupabase.client.from.mockReturnValueOnce(updateChain);
 
       await service.resetPasswordWithOtp(dto);
-      expect((service as any).otpStore.has('user@example.com')).toBe(false);
+      expect(
+        await (service as any).otpStore.get('user@example.com'),
+      ).toBeNull();
     });
 
     describe('wrong codes', () => {
@@ -244,7 +246,7 @@ describe('AuthService – password', () => {
       it('lets the person try again after the wait', async () => {
         for (let i = 0; i < 3; i++) await guess('000000').catch(() => {});
         now += 5 * 60 * 1000 + 1000;
-        (service as any).otpStore.get('user@example.com').expires =
+        (service as any).otpStore.local.get('user@example.com').expires =
           now + 60_000;
         mockAdminSupabase.client.from
           .mockReturnValueOnce(
@@ -266,12 +268,12 @@ describe('AuthService – password', () => {
       it('never locks the email for a day, so a stranger cannot block a reset', async () => {
         for (let i = 0; i < 12; i++) {
           if (i > 0 && i % 3 === 0) now += 5 * 60 * 1000 + 1000;
-          (service as any).otpStore.get('user@example.com').expires =
+          (service as any).otpStore.local.get('user@example.com').expires =
             now + 60_000;
           await guess('000000').catch(() => {});
         }
         now += 5 * 60 * 1000 + 1000;
-        (service as any).otpStore.get('user@example.com').expires =
+        (service as any).otpStore.local.get('user@example.com').expires =
           now + 60_000;
         mockAdminSupabase.client.from
           .mockReturnValueOnce(
@@ -291,10 +293,10 @@ describe('AuthService – password', () => {
       });
 
       it('does not count a guess when no code is waiting', async () => {
-        const waiting = (service as any).otpStore.get('user@example.com');
-        (service as any).otpStore.clear();
+        const waiting = (service as any).otpStore.local.get('user@example.com');
+        (service as any).otpStore.local.clear();
         for (let i = 0; i < 5; i++) await guess('000000').catch(() => {});
-        (service as any).otpStore.set('user@example.com', waiting);
+        (service as any).otpStore.local.set('user@example.com', waiting);
         mockAdminSupabase.client.from
           .mockReturnValueOnce(
             createMockQueryChain({

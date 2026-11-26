@@ -25,24 +25,15 @@ import logger from '../../../common/utils/logger.util';
 import { UserProfileResponse } from '../interfaces/user-profile.interface';
 import { OnboardingService } from './onboarding.service';
 import { MSG } from '../../../common/constants/messages';
-import { timingSafeEqual } from 'crypto';
 import { RedisService } from '../../../common/services/redis.service';
 import { AttemptCounter } from '../../../common/utils/attempt-counter';
+import { OtpStore, newOtp } from '../../../common/utils/otp-store';
 
 @Injectable()
 export class AuthService {
   private admin;
-  // UPDATE THIS TYPE DEFINITION
-  private otpStore: Map<
-    string,
-    {
-      otp: string;
-      expires: number;
-      attempts: number;
-      lastSent: number;
-      type?: string; // ADD THIS - make it optional
-    }
-  >;
+  // Email codes, kept in Redis so every server sees them.
+  private otpStore: OtpStore;
   private readonly MAX_OTP_ATTEMPTS = 3;
   private readonly OTP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
   // Wrong guesses per email, kept apart from the code so a new code doesn't reset them.
@@ -57,7 +48,7 @@ export class AuthService {
     @Optional() redis?: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
-    this.otpStore = new Map();
+    this.otpStore = new OtpStore(config.get<string>('JWT_SECRET') ?? '', redis);
     this.otpGuesses = new AttemptCounter(redis);
   }
 
@@ -117,8 +108,8 @@ export class AuthService {
     type: 'signup' | 'password_reset' = 'signup',
   ): Promise<void> {
     const now = Date.now();
-    this.otpStore.set(email.toLowerCase(), {
-      otp,
+    await this.otpStore.set(email, {
+      hash: this.otpStore.hash(email, otp),
       expires: now + 15 * 60 * 1000,
       attempts: 1,
       lastSent: now,
@@ -135,7 +126,7 @@ export class AuthService {
   ): Promise<boolean> {
     const isValid = await this.checkOtp(email.toLowerCase(), token);
     if (isValid) {
-      this.otpStore.delete(email.toLowerCase());
+      await this.otpStore.delete(email);
     }
     return isValid;
   }
@@ -147,8 +138,9 @@ export class AuthService {
     token: string,
     type?: string,
   ): Promise<boolean> {
+    key = key.toLowerCase();
     const now = Date.now();
-    const stored = this.otpStore.get(key);
+    const stored = await this.otpStore.get(key);
     const live = !!stored && stored.expires >= now;
     const burstKey = `otp:burst:${key}`;
     // Only a real guess at a live code counts; it is counted before the check.
@@ -166,13 +158,10 @@ export class AuthService {
       }
     }
 
-    const given = Buffer.from(String(token ?? ''));
-    const expected = Buffer.from(stored?.otp ?? '');
     const matches =
       live &&
       (type === undefined || stored.type === type) &&
-      given.length === expected.length &&
-      timingSafeEqual(given, expected);
+      this.otpStore.matches(stored, key, token);
 
     if (matches) {
       await this.otpGuesses.clear(burstKey);
@@ -854,14 +843,7 @@ export class AuthService {
       const resetOtp = this.generateOtp();
 
       // Store OTP with password reset type
-      const now = Date.now();
-      this.otpStore.set(dto.email, {
-        otp: resetOtp,
-        expires: now + 15 * 60 * 1000, // 15 minutes
-        attempts: 1,
-        lastSent: now,
-        type: 'password_reset', // Mark as password reset OTP
-      });
+      await this.storeOtp(dto.email, resetOtp, 'password_reset');
 
       // OPTIMIZATION: Already have username from the query above
       const username = profile.username || 'User';
@@ -947,7 +929,7 @@ export class AuthService {
       }
 
       // Clear OTP after successful reset
-      this.otpStore.delete(dto.email);
+      await this.otpStore.delete(dto.email);
 
       // OPTIMIZATION: Send confirmation email (already have username)
       try {
@@ -1108,7 +1090,7 @@ export class AuthService {
     const email = dto.email.toLowerCase();
     const now = Date.now();
 
-    const existing = this.otpStore.get(email);
+    const existing = await this.otpStore.get(email);
     if (existing) {
       if (existing.attempts >= this.MAX_OTP_ATTEMPTS) {
         const timeLeft = this.OTP_COOLDOWN_MS - (now - existing.lastSent);
@@ -1144,15 +1126,15 @@ export class AuthService {
     }
 
     // Allow resend if user exists and NOT confirmed OR has pending OTP
-    if (isEmailConfirmed && !this.otpStore.has(email)) {
+    if (isEmailConfirmed && !existing) {
       throw new BadRequestException(
         'Email is already verified. Please log in.',
       );
     }
 
     const otp = this.generateOtp();
-    this.otpStore.set(email, {
-      otp,
+    await this.otpStore.set(email, {
+      hash: this.otpStore.hash(email, otp),
       expires: now + 15 * 60 * 1000,
       attempts: (existing?.attempts || 0) + 1,
       lastSent: now,
@@ -1449,7 +1431,7 @@ export class AuthService {
 
   // PRIVATE METHODS
   private generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return newOtp();
   }
 
   // Safely decrypt a single encrypted field; returns null on any failure.
