@@ -11,6 +11,7 @@ import { MentionsModule } from '../mentions/mentions.module';
 import { OkestraModule } from '../okestra/okestra.module';
 import { ContentSafetyModule } from '../content-safety/content-safety.module';
 import { RedisService } from '../../common/services/redis.service';
+import { PermissionGuard } from '../../common/guards/permission.guard';
 
 @Module({
   imports: [
@@ -23,7 +24,13 @@ import { RedisService } from '../../common/services/redis.service';
     ContentSafetyModule,
   ],
   controllers: [ForumController],
-  providers: [ForumService, TopicService, CommentService, RedisService],
+  providers: [
+    ForumService,
+    TopicService,
+    CommentService,
+    RedisService,
+    PermissionGuard,
+  ],
   exports: [ForumService, TopicService, CommentService],
 })
 export class ForumModule {}

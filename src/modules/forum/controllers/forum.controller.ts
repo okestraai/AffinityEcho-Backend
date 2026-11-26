@@ -23,6 +23,8 @@ import { ForumService } from '../services/forum.service';
 import { TopicService } from '../services/topic.service';
 import { CommentService } from '../services/comment.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PermissionGuard } from '../../../common/guards/permission.guard';
+import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CreateForumDto } from '../dto/create-forum.dto';
@@ -168,6 +170,8 @@ export class ForumController {
   // ========== EXISTING ENDPOINTS (unchanged) ==========
 
   @Post()
+  @UseGuards(PermissionGuard)
+  @RequirePermission('forums:create')
   @ApiOperation({
     summary: 'Create a new forum',
     description: 'Create a new forum. Admin users only.',
@@ -325,6 +329,8 @@ export class ForumController {
   }
 
   @Put(':id')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('forums:update')
   @ApiOperation({
     summary: 'Update forum',
     description: 'Update forum information. Admin users only.',
@@ -347,6 +353,8 @@ export class ForumController {
   }
 
   @Delete(':id')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('forums:delete')
   @ApiOperation({
     summary: 'Delete forum',
     description: 'Delete a forum. Admin users only.',
@@ -630,22 +638,6 @@ export class ForumController {
   }
 
   // ========== OTHER ENDPOINTS ==========
-
-  @Public()
-  @Post('bootstrap/:companyName')
-  @ApiOperation({
-    summary: 'Bootstrap foundation forums',
-    description:
-      'Create foundation forums for a company. Public endpoint for setup.',
-  })
-  @ApiParam({ name: 'companyName', description: 'Company Name' })
-  @ApiResponse({
-    status: 200,
-    description: 'Foundation forums bootstrapped successfully',
-  })
-  async bootstrapFoundationForums(@Param('companyName') companyName: string) {
-    return this.forumService.bootstrapFoundationForums(companyName);
-  }
 
   @Get('health')
   @Public()
