@@ -23,30 +23,68 @@ export function coverType(data: Buffer): CoverMime | null {
   return null;
 }
 
+const damaged = () => new BadRequestException('That image file is damaged');
+
+// APP1 to APP15 and comments hold metadata. The colour profile (APP2) and Adobe colour data (APP14) stay.
+function isJpegMetadata(marker: number, body: Buffer): boolean {
+  if (marker === 0xfe) return true;
+  if (marker < 0xe1 || marker > 0xef) return false;
+  if (
+    marker === 0xe2 &&
+    body.subarray(0, 12).toString('latin1') === 'ICC_PROFILE\0'
+  )
+    return false;
+  if (marker === 0xee && body.subarray(0, 5).toString('latin1') === 'Adobe')
+    return false;
+  return true;
+}
+
 // Removes camera and location data (EXIF, XMP, comments) so a photo can't reveal where it was taken.
+// Everything after the end of the picture is dropped too, which removes any second image glued on.
 export function stripJpeg(data: Buffer): Buffer {
   const parts: Buffer[] = [data.subarray(0, 2)];
   let i = 2;
-  while (i + 4 <= data.length) {
-    if (data[i] !== 0xff)
-      throw new BadRequestException('That image file is damaged');
+  let inScan = false;
+  while (i < data.length) {
+    if (inScan) {
+      // Image data runs until a real marker; 0xFF00, restart markers and fill bytes are part of it.
+      let j = i;
+      while (j + 1 < data.length) {
+        if (data[j] === 0xff) {
+          const next = data[j + 1];
+          if (
+            next === 0x00 ||
+            (next >= 0xd0 && next <= 0xd7) ||
+            next === 0xff
+          ) {
+            j += next === 0xff ? 1 : 2;
+            continue;
+          }
+          break;
+        }
+        j++;
+      }
+      if (j + 1 >= data.length) throw damaged();
+      parts.push(data.subarray(i, j));
+      i = j;
+      inScan = false;
+    }
+    if (i + 2 > data.length || data[i] !== 0xff) throw damaged();
     const marker = data[i + 1];
-    // Start of scan: the rest is image data.
-    if (marker === 0xda) {
-      parts.push(data.subarray(i));
+    if (marker === 0xd9) {
+      parts.push(data.subarray(i, i + 2));
       return Buffer.concat(parts);
     }
-    if (marker === 0xd9) break;
+    if (i + 4 > data.length) throw damaged();
     const length = data.readUInt16BE(i + 2);
-    if (length < 2 || i + 2 + length > data.length)
-      throw new BadRequestException('That image file is damaged');
-    const segment = data.subarray(i, i + 2 + length);
-    // APP1 to APP15 and comments hold metadata; APP0 (JFIF) and the image tables stay.
-    const isMetadata = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe;
-    if (!isMetadata) parts.push(segment);
+    if (length < 2 || i + 2 + length > data.length) throw damaged();
+    const body = data.subarray(i + 4, i + 2 + length);
+    if (!isJpegMetadata(marker, body))
+      parts.push(data.subarray(i, i + 2 + length));
     i += 2 + length;
+    if (marker === 0xda) inScan = true;
   }
-  throw new BadRequestException('That image file is damaged');
+  throw damaged();
 }
 
 export function stripPng(data: Buffer): Buffer {

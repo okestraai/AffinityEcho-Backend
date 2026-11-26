@@ -53,7 +53,9 @@ export function trackEventOnboarding(userId: string): void {
       WHERE u.id = $2
         AND EXISTS (SELECT 1 FROM event_registrations r WHERE r.user_id = u.id AND r.source = 'link')
         AND NOT EXISTS (SELECT 1 FROM "analytics_events" a
-                         WHERE a.user_id = u.id AND a.name = 'event_onboarding_completed')`,
+                         WHERE a.session_key = $1 AND a.platform = 'server'
+                           AND a.user_id = u.id AND a.name = 'event_onboarding_completed')
+     ON CONFLICT DO NOTHING`,
     [SERVER_SESSION, userId],
   );
 }

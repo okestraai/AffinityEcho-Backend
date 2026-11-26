@@ -27,20 +27,21 @@ export class EventsAdminService {
     const { rows } = await getPool().query(
       `WITH w AS (SELECT now() - ($1::int * interval '1 day') AS since),
             a AS (SELECT name, metadata FROM analytics_events, w
-                   WHERE session_key = 'server' AND created_at >= w.since
-                     AND name LIKE 'event\\_%')
+                   WHERE session_key = 'server' AND platform = 'server' AND type = 'custom'
+                     AND created_at >= w.since AND name LIKE 'event\\_%')
        SELECT
          (SELECT count(*) FROM event_views, w WHERE event_views.created_at >= w.since)::int AS link_opens,
          (SELECT count(*) FROM a WHERE name = 'event_otp_requested')::int AS codes_requested,
          (SELECT count(*) FROM a WHERE name = 'event_otp_verified')::int AS codes_verified,
-         (SELECT count(*) FROM a WHERE name = 'event_otp_verified' AND (metadata->>'newAccount')::boolean)::int AS new_accounts,
-         (SELECT count(*) FROM a WHERE name = 'event_registered' AND NOT coalesce((metadata->>'again')::boolean, false))::int AS registrations,
+         (SELECT count(*) FROM a WHERE name = 'event_otp_verified' AND metadata->>'newAccount' = 'true')::int AS new_accounts,
+         (SELECT count(*) FROM a WHERE name = 'event_registered' AND coalesce(metadata->>'again', 'false') <> 'true')::int AS registrations,
          (SELECT count(*) FROM analytics_events, w
            WHERE type = 'custom' AND name = 'event_onboarding_started' AND created_at >= w.since)::int AS onboarding_started,
          (SELECT count(*) FROM a WHERE name = 'event_onboarding_completed')::int AS onboarded,
-         (SELECT count(*) FROM a WHERE name = 'event_onboarding_completed' AND (metadata->>'daysSinceSignup')::int <= 7)::int AS onboarded_in_7_days,
+         (SELECT count(*) FROM a WHERE name = 'event_onboarding_completed' AND metadata->>'daysSinceSignup' ~ '^[0-7]$')::int AS onboarded_in_7_days,
          (SELECT count(*) FROM a WHERE name = 'event_created')::int AS events_created,
-         (SELECT coalesce(sum((metadata->>'guests')::int), 0) FROM a WHERE name = 'event_updated_notified')::int AS guests_notified,
+         (SELECT coalesce(sum((metadata->>'guests')::bigint), 0) FROM a
+           WHERE name = 'event_updated_notified' AND metadata->>'guests' ~ '^\\d{1,6}$')::int AS guests_notified,
          (SELECT count(*) FROM user_profiles, w WHERE user_profiles.created_at >= w.since)::int AS all_signups`,
       [n],
     );

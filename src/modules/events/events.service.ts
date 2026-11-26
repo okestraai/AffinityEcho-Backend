@@ -203,6 +203,7 @@ export class EventsService {
       .not('status', 'in', HIDDEN_STATUSES)
       .select('id');
     if (!data?.length) throw new NotFoundException('Event not found');
+    await this.dropCover(eventId);
     if (
       event.status === 'published' &&
       new Date(event.ends_at).getTime() > Date.now()
@@ -603,15 +604,35 @@ export class EventsService {
   }
 
   // The picture itself, for anyone who can see the event page.
-  async coverFile(slug: string): Promise<{ mime: string; data: Buffer }> {
+  async coverFile(
+    slug: string,
+  ): Promise<{ mime: string; data: Buffer; version: number | null }> {
     const event = await this.bySlug(slug);
     const { rows } = await getPool().query(
       'SELECT mime, data FROM event_covers WHERE event_id = $1',
       [event.id],
     );
     if (!rows[0]) throw new NotFoundException('No picture');
-    return { mime: rows[0].mime, data: rows[0].data };
+    return {
+      mime: rows[0].mime,
+      data: rows[0].data,
+      version: event.cover_updated_at
+        ? new Date(event.cover_updated_at).getTime()
+        : null,
+    };
   }
+
+  // A deleted or removed event keeps no picture.
+  async dropCover(eventId: string) {
+    try {
+      await getPool().query('DELETE FROM event_covers WHERE event_id = $1', [
+        eventId,
+      ]);
+    } catch (error) {
+      logger.warn('Cover clean-up failed', { error });
+    }
+  }
+
 
   // ── Helpers ──────────────────────────────────────────────────
 

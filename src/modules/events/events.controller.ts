@@ -78,7 +78,11 @@ export class EventsController {
   @Public()
   @Get('public/:slug/cover')
   @ApiOperation({ summary: "The event's cover picture, if it has one" })
-  async cover(@Param('slug') slug: string, @Res() res: Response) {
+  async cover(
+    @Param('slug') slug: string,
+    @Query('v') v: string | undefined,
+    @Res() res: Response,
+  ) {
     const file = await this.events.coverFile(cleanSlug(slug));
     res.setHeader('Content-Type', file.mime);
     res.setHeader('Content-Length', String(file.data.length));
@@ -86,8 +90,14 @@ export class EventsController {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // The web app runs on another address, so the picture must be loadable from there.
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    // The link carries the version, so a new picture gets a new link.
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    // The current version's link never changes, so it can be kept; any other link is checked each time,
+    // so a replaced or removed picture stops showing at once.
+    res.setHeader(
+      'Cache-Control',
+      file.version && v === String(file.version)
+        ? 'public, max-age=31536000, immutable'
+        : 'no-cache',
+    );
     res.end(file.data);
   }
 

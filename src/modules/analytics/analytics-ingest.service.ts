@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { getPool } from '../../database/pg-client';
 import logger from '../../common/utils/logger.util';
 import { CollectPayload } from './dto/collect.dto';
+import { SERVER_SESSION } from './server-events';
 import {
   clientIp,
   hashIp,
@@ -73,6 +74,8 @@ export class AnalyticsIngestService {
     try {
       const sessionKey = s(payload?.sid, 128);
       if (!sessionKey) return; // no session id → nothing to correlate; drop quietly
+      // 'server' is reserved for steps the server records itself, so visitors can't forge them.
+      if (sessionKey.toLowerCase() === SERVER_SESSION) return;
 
       const ctx = payload?.context || {};
       const rawEvents = Array.isArray(payload?.events)

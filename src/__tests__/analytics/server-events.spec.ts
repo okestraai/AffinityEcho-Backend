@@ -31,7 +31,10 @@ describe('server funnel steps', () => {
     trackEventOnboarding('user-2');
     const [sql, params] = query.mock.calls[0];
     expect(sql).toContain("r.source = 'link'");
-    expect(sql).toContain('NOT EXISTS');
+    // Only server rows count, and a unique index stops a double submit counting twice.
+    expect(sql).toContain("session_key = $1");
+    expect(sql).toContain("platform = 'server'");
+    expect(sql).toContain('ON CONFLICT DO NOTHING');
     expect(params).toEqual(['server', 'user-2']);
   });
 });

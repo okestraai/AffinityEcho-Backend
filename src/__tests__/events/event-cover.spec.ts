@@ -57,6 +57,39 @@ describe('event cover pictures', () => {
     expect(text).toContain('PIXELS');
   });
 
+  it('drops metadata after the first scan and anything glued on after the end', () => {
+    const second = jpeg([seg(0xe1, 'Exif\0\0GPS hidden-in-second-image')]);
+    const raw = Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      seg(0xe0, 'JFIF\0\x01\x01'),
+      seg(0xdb, 'TABLE'),
+      Buffer.from([0xff, 0xda, 0x00, 0x04, 0x01, 0x02]),
+      Buffer.from([0x11, 0xff, 0x00, 0x22, 0xff, 0xd3, 0x33]), // image data with stuffed and restart bytes
+      seg(0xe1, 'Exif\0\0GPS between-scans'),
+      seg(0xc4, 'HUFF'),
+      Buffer.from([0xff, 0xda, 0x00, 0x04, 0x01, 0x02]),
+      Buffer.from('SCAN2', 'latin1'),
+      Buffer.from([0xff, 0xd9]),
+      second,
+    ]);
+    const out = cleanCover(raw).data;
+    const text = out.toString('latin1');
+    expect(text).not.toContain('GPS');
+    expect(text).toContain('HUFF');
+    expect(text).toContain('SCAN2');
+    expect(out.subarray(-2)).toEqual(Buffer.from([0xff, 0xd9]));
+    // The stuffed 0xFF00 and restart marker inside the image data are kept as they were.
+    expect(out.includes(Buffer.from([0x11, 0xff, 0x00, 0x22, 0xff, 0xd3, 0x33]))).toBe(true);
+  });
+
+  it('keeps the colour profile and Adobe colour data, so colours stay right', () => {
+    const raw = jpeg([seg(0xe2, 'ICC_PROFILE\0\x01\x01PROFILE'), seg(0xee, 'Adobe\0\x64TRANSFORM'), seg(0xe2, 'MPF\0junk')]);
+    const text = cleanCover(raw).data.toString('latin1');
+    expect(text).toContain('PROFILE');
+    expect(text).toContain('TRANSFORM');
+    expect(text).not.toContain('MPF');
+  });
+
   it('removes text and camera chunks from a PNG but keeps the picture', () => {
     const raw = png([chunk('eXIf', 'GPS 6.45N'), chunk('tEXt', 'Author\0Ada'), chunk('iTXt', 'XMP')]);
     const text = cleanCover(raw).data.toString('latin1');
