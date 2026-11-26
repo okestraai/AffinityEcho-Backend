@@ -24,12 +24,16 @@ import { NookActiveGuard } from '../guards/nook-active.guard';
 import { PermissionGuard } from '../../../common/guards/permission.guard';
 import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
 
+import { SpacesService } from '../../spaces/spaces.service';
 @ApiTags('Nook Members')
 @Controller('nooks/:id/members')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 export class NookMembersController {
-  constructor(private readonly membersService: NookMembersService) {}
+  constructor(
+    private readonly membersService: NookMembersService,
+    private readonly spaces: SpacesService,
+  ) {}
 
   @Post('join')
   @UseGuards(NookActiveGuard)
@@ -52,6 +56,7 @@ export class NookMembersController {
     @Body() joinDto: JoinNookDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertNook(user.userId, nookId, 'nook.join');
     return this.membersService.join(nookId, user.userId, joinDto);
   }
 

@@ -20,6 +20,8 @@ import { MSG } from '../../../common/constants/messages';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { filterValue, searchValue } from '../../../database/query-builder';
+import { SpacesService } from '../../spaces/spaces.service';
+import { OTHER_TOPICS_FORUM } from '../../spaces/spaces.constants';
 
 interface UserReaction {
   seen: boolean;
@@ -57,42 +59,37 @@ export class TopicService {
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
     @InjectQueue('moderation') private moderationQueue: Queue,
+    private spaces: SpacesService,
   ) {
     this.admin = supabaseAdmin(config);
   }
 
-  /**
-   * Fetch user's company list (current + alumni) for company-scoped filtering.
-   */
+  // Spaces the member belongs to, for company-scoped filtering.
   private async getUserCompanyList(userId: string): Promise<string[]> {
-    const { data: profile } = await this.admin
-      .from('user_profiles')
-      .select('company_encrypted, company_alumni_encrypted')
-      .eq('id', userId)
-      .single();
+    return (await this.spaces.forUser(userId)).spaces;
+  }
 
-    if (!profile) return [];
-
-    const companies: string[] = [];
-
-    if (profile.company_encrypted) {
-      try {
-        companies.push(this.encryption.decrypt(profile.company_encrypted));
-      } catch {}
+  // The forum a new topic goes to: the one picked, or Other topics in the audience's space.
+  private async targetForum(dto: CreateTopicDto, userId: string) {
+    if (dto.forumId) {
+      return this.spaces.forumFor(userId, dto.forumId, 'topic.create');
     }
-
-    if (
-      profile.company_alumni_encrypted &&
-      Array.isArray(profile.company_alumni_encrypted)
-    ) {
-      for (const alumniEncrypted of profile.company_alumni_encrypted) {
-        try {
-          companies.push(this.encryption.decrypt(alumniEncrypted));
-        } catch {}
-      }
+    const user = await this.spaces.forUser(userId);
+    const space = this.spaces.audienceSpace(user, dto.audience ?? 'everyone');
+    let query = this.admin
+      .from('forums')
+      .select(
+        'id, name, is_global, is_shared, is_other_topics, company_name, is_hidden, is_locked, deleted_at, topic_count',
+      )
+      .eq('is_other_topics', true)
+      .is('deleted_at', null);
+    query = space ? query.eq('company_name', space) : query.is('company_name', null);
+    const { data: forum } = await query.maybeSingle();
+    if (!forum) {
+      logger.error('Other topics forum is missing', { space });
+      throw new NotFoundException(`${OTHER_TOPICS_FORUM} isn't set up for this space yet`);
     }
-
-    return companies.filter(Boolean);
+    return { forum, user };
   }
 
   // Fixed: fallback MUST return Promise<void> by executing the query
@@ -114,24 +111,20 @@ export class TopicService {
     logger.info('Creating topic', { forumId: createTopicDto.forumId, userId });
 
     try {
-      const { forumId } = createTopicDto;
+      const { forum, user } = await this.targetForum(createTopicDto, userId);
+      const forumId = forum.id as string;
 
-      const { data: forum, error: forumError } = await this.admin
-        .from('forums')
-        .select('id, is_global, topic_count')
-        .eq('id', forumId)
-        .single();
+      if (forum.is_locked && !user.isStaff)
+        throw new ForbiddenException('This forum is locked');
 
-      if (forumError || !forum)
-        throw new NotFoundException(MSG.FORUM.NOT_FOUND);
-
-      if (!forum.is_global) {
+      // Company and Students forums need joining first; Other topics doesn't.
+      if (!forum.is_global && !forum.is_other_topics) {
         const { data: membership } = await this.admin
           .from('forum_members')
           .select('id')
           .eq('forum_id', forumId)
           .eq('user_id', userId)
-          .single();
+          .maybeSingle();
 
         if (!membership) {
           throw new ForbiddenException(
@@ -139,6 +132,9 @@ export class TopicService {
           );
         }
       }
+
+      // The space comes from the forum, never from the app.
+      const inSpace = !forum.is_global && !!forum.company_name;
 
       // Current timestamp for updated_at
       const currentTimestamp = new Date().toISOString();
@@ -149,8 +145,9 @@ export class TopicService {
           title: createTopicDto.title,
           content: createTopicDto.content,
           forum_id: forumId,
-          company_name: createTopicDto.companyName,
-          scope: createTopicDto.scope,
+          company_name: inSpace ? forum.company_name : null,
+          scope: inSpace ? 'local' : 'global',
+          label: createTopicDto.label ?? null,
           user_id: userId,
           is_anonymous: createTopicDto.isAnonymous ?? true,
           tags: createTopicDto.tags || [],
@@ -276,6 +273,16 @@ export class TopicService {
     // Apply filters
     if (filters.forumId) {
       query = query.eq('forum_id', filters.forumId);
+    }
+
+    if (filters.label) {
+      query = query.ilike('label', filters.label.trim().replace(/[\\%_]/g, (c) => `\\${c}`));
+    }
+
+    // Topics in hidden or deleted forums are left out.
+    const closedForums = await this.spaces.closedForumIds();
+    if (closedForums.length > 0) {
+      query = query.not('forum_id', 'in', closedForums);
     }
 
     if (filters.search) {
@@ -419,7 +426,7 @@ export class TopicService {
       // First, get the current topic to check its views_count
       const { data: currentTopic, error: fetchError } = await this.admin
         .from('forum_topics')
-        .select('views_count')
+        .select('views_count, company_name, scope')
         .eq('id', id)
         .single();
 
@@ -427,6 +434,11 @@ export class TopicService {
         throw fetchError.code === 'PGRST116'
           ? new NotFoundException(MSG.FORUM.TOPIC_NOT_FOUND)
           : new BadRequestException(MSG.FORUM.FETCH_TOPIC_FAILED);
+      }
+
+      if (userId) {
+        const user = await this.spaces.forUser(userId);
+        this.spaces.assertCanSee(user, userId, currentTopic, 'topic.view');
       }
 
       // Increment view count - FIXED: Use proper RLS-bypassing update
@@ -531,7 +543,8 @@ export class TopicService {
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException
       )
         throw error;
       logger.error('Unexpected error fetching topic', { error });
@@ -920,7 +933,9 @@ export class TopicService {
       let forumQuery = this.admin
         .from('forums')
         .select('id')
-        .or(`is_global.eq.true${companyFilter}`);
+        .or(`is_global.eq.true${companyFilter}`)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .is('deleted_at', null);
       if (category) forumQuery = forumQuery.eq('category', category);
       const forumsData = await forumQuery;
 

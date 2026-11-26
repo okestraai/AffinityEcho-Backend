@@ -23,8 +23,10 @@ import { RedisService } from '../../common/services/redis.service';
 
 import { PermissionGuard } from '../../common/guards/permission.guard';
 
+import { SpacesModule } from '../spaces/spaces.module';
 @Module({
   imports: [
+    SpacesModule,
     JwtModule,
     ConfigModule,
     BullModule.registerQueue({ name: 'moderation' }),

@@ -27,6 +27,7 @@ jest.mock('../../common/utils/logger.util', () => ({
   },
 }));
 
+import { createTestSpaces } from '../helpers/spaces';
 describe('FeedsService', () => {
   let service: FeedsService;
   let mockClient: any;
@@ -86,6 +87,7 @@ describe('FeedsService', () => {
       mockIdentityReveal,
       mockRedis,
       mockContentSafety as any,
+      createTestSpaces(mockEncryption),
     );
   });
 
@@ -554,6 +556,7 @@ describe('FeedsService', () => {
         mockIdentityReveal,
         mockRedis,
         mockContentSafety as any,
+        createTestSpaces(mockEncryption),
       );
 
       setupSingleContentFeed('feed_posts', [
@@ -590,6 +593,7 @@ describe('FeedsService', () => {
         mockIdentityReveal,
         mockRedis,
         mockContentSafety as any,
+        createTestSpaces(mockEncryption),
       );
 
       setupSingleContentFeed('feed_posts', [
@@ -906,7 +910,7 @@ describe('FeedsService', () => {
       expect(result.success).toBe(true);
       expect(mockClient.from).toHaveBeenCalledWith('user_profiles');
       // posts chain should have company_name filter
-      expect(postsChain.eq).toHaveBeenCalledWith('company_name', 'Acme Inc');
+      expect(postsChain.in).toHaveBeenCalledWith('company_name', ['Acme Inc']);
     });
 
     it('should handle FOLLOWING with ALL content types', async () => {

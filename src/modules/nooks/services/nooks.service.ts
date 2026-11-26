@@ -18,6 +18,8 @@ import logger from '../../../common/utils/logger.util';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
+import { SpacesService } from '../../spaces/spaces.service';
+import { filterValue } from '../../../database/query-builder';
 @Injectable()
 export class NooksService {
   private admin;
@@ -30,12 +32,15 @@ export class NooksService {
     private okestraService: OkestraService,
     private contentSafety: ContentSafetyService,
     @InjectQueue('moderation') private moderationQueue: Queue,
+    private spaces: SpacesService,
   ) {
     this.admin = supabaseAdmin(config);
   }
 
   async findAll(query: NookQueryDto, userId: string) {
-    const cacheKey = `nooks:list:${JSON.stringify(query)}`;
+    // Company nooks are only for members of that space, so the cache is per member.
+    const viewer = await this.spaces.forUser(userId);
+    const cacheKey = `nooks:list:${JSON.stringify(query)}:${userId}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) {
       // Apply hidden content filter post-cache so hides take effect immediately
@@ -75,6 +80,15 @@ export class NooksService {
 
     if (filters.scope && filters.scope !== 'all') {
       supabaseQuery = supabaseQuery.eq('scope', filters.scope);
+    }
+
+    if (!viewer.isStaff) {
+      const spaceFilter = viewer.spaces.length
+        ? `,company_name.in.(${viewer.spaces.map(filterValue).join(',')})`
+        : '';
+      supabaseQuery = supabaseQuery.or(
+        `scope.eq.global,company_name.is.null${spaceFilter}`,
+      );
     }
 
     if (filters.temperature && filters.temperature !== 'all') {
@@ -154,23 +168,15 @@ export class NooksService {
       expires_at: expiresAt.toISOString(),
     };
 
-    // Stamp company_name on company-scoped nooks
-    if (createNookDto.scope === 'company') {
-      const { data: userProfile } = await this.admin
-        .from('user_profiles')
-        .select('company_encrypted')
-        .eq('id', userId)
-        .single();
-
-      if (userProfile?.company_encrypted) {
-        try {
-          insertData.company_name = this.encryption.decrypt(
-            userProfile.company_encrypted,
-          );
-        } catch (e) {
-          // Skip stamping if decryption fails
-        }
-      }
+    delete insertData.audience;
+    // The space comes from the server's view of the member.
+    if (createNookDto.audience || createNookDto.scope === 'company') {
+      const viewer = await this.spaces.forUser(userId);
+      const space = createNookDto.audience
+        ? this.spaces.audienceSpace(viewer, createNookDto.audience)
+        : viewer.company;
+      if (createNookDto.audience) insertData.scope = space ? 'company' : 'global';
+      if (space) insertData.company_name = space;
     }
 
     const { data: nook, error } = await this.admin
@@ -247,6 +253,9 @@ export class NooksService {
       .single();
 
     if (error || !nook) throw new NotFoundException(MSG.NOOK.NOT_FOUND);
+
+    const viewer = await this.spaces.forUser(userId);
+    this.spaces.assertCanSee(viewer, userId, nook, 'nook.view');
 
     if (!nook.is_active || new Date(nook.expires_at) < new Date()) {
       throw new BadRequestException(MSG.NOOK.EXPIRED);

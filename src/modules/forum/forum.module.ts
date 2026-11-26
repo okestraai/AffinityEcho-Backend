@@ -10,6 +10,7 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
 import { OkestraModule } from '../okestra/okestra.module';
 import { ContentSafetyModule } from '../content-safety/content-safety.module';
+import { SpacesModule } from '../spaces/spaces.module';
 import { RedisService } from '../../common/services/redis.service';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 
@@ -22,6 +23,7 @@ import { PermissionGuard } from '../../common/guards/permission.guard';
     MentionsModule,
     OkestraModule,
     ContentSafetyModule,
+    SpacesModule,
   ],
   controllers: [ForumController],
   providers: [

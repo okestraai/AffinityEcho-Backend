@@ -607,13 +607,34 @@ describe('ForumService', () => {
       expect(result.total).toBe(0);
     });
 
-    it('should apply companyName and isGlobal filters', async () => {
+    it("lists a space's own forums and the Shared forums", async () => {
       const chain = createMockQueryChain({ data: [], error: null, count: 0 });
       mockClient.from.mockReturnValueOnce(chain);
 
       await service.findAllForums({ companyName: 'Acme', isGlobal: false, page: 1, limit: 10 } as any);
-      expect(chain.eq).toHaveBeenCalledWith('company_name', 'Acme');
-      expect(chain.eq).toHaveBeenCalledWith('is_global', false);
+      expect(chain.or).toHaveBeenCalledWith('company_name.eq."Acme",is_shared.is.true');
+      expect(chain.eq).not.toHaveBeenCalledWith('is_global', false);
+    });
+
+    it('applies the isGlobal filter when no space is named', async () => {
+      const chain = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await service.findAllForums({ isGlobal: true, page: 1, limit: 10 } as any);
+      expect(chain.eq).toHaveBeenCalledWith('is_global', true);
+    });
+
+    it('hides hidden and deleted forums from members, not from staff', async () => {
+      const member = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(member);
+      await service.findAllForums({ page: 1, limit: 10 } as any);
+      expect(member.or).toHaveBeenCalledWith('is_hidden.is.null,is_hidden.eq.false');
+      expect(member.is).toHaveBeenCalledWith('deleted_at', null);
+
+      const staff = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(staff);
+      await service.findAllForums({ page: 1, limit: 10 } as any, { isStaff: true });
+      expect(staff.is).not.toHaveBeenCalledWith('deleted_at', null);
     });
 
     it('should apply category and timeFilter filters', async () => {

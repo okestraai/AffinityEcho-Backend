@@ -13,7 +13,7 @@ import { ForumFiltersDto } from '../dto/forum-filters.dto';
 import logger from '../../../common/utils/logger.util';
 import { FORUM_FIELDS } from '../../../common/constants/select-fields';
 import { MSG } from '../../../common/constants/messages';
-import { searchValue } from '../../../database/query-builder';
+import { filterValue, searchValue } from '../../../database/query-builder';
 
 interface Forum {
   id: string;
@@ -111,7 +111,10 @@ export class ForumService {
     }
   }
 
-  async findAllForums(filters: ForumFiltersDto) {
+  async findAllForums(
+    filters: ForumFiltersDto,
+    viewer: { isStaff: boolean } = { isStaff: false },
+  ) {
     logger.info('Fetching forums', {
       filters,
       isGlobalType: typeof filters.isGlobal,
@@ -144,6 +147,13 @@ export class ForumService {
 
       let query = this.admin.from('forums').select('*', { count: 'exact' });
 
+      // Members never see hidden or deleted forums.
+      if (!viewer.isStaff) {
+        query = query
+          .or('is_hidden.is.null,is_hidden.eq.false')
+          .is('deleted_at', null);
+      }
+
       // Apply filters
       if (search) {
         query = query.or(
@@ -151,12 +161,12 @@ export class ForumService {
         );
       }
 
+      // A space lists its own forums plus the Shared forums.
       if (companyName !== undefined) {
-        query = query.eq('company_name', companyName);
-      }
-
-      // FIX: Add explicit logging for isGlobal filter
-      if (isGlobal !== undefined) {
+        query = query.or(
+          `company_name.eq.${filterValue(companyName)},is_shared.is.true`,
+        );
+      } else if (isGlobal !== undefined) {
         logger.debug('Applying isGlobal filter', {
           isGlobal,
           isGlobalType: typeof isGlobal,
@@ -179,6 +189,12 @@ export class ForumService {
         };
         query = query.gte('last_activity', timeMap[timeFilter].toISOString());
       }
+
+      // The space's own forums in admins' order, then Shared, then Other topics.
+      query = query
+        .order('is_other_topics', { ascending: true })
+        .order('is_shared', { ascending: true })
+        .order('sort_order', { ascending: true });
 
       // Apply sorting
       switch (sortBy) {
@@ -395,6 +411,8 @@ export class ForumService {
     try {
       // Check if forum exists
       const forum = await this.findForumById(forumId);
+      if (forum.is_hidden || forum.deleted_at)
+        throw new NotFoundException(MSG.FORUM.NOT_FOUND);
 
       // Check if user is already a member
       const { data: existingMember, error: checkError } = await this.admin
@@ -644,6 +662,7 @@ export class ForumService {
         icon: '📈',
         is_global: false,
         category: 'foundation',
+        is_other_topics: false,
         rules: [
           'Be respectful and professional in all interactions',
           'Share experiences honestly while maintaining privacy',
@@ -657,6 +676,7 @@ export class ForumService {
         icon: '🤝',
         is_global: false,
         category: 'foundation',
+        is_other_topics: false,
         rules: [
           'Be respectful and professional in all interactions',
           'Share experiences honestly while maintaining privacy',
@@ -670,6 +690,7 @@ export class ForumService {
         icon: '⚖️',
         is_global: false,
         category: 'foundation',
+        is_other_topics: false,
         rules: [
           'Be respectful and professional in all interactions',
           'Share experiences honestly while maintaining privacy',
@@ -683,6 +704,7 @@ export class ForumService {
         icon: '🎯',
         is_global: false,
         category: 'foundation',
+        is_other_topics: false,
         rules: [
           'Be respectful and professional in all interactions',
           'Share experiences honestly while maintaining privacy',
@@ -696,6 +718,7 @@ export class ForumService {
         icon: '🌱',
         is_global: false,
         category: 'foundation',
+        is_other_topics: false,
         rules: [
           'Be respectful and professional in all interactions',
           'Share experiences honestly while maintaining privacy',
@@ -704,6 +727,22 @@ export class ForumService {
         moderators: [],
       },
     ];
+
+    // Topics posted without a forum land here.
+    foundationForums.push({
+      name: 'Other topics',
+      description: "Anything that doesn't fit another forum",
+      icon: '💭',
+      is_global: false,
+      category: 'other',
+      is_other_topics: true,
+      rules: [
+        'Be respectful and professional in all interactions',
+        'Share experiences honestly while maintaining privacy',
+        'Support others and contribute constructively',
+      ],
+      moderators: [],
+    });
 
     const createdForums: any[] = [];
 

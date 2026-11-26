@@ -22,6 +22,7 @@ import {
 } from '../helpers/mock-supabase';
 import { MSG } from '../../common/constants/messages';
 
+import { createTestSpaces } from '../helpers/spaces';
 describe('FeedPostsService', () => {
   let service: FeedPostsService;
   let mockClient: any;
@@ -90,6 +91,7 @@ describe('FeedPostsService', () => {
       mockNotifications,
       mockContentSafety as any,
       mockModerationQueue as any,
+      createTestSpaces(mockEncryption),
     );
   });
 
@@ -133,6 +135,39 @@ describe('FeedPostsService', () => {
         visibility: 'company',
       } as any);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('audience', () => {
+    it('posts to Students for a student, as a company-visibility post', async () => {
+      const insertChain = createMockQueryChain({ data: mockPost, error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', is_student: true }, error: null }))
+        .mockReturnValueOnce(insertChain);
+
+      await service.createPost('u1', { content: 'Hi', audience: 'students' } as any);
+      expect(insertChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ visibility: 'company', company_name: 'Students' }),
+      );
+    });
+
+    it('puts a typed-company member in Others', async () => {
+      const insertChain = createMockQueryChain({ data: mockPost, error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', company_encrypted: 'enc_Zenzi', company_type: 'other' }, error: null }))
+        .mockReturnValueOnce(insertChain);
+
+      await service.createPost('u1', { content: 'Hi', visibility: 'company' } as any);
+      expect(insertChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ visibility: 'company', company_name: 'Others' }),
+      );
+    });
+
+    it('refuses Students to a non-student', async () => {
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: { role: 'user' }, error: null }));
+      await expect(
+        service.createPost('u1', { content: 'Hi', audience: 'students' } as any),
+      ).rejects.toThrow('Only students can post to Students');
     });
   });
 

@@ -1,11 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
   IsEnum,
   IsArray,
   MaxLength,
   IsOptional,
+  IsIn,
 } from 'class-validator';
+import { AUDIENCES, Audience } from '../../spaces/spaces.constants';
 
 export enum Urgency {
   LOW = 'low',
@@ -51,6 +53,15 @@ export class CreateNookDto {
   })
   @IsEnum(Scope)
   scope!: Scope;
+
+  @ApiPropertyOptional({
+    description:
+      'Who sees it: everyone, your company or Students. When sent, it decides the space.',
+    enum: AUDIENCES,
+  })
+  @IsOptional()
+  @IsIn(AUDIENCES)
+  audience?: Audience;
 
   @ApiProperty({
     description: 'Optional hashtags',

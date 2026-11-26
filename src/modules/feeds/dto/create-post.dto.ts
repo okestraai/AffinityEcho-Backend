@@ -5,8 +5,10 @@ import {
   IsArray,
   MaxLength,
   MinLength,
+  IsIn,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { AUDIENCES, Audience } from '../../spaces/spaces.constants';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum PostVisibility {
   GLOBAL = 'global',
@@ -36,6 +38,15 @@ export class CreatePostDto {
   @IsOptional()
   @IsEnum(PostVisibility)
   visibility?: PostVisibility;
+
+  @ApiPropertyOptional({
+    description:
+      'Who sees it: everyone, your company or Students. When sent, it decides the space.',
+    enum: AUDIENCES,
+  })
+  @IsOptional()
+  @IsIn(AUDIENCES)
+  audience?: Audience;
 
   @ApiProperty({
     description: 'Whether to post anonymously',

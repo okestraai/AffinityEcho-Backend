@@ -22,6 +22,7 @@ import {
 } from '../helpers/mock-supabase';
 import { MSG } from '../../common/constants/messages';
 
+import { createTestSpaces } from '../helpers/spaces';
 describe('NooksService', () => {
   let service: NooksService;
   let mockClient: any;
@@ -81,6 +82,7 @@ describe('NooksService', () => {
       mockOkestra,
       mockContentSafety as any,
       mockModerationQueue as any,
+      createTestSpaces(mockEncryption),
     );
   });
 
@@ -114,6 +116,30 @@ describe('NooksService', () => {
     });
   });
 
+  describe('spaces', () => {
+    it('stamps the Students space for a student audience', async () => {
+      const insertChain = createMockQueryChain({ data: mockNook, error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', is_student: true }, error: null }))
+        .mockReturnValueOnce(insertChain)
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: null }));
+
+      await service.create({ title: 'T', description: 'd', scope: 'global', audience: 'students' } as any, 'u1');
+      const row = insertChain.insert.mock.calls[0][0][0];
+      expect(row).toMatchObject({ scope: 'company', company_name: 'Students' });
+      expect(row.audience).toBeUndefined();
+    });
+
+    it("lists only global nooks and the member's own spaces", async () => {
+      const profile = createMockQueryChain({ data: { role: 'user', company_encrypted: 'Acme', company_type: 'static' }, error: null });
+      const nooks = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(profile).mockReturnValue(nooks);
+
+      await service.findAll({} as any, 'u1');
+      expect(nooks.or).toHaveBeenCalledWith(expect.stringMatching(/^scope\.eq\.global,company_name\.is\.null,company_name\.in\.\(/));
+    });
+  });
+
   describe('findAll', () => {
     it('should return cached nooks if available', async () => {
       const cached = { success: true, data: { nooks: [mockNook] } };
@@ -121,7 +147,8 @@ describe('NooksService', () => {
 
       const result = await service.findAll({} as any, 'u2');
       expect(result).toEqual(cached);
-      expect(mockClient.from).not.toHaveBeenCalled();
+      // Only the member's own spaces are read; nooks come from the cache.
+      expect(mockClient.from).not.toHaveBeenCalledWith('nooks');
     });
 
     it('should query and cache nooks', async () => {

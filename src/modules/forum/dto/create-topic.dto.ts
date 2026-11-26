@@ -5,7 +5,13 @@ import {
   IsArray,
   IsEnum,
   IsUrl,
+  IsIn,
+  IsUUID,
+  Length,
+  Matches,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { AUDIENCES, Audience } from '../../spaces/spaces.constants';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTopicDto {
@@ -26,28 +32,55 @@ export class CreateTopicDto {
   @IsString()
   content!: string;
 
-  @ApiProperty({
-    description: 'ID of the forum where the topic will be created',
+  @ApiPropertyOptional({
+    description:
+      'Forum for the topic. Leave it out to post to Other topics in the space picked by audience.',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  @IsString()
-  forumId!: string;
+  @IsOptional()
+  @IsUUID()
+  forumId?: string;
 
   @ApiPropertyOptional({
-    description: 'Company name for company-specific topics',
-    example: 'Google',
+    description:
+      'Who sees a topic posted without a forum. Ignored when a forum is given.',
+    enum: AUDIENCES,
+    default: 'everyone',
+  })
+  @IsOptional()
+  @IsIn(AUDIENCES)
+  audience?: Audience;
+
+  @ApiPropertyOptional({
+    description: 'Optional short label, used to filter Other topics',
+    example: 'visas',
+    maxLength: 40,
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value,
+  )
+  @IsString()
+  @Length(1, 40)
+  @Matches(/^[^,()]+$/, { message: 'Label cannot contain commas or brackets' })
+  label?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ignored: the space comes from the forum.',
+    deprecated: true,
   })
   @IsOptional()
   @IsString()
   companyName?: string;
 
-  @ApiProperty({
-    description: 'Scope of the topic visibility',
+  @ApiPropertyOptional({
+    description: 'Ignored: the scope comes from the forum.',
     enum: ['local', 'global'],
-    example: 'local',
+    deprecated: true,
   })
+  @IsOptional()
   @IsEnum(['local', 'global'])
-  scope!: 'local' | 'global';
+  scope?: 'local' | 'global';
 
   @ApiPropertyOptional({
     description: 'Whether the topic should be posted anonymously',

@@ -11,8 +11,10 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { MentionsModule } from '../mentions/mentions.module';
 import { ContentSafetyModule } from '../content-safety/content-safety.module';
 
+import { SpacesModule } from '../spaces/spaces.module';
 @Module({
   imports: [
+    SpacesModule,
     ConfigModule,
     BullModule.registerQueue({ name: 'moderation' }),
     NotificationsModule,

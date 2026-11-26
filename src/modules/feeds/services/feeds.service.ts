@@ -40,6 +40,7 @@ interface FeedItem {
   user_reactions?: Record<string, boolean>;
 }
 
+import { SpacesService } from '../../spaces/spaces.service';
 @Injectable()
 export class FeedsService {
   private admin;
@@ -51,42 +52,9 @@ export class FeedsService {
     private identityReveal: IdentityRevealUtil,
     private redis: RedisService,
     private contentSafety: ContentSafetyService,
+    private spaces: SpacesService,
   ) {
     this.admin = supabaseAdmin(config);
-  }
-
-  /**
-   * Fetch user's company list (current + alumni) for company-scoped filtering.
-   */
-  private async getUserCompanyList(userId: string): Promise<string[]> {
-    const { data: profile } = await this.admin
-      .from('user_profiles')
-      .select('company_encrypted, company_alumni_encrypted')
-      .eq('id', userId)
-      .single();
-
-    if (!profile) return [];
-
-    const companies: string[] = [];
-
-    if (profile.company_encrypted) {
-      try {
-        companies.push(this.encryption.decrypt(profile.company_encrypted));
-      } catch {}
-    }
-
-    if (
-      profile.company_alumni_encrypted &&
-      Array.isArray(profile.company_alumni_encrypted)
-    ) {
-      for (const enc of profile.company_alumni_encrypted) {
-        try {
-          companies.push(this.encryption.decrypt(enc));
-        } catch {}
-      }
-    }
-
-    return companies.filter(Boolean);
   }
 
   async getAggregatedFeed(userId: string, queryDto: QueryFeedDto) {
@@ -143,7 +111,10 @@ export class FeedsService {
         // Pre-fetch user's company list for company-scoped filtering
         let userCompanyList: string[] | null = null;
         if (filter === FeedFilter.COMPANY || company) {
-          userCompanyList = await this.getUserCompanyList(userId);
+          const viewer = await this.spaces.forUser(userId);
+          userCompanyList = viewer.spaces;
+          if (company)
+            this.spaces.assertInSpace(viewer, userId, company, 'feed.company');
         }
 
         if (
@@ -359,11 +330,8 @@ export class FeedsService {
       // Filter by user's company list (current + alumni)
       const companyList =
         userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
-      if (company) {
-        query = query.eq('company_name', company);
-      } else if (companyList.length > 0) {
-        query = query.in('company_name', companyList);
-      }
+      // A member with no space sees no company posts.
+      query = query.in('company_name', company ? [company] : companyList);
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('visibility', 'global');
     } else if (filter === FeedFilter.FOLLOWING) {
@@ -479,11 +447,8 @@ export class FeedsService {
       query = query.eq('scope', 'company');
       const companyList =
         userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
-      if (company) {
-        query = query.eq('company_name', company);
-      } else if (companyList.length > 0) {
-        query = query.in('company_name', companyList);
-      }
+      // A member with no space sees no company posts.
+      query = query.in('company_name', company ? [company] : companyList);
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('scope', 'global');
     } else if (filter === FeedFilter.FOLLOWING) {
@@ -608,11 +573,8 @@ export class FeedsService {
       query = query.eq('scope', 'company');
       const companyList =
         userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
-      if (company) {
-        query = query.eq('company_name', company);
-      } else if (companyList.length > 0) {
-        query = query.in('company_name', companyList);
-      }
+      // A member with no space sees no company posts.
+      query = query.in('company_name', company ? [company] : companyList);
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('scope', 'global');
     } else if (filter === FeedFilter.FOLLOWING) {

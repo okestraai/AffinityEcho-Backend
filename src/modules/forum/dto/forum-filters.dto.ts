@@ -1,4 +1,5 @@
 import {
+  MaxLength,
   IsOptional,
   IsString,
   IsEnum,
@@ -80,6 +81,15 @@ export class ForumFiltersDto {
   @IsOptional()
   @IsString()
   hashtag?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter topics by label, ignoring case',
+    example: 'visas',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  label?: string;
 
   @ApiPropertyOptional({
     description: 'Page number for pagination',

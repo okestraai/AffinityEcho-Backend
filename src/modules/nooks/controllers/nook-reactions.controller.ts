@@ -23,12 +23,16 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { NookActiveGuard } from '../guards/nook-active.guard';
 
+import { SpacesService } from '../../spaces/spaces.service';
 @ApiTags('Nook Reactions')
 @Controller()
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 export class NookReactionsController {
-  constructor(private readonly reactionsService: NookReactionsService) {}
+  constructor(
+    private readonly reactionsService: NookReactionsService,
+    private readonly spaces: SpacesService,
+  ) {}
 
   // ── NOOK REACTIONS ──────────────────────────────────────────────────────
 
@@ -42,6 +46,7 @@ export class NookReactionsController {
     @Body() reactionDto: ReactionDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertNook(user.userId, nookId, 'nook.react');
     return this.reactionsService.reactToNook(nookId, user.userId, reactionDto);
   }
 

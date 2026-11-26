@@ -18,6 +18,7 @@ import { MSG } from '../../../common/constants/messages';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
+import { SpacesService } from '../../spaces/spaces.service';
 @Injectable()
 export class FeedPostsService {
   private admin;
@@ -31,6 +32,7 @@ export class FeedPostsService {
     private notificationsService: NotificationsService,
     private contentSafety: ContentSafetyService,
     @InjectQueue('moderation') private moderationQueue: Queue,
+    private spaces: SpacesService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -47,23 +49,14 @@ export class FeedPostsService {
         tags: dto.tags || [],
       };
 
-      // Stamp company_name on company-scoped posts
-      if (insertData.visibility === 'company') {
-        const { data: userProfile } = await this.admin
-          .from('user_profiles')
-          .select('company_encrypted')
-          .eq('id', userId)
-          .single();
-
-        if (userProfile?.company_encrypted) {
-          try {
-            insertData.company_name = this.encryption.decrypt(
-              userProfile.company_encrypted,
-            );
-          } catch (e) {
-            logger.warn('Failed to decrypt company for post stamp', { userId });
-          }
-        }
+      // The space comes from the server's view of the member.
+      if (dto.audience || insertData.visibility === 'company') {
+        const viewer = await this.spaces.forUser(userId);
+        const space = dto.audience
+          ? this.spaces.audienceSpace(viewer, dto.audience)
+          : viewer.company;
+        if (dto.audience) insertData.visibility = space ? 'company' : 'global';
+        if (space) insertData.company_name = space;
       }
 
       const { data: post, error } = await this.admin
@@ -138,7 +131,11 @@ export class FeedPostsService {
         message: MSG.FEED.POST_CREATED,
       };
     } catch (error) {
-      if (error instanceof BadRequestException) throw error;
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException
+      )
+        throw error;
       logger.error('Unexpected error creating post', { error });
       throw new BadRequestException(MSG.FEED.CREATE_FAILED);
     }

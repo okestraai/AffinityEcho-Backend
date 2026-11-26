@@ -35,6 +35,7 @@ import { TopicReactionDto } from '../dto/topic-reaction.dto';
 import { CommentReactionDto } from '../dto/comment-reaction.dto';
 import { ForumFiltersDto } from '../dto/forum-filters.dto';
 import logger from '../../../common/utils/logger.util';
+import { SpacesService } from '../../spaces/spaces.service';
 
 @ApiTags('Forum')
 @Controller('forum') // This will automatically become /api/v1/forum due to global prefix
@@ -45,7 +46,15 @@ export class ForumController {
     private readonly forumService: ForumService,
     private readonly topicService: TopicService,
     private readonly commentService: CommentService,
+    private readonly spaces: SpacesService,
   ) {}
+
+  // A company or Students space is only for its members, whatever the address says.
+  private async assertSpace(userId: string, space: string, action: string) {
+    const user = await this.spaces.forUser(userId);
+    this.spaces.assertInSpace(user, userId, space, action);
+    return user;
+  }
 
   // ========== NEW ENDPOINTS ==========
 
@@ -60,7 +69,11 @@ export class ForumController {
     status: 200,
     description: 'Local forum metrics retrieved successfully',
   })
-  async getLocalForumMetrics(@Param('companyName') companyName: string) {
+  async getLocalForumMetrics(
+    @Param('companyName') companyName: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.assertSpace(user.userId, companyName, 'forum.metrics');
     logger.info('Getting local forum metrics for company', {
       companyName,
     });
@@ -160,7 +173,9 @@ export class ForumController {
   })
   async getFoundationForumsWithMetrics(
     @Param('companyName') companyName: string,
+    @CurrentUser() user: any,
   ) {
+    await this.assertSpace(user.userId, companyName, 'forum.foundation');
     logger.info('Getting foundation forums with metrics for company', {
       companyName,
     });
@@ -223,7 +238,12 @@ export class ForumController {
     @Query('category') category?: string,
     @Query('page') page?: string, // Accept as string
     @Query('limit') limit?: string, // Accept as string
+    @CurrentUser() user?: any,
   ) {
+    const viewer = await this.spaces.forUser(user.userId);
+    if (companyName !== undefined) {
+      this.spaces.assertInSpace(viewer, user.userId, companyName, 'forum.list');
+    }
     const filters: ForumFiltersDto = {
       search,
       sortBy: sortBy as any,
@@ -235,7 +255,7 @@ export class ForumController {
       limit: limit ? parseInt(limit, 10) : 10,
     };
 
-    return this.forumService.findAllForums(filters);
+    return this.forumService.findAllForums(filters, viewer);
   }
 
   @Get('joined')
@@ -324,7 +344,8 @@ export class ForumController {
     status: 404,
     description: 'Forum not found',
   })
-  async getForum(@Param('id') id: string) {
+  async getForum(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.spaces.forumFor(user.userId, id, 'forum.view');
     return this.forumService.findForumById(id);
   }
 
@@ -387,6 +408,7 @@ export class ForumController {
     description: 'User is already a member',
   })
   async joinForum(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.spaces.forumFor(user.userId, id, 'forum.join');
     return this.forumService.joinForum(id, user.userId);
   }
 
@@ -474,6 +496,7 @@ export class ForumController {
     @Body() reactionDto: TopicReactionDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertTopic(user.userId, reactionDto.topicId, 'topic.react');
     return this.topicService.addReaction(
       reactionDto.topicId,
       user.userId,
@@ -488,6 +511,7 @@ export class ForumController {
     @CurrentUser() user: any,
     @Param('topicId') topicId: string,
   ) {
+    await this.spaces.assertTopic(user.userId, topicId, 'topic.bookmark');
     return this.topicService.toggleTopicBookmark(topicId, user.userId);
   }
 
@@ -556,6 +580,11 @@ export class ForumController {
     @Body() createCommentDto: CreateCommentDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertTopic(
+      user.userId,
+      createCommentDto.topicId,
+      'comment.create',
+    );
     return this.commentService.createComment(createCommentDto, user.userId);
   }
 
@@ -573,6 +602,7 @@ export class ForumController {
     @Param('topicId') topicId: string,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertTopic(user.userId, topicId, 'comment.list');
     return this.commentService.getTopicComments(topicId, user.userId);
   }
 

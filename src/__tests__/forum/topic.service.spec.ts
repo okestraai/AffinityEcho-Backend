@@ -26,6 +26,7 @@ import {
 } from '../helpers/mock-supabase';
 import { MSG } from '../../common/constants/messages';
 
+import { createTestSpaces } from '../helpers/spaces';
 describe('TopicService', () => {
   let service: TopicService;
   let mockClient: any;
@@ -88,6 +89,7 @@ describe('TopicService', () => {
       mockOkestra,
       mockContentSafety,
       mockModerationQueue as any,
+      createTestSpaces(mockEncryption),
     );
   });
 
@@ -108,6 +110,7 @@ describe('TopicService', () => {
 
       mockClient.from
         .mockReturnValueOnce(forumChain)
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: null }))
         .mockReturnValueOnce(memberChain)
         .mockReturnValueOnce(insertChain);
 
@@ -142,6 +145,7 @@ describe('TopicService', () => {
 
       mockClient.from
         .mockReturnValueOnce(forumChain)
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: null }))
         .mockReturnValueOnce(memberChain);
 
       await expect(
@@ -149,7 +153,7 @@ describe('TopicService', () => {
           { forumId: 'f1', title: 'T', content: 'C' } as any,
           'u1',
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow('You must join the forum before creating topics');
     });
 
     it('should throw on insert error', async () => {
@@ -168,6 +172,7 @@ describe('TopicService', () => {
 
       mockClient.from
         .mockReturnValueOnce(forumChain)
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: null }))
         .mockReturnValueOnce(memberChain)
         .mockReturnValueOnce(insertChain);
 
@@ -177,6 +182,97 @@ describe('TopicService', () => {
           'u1',
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('spaces on new topics', () => {
+    const profile = (data: any) => createMockQueryChain({ data, error: null });
+
+    it('puts a topic with no forum in Global Other topics, with no join needed', async () => {
+      const otherTopics = createMockQueryChain({
+        data: { id: 'ot', is_global: true, is_other_topics: true, company_name: null, topic_count: 0 },
+        error: null,
+      });
+      const insert = createMockQueryChain({ data: mockTopic, error: null });
+      mockClient.from
+        .mockReturnValueOnce(profile(null))
+        .mockReturnValueOnce(otherTopics)
+        .mockReturnValueOnce(insert);
+
+      await service.createTopic({ title: 'T', content: 'C', label: 'visas' } as any, 'u1');
+
+      expect(otherTopics.eq).toHaveBeenCalledWith('is_other_topics', true);
+      expect(otherTopics.is).toHaveBeenCalledWith('company_name', null);
+      expect(insert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ forum_id: 'ot', company_name: null, scope: 'global', label: 'visas' }),
+      );
+    });
+
+    it("puts a company audience topic in the member's company Other topics", async () => {
+      const otherTopics = createMockQueryChain({
+        data: { id: 'ot-g', is_global: false, is_other_topics: true, company_name: 'Acme_dec', topic_count: 0 },
+        error: null,
+      });
+      const insert = createMockQueryChain({ data: mockTopic, error: null });
+      mockClient.from
+        .mockReturnValueOnce(profile({ role: 'user', company_encrypted: 'Acme', company_type: 'static' }))
+        .mockReturnValueOnce(otherTopics)
+        .mockReturnValueOnce(insert);
+
+      await service.createTopic({ title: 'T', content: 'C', audience: 'company' } as any, 'u1');
+
+      expect(otherTopics.eq).toHaveBeenCalledWith('company_name', 'Acme_dec');
+      expect(insert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ forum_id: 'ot-g', company_name: 'Acme_dec', scope: 'local' }),
+      );
+    });
+
+    it('refuses the Students audience to a non-student', async () => {
+      mockClient.from.mockReturnValueOnce(profile({ role: 'user', is_student: false }));
+      await expect(
+        service.createTopic({ title: 'T', content: 'C', audience: 'students' } as any, 'u1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('takes the space from the forum, not from the app', async () => {
+      const forum = createMockQueryChain({
+        data: { id: 'f1', is_global: false, company_name: 'Acme_dec', topic_count: 0 },
+        error: null,
+      });
+      const insert = createMockQueryChain({ data: mockTopic, error: null });
+      mockClient.from
+        .mockReturnValueOnce(forum)
+        .mockReturnValueOnce(profile({ role: 'user', company_encrypted: 'Acme', company_type: 'static' }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'm1' }, error: null }))
+        .mockReturnValueOnce(insert);
+
+      await service.createTopic(
+        { forumId: 'f1', title: 'T', content: 'C', companyName: 'Meta', scope: 'global' } as any,
+        'u1',
+      );
+      expect(insert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ company_name: 'Acme_dec', scope: 'local' }),
+      );
+    });
+
+    it('refuses a locked forum', async () => {
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'f1', is_global: true, is_locked: true }, error: null }))
+        .mockReturnValueOnce(profile({ role: 'user' }));
+      await expect(
+        service.createTopic({ forumId: 'f1', title: 'T', content: 'C' } as any, 'u1'),
+      ).rejects.toThrow('This forum is locked');
+    });
+
+    it('filters a list by label and leaves out closed forums', async () => {
+      const topics = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValue(topics);
+      jest.spyOn((service as any).spaces, 'closedForumIds').mockResolvedValue(['hidden-1']);
+
+      await service.findAllTopics({ label: ' Visas ' } as any, 'u1');
+
+      expect(topics.ilike).toHaveBeenCalledWith('label', 'Visas');
+      expect(topics.not).toHaveBeenCalledWith('forum_id', 'in', ['hidden-1']);
     });
   });
 
@@ -194,6 +290,7 @@ describe('TopicService', () => {
 
       mockClient.from
         .mockReturnValueOnce(viewsChain)
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: null }))
         .mockReturnValueOnce(topicChain)
         .mockReturnValueOnce(reactionsChain);
 

@@ -26,12 +26,16 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { NookActiveGuard } from '../guards/nook-active.guard';
 
+import { SpacesService } from '../../spaces/spaces.service';
 @ApiTags('Nook Messages')
 @Controller('nooks/:nookId/messages')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 export class NookMessagesController {
-  constructor(private readonly messagesService: NookMessagesService) {}
+  constructor(
+    private readonly messagesService: NookMessagesService,
+    private readonly spaces: SpacesService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -51,6 +55,7 @@ export class NookMessagesController {
     @Query() query: MessageQueryDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertNook(user.userId, nookId, 'nook.messages');
     return this.messagesService.getMessages(nookId, query, user.userId);
   }
 
@@ -75,6 +80,7 @@ export class NookMessagesController {
     @Body() createMessageDto: CreateMessageDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertNook(user.userId, nookId, 'nook.message');
     return this.messagesService.createMessage(
       nookId,
       createMessageDto,
