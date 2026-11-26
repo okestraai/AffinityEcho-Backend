@@ -40,7 +40,7 @@ describe('cover storage', () => {
   let query: jest.Mock;
   let client: { query: jest.Mock; release: jest.Mock };
   const sent = () => client.query.mock.calls.map(([sql]) => String(sql));
-  let bucket: { name: string; put: jest.Mock; get: jest.Mock; remove: jest.Mock };
+  let bucket: { name: string; prefix: string; put: jest.Mock; get: jest.Mock; remove: jest.Mock };
   const event = { id: 'e1', slug: 'talk-abcdef', host_id: 'host', status: 'published', cover_updated_at: '2026-11-26T10:00:00Z' };
 
   const make = (withBucket: boolean) => {
@@ -57,7 +57,7 @@ describe('cover storage', () => {
     // Cover saves run on one client in a transaction; reads use the pool.
     client = { query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() };
     (getPool as jest.Mock).mockReturnValue({ query, connect: jest.fn().mockResolvedValue(client) });
-    bucket = { name: 'covers', put: jest.fn(), get: jest.fn(), remove: jest.fn().mockResolvedValue(undefined) };
+    bucket = { name: 'covers', prefix: 'event-covers/', put: jest.fn(), get: jest.fn(), remove: jest.fn().mockResolvedValue(undefined) };
     settings();
   });
 

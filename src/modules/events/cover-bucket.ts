@@ -10,6 +10,8 @@ import type { ConfigService } from '@nestjs/config';
 // An S3-style bucket for cover pictures: Cloudflare R2 or AWS S3. The keys live only in the server's environment.
 export interface CoverBucket {
   name: string;
+  // Where this environment's covers live, e.g. "event-covers/" or "staging/event-covers/".
+  prefix: string;
   put(key: string, data: Buffer, mime: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
@@ -38,6 +40,11 @@ export function coverBucketFrom(config: ConfigService): CoverBucket | null {
   const accessKeyId = config.get<string>('COVER_BUCKET_ACCESS_KEY_ID');
   const secretAccessKey = config.get<string>('COVER_BUCKET_SECRET_ACCESS_KEY');
   if (!name || !endpoint || !accessKeyId || !secretAccessKey) return null;
+  // Each environment sharing a bucket gets its own folder, so one can never touch another's pictures.
+  const env = config.get<string>('COVER_BUCKET_PREFIX') ?? '';
+  const prefix = /^[a-z0-9-]{1,40}$/i.test(env)
+    ? `${env}/event-covers/`
+    : 'event-covers/';
   const client = new S3Client({
     region: config.get<string>('COVER_BUCKET_REGION') || 'auto',
     endpoint,
@@ -48,13 +55,17 @@ export function coverBucketFrom(config: ConfigService): CoverBucket | null {
     requestHandler: {
       connectionTimeout: 3_000,
       requestTimeout: 4_000,
+      // Also covers a bucket that starts answering and then stalls.
+      socketTimeout: 4_000,
       throwOnRequestTimeout: true,
     },
     maxAttempts: 2,
   });
   return {
     name,
+    prefix,
     async put(key, data, mime) {
+      // Sending up to 2 MB can take longer than a read on a slow link.
       await client.send(
         new PutObjectCommand({
           Bucket: name,
@@ -62,6 +73,7 @@ export function coverBucketFrom(config: ConfigService): CoverBucket | null {
           Body: data,
           ContentType: mime,
         }),
+        { requestTimeout: 20_000 },
       );
     },
     async get(key) {

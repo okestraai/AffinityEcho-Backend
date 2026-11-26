@@ -610,7 +610,7 @@ export class EventsService {
         'Cover storage is set to the bucket, but no bucket is set up; using the database',
       );
     const key = useBucket
-      ? `event-covers/${event.id}/${now.getTime()}.${cover.mime === 'image/png' ? 'png' : 'jpg'}`
+      ? `${this.bucket.prefix}${event.id}/${now.getTime()}.${cover.mime === 'image/png' ? 'png' : 'jpg'}`
       : null;
     let replaced: string | null = null;
     const client = await getPool().connect();
