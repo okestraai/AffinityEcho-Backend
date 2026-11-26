@@ -1267,12 +1267,8 @@ export class ForumService {
         0,
       );
 
-      // Sort forums by activity level (most active first)
-      const sortedForums = forumsWithDetailedMetrics.sort((a: any, b: any) => {
-        const aScore = a.metrics.topicCount * 2 + a.metrics.memberCount;
-        const bScore = b.metrics.topicCount * 2 + b.metrics.memberCount;
-        return bScore - aScore;
-      });
+      // Kept in the admins' order from the query, with Other topics last.
+      const sortedForums = forumsWithDetailedMetrics;
 
       const result = {
         companyName,

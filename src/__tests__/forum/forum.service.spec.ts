@@ -589,6 +589,18 @@ describe('ForumService', () => {
       expect(chain.order).toHaveBeenNthCalledWith(1, 'is_other_topics', { ascending: true });
     });
 
+    it("keeps the admins' order instead of sorting by activity", async () => {
+      const forums = [
+        { id: 'a', name: 'Quiet', topic_count: 0, member_count: 0 },
+        { id: 'b', name: 'Busy', topic_count: 9, member_count: 9 },
+      ];
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: forums, error: null }))
+        .mockReturnValue(createMockQueryChain({ data: [], error: null }));
+      const result: any = await service.getFoundationForumsWithMetrics('Students');
+      expect(result.forums.map((f: any) => f.id)).toEqual(['a', 'b']);
+    });
+
     it('should return empty result when no foundation forums found', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValueOnce(chain);
