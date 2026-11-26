@@ -213,12 +213,20 @@ export class AuthService {
       lastSent: now,
       type: 'login',
     });
-    try {
-      await this.emailService.sendSignInCodeEmail(
-        email,
-        code,
-        profile?.username || 'there',
+    const sending = this.emailService.sendSignInCodeEmail(
+      email,
+      code,
+      profile?.username || 'there',
+    );
+    // On the sign-in screen, waiting for the mail (or its failure) would show which emails have accounts.
+    if (dto.existingOnly) {
+      sending.catch((error) =>
+        logger.error('Could not send a sign-in code', { error }),
       );
+      return reply;
+    }
+    try {
+      await sending;
     } catch (error) {
       logger.error('Could not send a sign-in code', { error });
       throw new InternalServerErrorException(

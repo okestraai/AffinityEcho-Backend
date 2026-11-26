@@ -153,6 +153,16 @@ describe('AuthService – email code sign-in', () => {
       expect((mockEmail as any).sendSignInCodeEmail).toHaveBeenCalled();
     });
 
+    it('answers a known email on the sign-in screen without waiting for the mail, even if it fails', async () => {
+      from().mockReturnValueOnce(chain({ username: 'ada' }));
+      (mockEmail as any).sendSignInCodeEmail.mockImplementationOnce(
+        () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error('smtp down')), 50)),
+      );
+      const reply = await service.sendLoginCode({ email: 'ada@example.com', existingOnly: true });
+      expect(reply.message).toBe('If this email can sign in, a code is on its way.');
+      await new Promise((r) => setTimeout(r, 80));
+    });
+
     it('allows 3 sends every 5 minutes', async () => {
       from().mockReturnValue(chain(null));
       for (let i = 0; i < 3; i++) await service.sendLoginCode({ email: 'a@example.com' });
