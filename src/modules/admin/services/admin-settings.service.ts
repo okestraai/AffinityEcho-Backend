@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
+import { getPool } from '../../../database/pg-client';
+import logger from '../../../common/utils/logger.util';
 import { AdminUsersService } from './admin-users.service';
 import {
   EVENT_DEFAULTS,
@@ -69,6 +71,9 @@ export class AdminSettingsService {
       );
     }
 
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new BadRequestException('Settings must be sent as an object');
+
     // Event and storage values are checked strictly; the older sections keep their free-form shape.
     if (key === 'events') value = checkEventSettings(value);
     if (key === 'storage')
@@ -77,30 +82,27 @@ export class AdminSettingsService {
         coverBucketStatus(this.config).bucketReady,
       );
 
-    // Fetch current value and merge (partial update)
-    const { data: existing } = await this.admin
-      .from('system_settings')
-      .select('value')
-      .eq('key', key)
-      .maybeSingle();
-
-    const merged = { ...(existing?.value ?? {}), ...value };
-
-    const { data, error } = await this.admin
-      .from('system_settings')
-      .upsert(
-        {
-          key,
-          value: merged,
-          updated_by: adminId,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'key' },
-      )
-      .select('key, value, updated_at')
-      .single();
-
-    if (error) throw new BadRequestException(error.message);
+    // Merged inside the database in one step, so two admins saving at once both keep their change.
+    let data: {
+      key: string;
+      value: Record<string, unknown>;
+      updated_at: string;
+    };
+    try {
+      const { rows } = await getPool().query(
+        `INSERT INTO system_settings (key, value, updated_by, updated_at)
+         VALUES ($1, $2::jsonb, $3, now())
+         ON CONFLICT (key) DO UPDATE
+           SET value = system_settings.value || EXCLUDED.value,
+               updated_by = EXCLUDED.updated_by, updated_at = now()
+         RETURNING key, value, updated_at`,
+        [key, JSON.stringify(value ?? {}), adminId],
+      );
+      data = rows[0];
+    } catch (err: any) {
+      logger.error('Settings save failed', { key, error: err?.message });
+      throw new BadRequestException('Could not save the settings');
+    }
     if (key === 'events' || key === 'storage') clearEventSettingsCache();
 
     await this.adminUsers.logAction(

@@ -33,12 +33,20 @@ export class EventNoticesService {
   // Edits within the window reach guests as one message: a later edit finds the job already waiting.
   async queueUpdate(eventId: string) {
     const minutes = (await eventSettings()).events.update_grouping_minutes;
+    // A message already being sent can't take this edit, so the edit gets a message of its own.
+    let jobId = `event-updated-${eventId}`;
+    const waiting = await this.queue.getJob(jobId).catch(() => undefined);
+    if (
+      waiting &&
+      (await waiting.getState().catch(() => 'unknown')) === 'active'
+    )
+      jobId = `${jobId}-${Date.now()}`;
     await this.queue
       .add(
         'updated',
         { eventId },
         {
-          jobId: `event-updated-${eventId}`,
+          jobId,
           delay: minutes * 60 * 1000,
           removeOnComplete: true,
           removeOnFail: true,

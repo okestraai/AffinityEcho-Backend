@@ -38,6 +38,8 @@ const settings = (events: Record<string, unknown> = {}, storage = 'database') =>
 
 describe('cover storage', () => {
   let query: jest.Mock;
+  let client: { query: jest.Mock; release: jest.Mock };
+  const sent = () => client.query.mock.calls.map(([sql]) => String(sql));
   let bucket: { name: string; put: jest.Mock; get: jest.Mock; remove: jest.Mock };
   const event = { id: 'e1', slug: 'talk-abcdef', host_id: 'host', status: 'published', cover_updated_at: '2026-11-26T10:00:00Z' };
 
@@ -52,7 +54,9 @@ describe('cover storage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     query = jest.fn().mockResolvedValue({ rows: [] });
-    (getPool as jest.Mock).mockReturnValue({ query });
+    // Cover saves run on one client in a transaction; reads use the pool.
+    client = { query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() };
+    (getPool as jest.Mock).mockReturnValue({ query, connect: jest.fn().mockResolvedValue(client) });
     bucket = { name: 'covers', put: jest.fn(), get: jest.fn(), remove: jest.fn().mockResolvedValue(undefined) };
     settings();
   });
@@ -60,7 +64,7 @@ describe('cover storage', () => {
   it('keeps the picture in the database by default', async () => {
     await make(true).setCover('host', 'e1', jpeg);
     expect(bucket.put).not.toHaveBeenCalled();
-    const insert = query.mock.calls.find(([sql]) => sql.includes('INSERT INTO event_covers'));
+    const insert = client.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO event_covers'));
     expect(insert[1][2]).toBeInstanceOf(Buffer);
     expect(insert[1][4]).toBe('database');
   });
@@ -69,7 +73,7 @@ describe('cover storage', () => {
     settings({}, 'bucket');
     await make(true).setCover('host', 'e1', jpeg);
     expect(bucket.put).toHaveBeenCalledWith(expect.stringMatching(/^event-covers\/e1\/\d+\.jpg$/), expect.any(Buffer), 'image/jpeg');
-    const insert = query.mock.calls.find(([sql]) => sql.includes('INSERT INTO event_covers'));
+    const insert = client.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO event_covers'));
     expect(insert[1][2]).toBeNull();
     expect(insert[1][4]).toBe('bucket');
   });
@@ -77,25 +81,36 @@ describe('cover storage', () => {
   it('falls back to the database if the bucket was chosen but is not set up', async () => {
     settings({}, 'bucket');
     await make(false).setCover('host', 'e1', jpeg);
-    const insert = query.mock.calls.find(([sql]) => sql.includes('INSERT INTO event_covers'));
+    const insert = client.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO event_covers'));
     expect(insert[1][4]).toBe('database');
   });
 
-  it('removes the old bucket picture after a replacement, and the new one if saving fails', async () => {
+  it('saves in one transaction, one upload per event at a time, and removes the replaced bucket picture', async () => {
     settings({}, 'bucket');
-    query.mockImplementation(async (sql: string) =>
-      sql.startsWith('SELECT') ? { rows: [{ mime: 'image/jpeg', storage: 'bucket', object_key: 'event-covers/e1/1.jpg' }] } : { rows: [] },
+    client.query.mockImplementation(async (sql: string) =>
+      sql.includes('FOR UPDATE') ? { rows: [{ object_key: 'event-covers/e1/1.jpg' }] } : { rows: [] },
     );
     await make(true).setCover('host', 'e1', jpeg);
+    const order = sent();
+    expect(order[0]).toBe('BEGIN');
+    expect(order[1]).toContain('pg_advisory_xact_lock');
+    expect(order.some((q) => q.includes('FOR UPDATE'))).toBe(true);
+    expect(order[order.length - 1]).toBe('COMMIT');
     expect(bucket.remove).toHaveBeenCalledWith('event-covers/e1/1.jpg');
+    expect(client.release).toHaveBeenCalled();
+  });
 
-    bucket.remove.mockClear();
-    query.mockImplementation(async (sql: string) => {
-      if (sql.includes('INSERT INTO event_covers')) throw new Error('db down');
-      return { rows: [] };
+  it('rolls back and removes the new bucket picture if any part of the save fails', async () => {
+    settings({}, 'bucket');
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.startsWith('UPDATE events')) throw new Error('lost connection');
+      return { rows: sql.includes('FOR UPDATE') ? [{ object_key: 'event-covers/e1/1.jpg' }] : [] };
     });
     await expect(make(true).setCover('host', 'e1', jpeg)).rejects.toThrow('Could not save the picture');
-    expect(bucket.remove).toHaveBeenCalledWith(bucket.put.mock.calls[1][0]);
+    expect(sent()).toContain('ROLLBACK');
+    expect(bucket.remove).toHaveBeenCalledWith(bucket.put.mock.calls[0][0]);
+    // The picture still in use is kept.
+    expect(bucket.remove).not.toHaveBeenCalledWith('event-covers/e1/1.jpg');
   });
 
   it('serves a bucket picture through the same address', async () => {

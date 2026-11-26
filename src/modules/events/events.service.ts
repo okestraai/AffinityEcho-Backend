@@ -117,6 +117,24 @@ export class EventsService {
         .eq('id', hostId);
     }
 
+    // One create per host at a time, so parallel requests can't pass the daily limit.
+    const lock = await getPool().connect();
+    try {
+      await lock.query('SELECT pg_advisory_lock(hashtext($1))', [
+        `event-create:${hostId}`,
+      ]);
+      return await this.createLocked(hostId, dto);
+    } finally {
+      await lock
+        .query('SELECT pg_advisory_unlock(hashtext($1))', [
+          `event-create:${hostId}`,
+        ])
+        .catch(() => undefined);
+      lock.release();
+    }
+  }
+
+  private async createLocked(hostId: string, dto: CreateEventDto) {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count } = await this.admin
       .from('events')
@@ -591,13 +609,24 @@ export class EventsService {
       logger.warn(
         'Cover storage is set to the bucket, but no bucket is set up; using the database',
       );
-    const previous = await this.coverRow(event.id);
     const key = useBucket
       ? `event-covers/${event.id}/${now.getTime()}.${cover.mime === 'image/png' ? 'png' : 'jpg'}`
       : null;
+    let replaced: string | null = null;
+    const client = await getPool().connect();
     try {
       if (key) await this.bucket!.put(key, cover.data, cover.mime);
-      await getPool().query(
+      // One save per event at a time, and both writes land together or not at all.
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `cover:${event.id}`,
+      ]);
+      const { rows } = await client.query(
+        'SELECT object_key FROM event_covers WHERE event_id = $1 FOR UPDATE',
+        [event.id],
+      );
+      replaced = rows[0]?.object_key ?? null;
+      await client.query(
         `INSERT INTO event_covers (event_id, mime, data, size, storage, object_key, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (event_id) DO UPDATE
@@ -613,17 +642,20 @@ export class EventsService {
           now,
         ],
       );
-      await getPool().query(
+      await client.query(
         'UPDATE events SET cover_updated_at = $2 WHERE id = $1',
         [event.id, now],
       );
+      await client.query('COMMIT');
     } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
       logger.error('Cover save failed', { error });
       if (key) await this.removeObject(key);
       throw new BadRequestException('Could not save the picture');
+    } finally {
+      client.release();
     }
-    if (previous?.object_key && previous.object_key !== key)
-      await this.removeObject(previous.object_key);
+    if (replaced && replaced !== key) await this.removeObject(replaced);
     return { coverVersion: now.getTime() };
   }
 

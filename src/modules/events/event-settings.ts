@@ -112,13 +112,17 @@ let cache: {
   storage: StorageSettings;
 } | null = null;
 let loading: Promise<void> | null = null;
+// Bumped on every save, so a read that started before it is thrown away.
+let generation = 0;
 
 async function refresh(): Promise<void> {
+  const started = generation;
   try {
     const { rows } = await getPool().query(
       "SELECT key, value FROM system_settings WHERE key IN ('events', 'storage')",
     );
     const by = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+    if (started !== generation) return;
     cache = {
       at: Date.now(),
       events: settle(EVENT_DEFAULTS, by.events, checkEventSettings),
@@ -139,7 +143,7 @@ async function refresh(): Promise<void> {
           storage: { ...STORAGE_DEFAULTS },
         };
   } finally {
-    loading = null;
+    if (started === generation) loading = null;
   }
 }
 
@@ -148,11 +152,16 @@ export async function eventSettings(): Promise<{
   events: EventSettings;
   storage: StorageSettings;
 }> {
-  if (!cache || Date.now() - cache.at > CACHE_MS) {
+  // A save during the read throws that read away; try again a couple of times, then use defaults.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (cache && Date.now() - cache.at <= CACHE_MS)
+      return { events: cache.events, storage: cache.storage };
     loading = loading ?? refresh();
     await loading;
   }
-  return { events: cache!.events, storage: cache!.storage };
+  return cache
+    ? { events: cache.events, storage: cache.storage }
+    : { events: { ...EVENT_DEFAULTS }, storage: { ...STORAGE_DEFAULTS } };
 }
 
 // For code that can't wait: the last known values, refreshed in the background when old.
@@ -174,5 +183,7 @@ export function eventSettingsNow(): {
 
 // Called after an admin saves, so the change applies at once on this server.
 export function clearEventSettingsCache(): void {
+  generation++;
   cache = null;
+  loading = null;
 }

@@ -41,6 +41,8 @@ export function coverBucketFrom(config: ConfigService): CoverBucket | null {
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
     forcePathStyle: true,
+    // A slow bucket must not hold public picture requests open.
+    requestHandler: { connectionTimeout: 3_000, requestTimeout: 10_000 },
   });
   return {
     name,

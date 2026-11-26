@@ -67,6 +67,18 @@ describe('event settings from the admin console', () => {
     expect(query).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores a read that started before a save, so the new values apply at once', async () => {
+    let finishOld!: (v: unknown) => void;
+    query.mockImplementationOnce(() => new Promise((r) => (finishOld = r)));
+    const first = eventSettings();
+    clearEventSettingsCache();
+    query.mockResolvedValue({ rows: [{ key: 'events', value: { events_per_day: 9 } }] });
+    finishOld({ rows: [{ key: 'events', value: { events_per_day: 3 } }] });
+    // Even the caller already waiting gets the saved value, not the old read.
+    expect((await first).events.events_per_day).toBe(9);
+    expect((await eventSettings()).events.events_per_day).toBe(9);
+  });
+
   it('keeps working on defaults if the settings table cannot be read', async () => {
     query.mockRejectedValue(new Error('down'));
     expect((await eventSettings()).events).toEqual(EVENT_DEFAULTS);

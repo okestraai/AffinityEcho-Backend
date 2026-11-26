@@ -77,6 +77,12 @@ describe('EventsService', () => {
       queueCancel: jest.fn(),
       sendConfirmation: jest.fn(),
     };
+    // Settings reads and the per-host create lock go through the pool.
+    const lockClient = { query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() };
+    (getPool as jest.Mock).mockReturnValue({
+      query: jest.fn().mockResolvedValue({ rows: [] }),
+      connect: jest.fn().mockResolvedValue(lockClient),
+    });
     service = new EventsService(createMockConfigService() as any, encryption as any, notices as any);
   });
 
@@ -96,6 +102,19 @@ describe('EventsService', () => {
         .mockReturnValueOnce(chain({ has_completed_onboarding: true, event_policy_accepted_at: 'x' }))
         .mockReturnValueOnce(chain([], { count: 5 }));
       await expect(service.create('u1', virtualDto)).rejects.toThrow('up to 5 events a day');
+    });
+
+    it('checks the daily limit under a per-host lock, and always lets the lock go', async () => {
+      client.from
+        .mockReturnValueOnce(chain({ has_completed_onboarding: true, event_policy_accepted_at: 'x' }))
+        .mockReturnValueOnce(chain([], { count: 5 }));
+      await expect(service.create('u1', virtualDto)).rejects.toThrow('up to 5 events a day');
+      const lockClient = await (getPool as jest.Mock).mock.results.at(-1)!.value.connect.mock.results[0].value;
+      const sql = lockClient.query.mock.calls.map(([q]: [string]) => q);
+      expect(sql[0]).toContain('pg_advisory_lock');
+      expect(sql[1]).toContain('pg_advisory_unlock');
+      expect(lockClient.query.mock.calls[0][1]).toEqual(['event-create:u1']);
+      expect(lockClient.release).toHaveBeenCalled();
     });
 
     it('lets the join link be added later, but needs a full venue in person', async () => {
