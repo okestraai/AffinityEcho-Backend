@@ -174,11 +174,15 @@ describe('OnboardingService', () => {
 
   describe('global and student fields', () => {
     const base = { firstName: 'Ada', lastName: 'Obi' };
-    const lastUpdate = () => mockClient.from.mock.results.at(-1).value.update.mock.calls.at(-1)[0];
+    const lastUpdate = () =>
+      mockClient.from.mock.results.at(-1).value.update.mock.calls.at(-1)[0];
 
     beforeEach(() => {
       mockClient.from.mockReturnValue(
-        createMockQueryChain({ data: { username: 'u', email: 'u@x.co' }, error: null }),
+        createMockQueryChain({
+          data: { username: 'u', email: 'u@x.co' },
+          error: null,
+        }),
       );
     });
 
@@ -203,7 +207,11 @@ describe('OnboardingService', () => {
     it('takes the company type from the company list, not the app', async () => {
       mockCompanies.resolve.mockResolvedValueOnce({
         name: 'Dangote',
-        columns: { company_encrypted: 'enc_Dangote', company_type: 'other', company_key: 'k1' },
+        columns: {
+          company_encrypted: 'enc_Dangote',
+          company_type: 'other',
+          company_key: 'k1',
+        },
       });
       await service.saveOnboardingData('u1', {
         ...base,
@@ -220,9 +228,34 @@ describe('OnboardingService', () => {
       expect(lastUpdate().company_encrypted).toBeUndefined();
     });
 
+    it('refuses a school name that is only spaces', async () => {
+      await expect(
+        service.saveOnboardingData('u1', {
+          ...base,
+          isStudent: true,
+          school: '   ',
+        } as any),
+      ).rejects.toThrow('Add your school or university');
+    });
+
+    it('treats a null country or company as not given', async () => {
+      await service.saveOnboardingData('u1', {
+        ...base,
+        country: null,
+        company: null,
+      } as any);
+      const saved = lastUpdate();
+      expect(saved.country_code).toBeUndefined();
+      expect(saved.company_encrypted).toBeUndefined();
+    });
+
     it('refuses a school named like a forum space', async () => {
       await expect(
-        service.saveOnboardingData('u1', { ...base, isStudent: true, school: 'students' } as any),
+        service.saveOnboardingData('u1', {
+          ...base,
+          isStudent: true,
+          school: 'students',
+        } as any),
       ).rejects.toThrow("can't be used as a school name");
     });
   });

@@ -191,7 +191,11 @@ describe('UnifiedProfileService', () => {
         data: { id: 'u1', username: 'NewUser', avatar: '🔥', bio: 'new bio' },
         error: null,
       });
-      const countChain = createMockQueryChain({ data: null, error: null, count: 0 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 0,
+      });
 
       mockClient.from
         .mockReturnValueOnce(updateChain)
@@ -207,7 +211,12 @@ describe('UnifiedProfileService', () => {
     it('should encrypt first_name and last_name in basic section', async () => {
       const updateChain = createMockQueryChain({ data: null, error: null });
       const profileChain = createMockQueryChain({
-        data: { id: 'u1', username: 'User1', first_name_encrypted: 'enc_Jane', last_name_encrypted: 'enc_Doe' },
+        data: {
+          id: 'u1',
+          username: 'User1',
+          first_name_encrypted: 'enc_Jane',
+          last_name_encrypted: 'enc_Doe',
+        },
         error: null,
       });
 
@@ -216,7 +225,13 @@ describe('UnifiedProfileService', () => {
         .mockReturnValueOnce(profileChain);
 
       const result = await service.updateProfile('u1', {
-        basic: { first_name: 'Jane', last_name: 'Doe', location: 'NYC', years_experience: 5, skills: ['Python'] },
+        basic: {
+          first_name: 'Jane',
+          last_name: 'Doe',
+          location: 'NYC',
+          years_experience: 5,
+          skills: ['Python'],
+        },
       } as any);
       expect(result.success).toBe(true);
     });
@@ -255,7 +270,10 @@ describe('UnifiedProfileService', () => {
         data: { company_encrypted: 'enc_OldCo', company_alumni_encrypted: [] },
         error: null,
       });
-      const deleteTokensChain = createMockQueryChain({ data: null, error: null });
+      const deleteTokensChain = createMockQueryChain({
+        data: null,
+        error: null,
+      });
       const updateChain = createMockQueryChain({ data: null, error: null });
       const profileChain = createMockQueryChain({
         data: { id: 'u1', username: 'User1', company_encrypted: 'enc_NewCo' },
@@ -277,7 +295,12 @@ describe('UnifiedProfileService', () => {
     it('should update mentee section fields', async () => {
       const updateChain = createMockQueryChain({ data: null, error: null });
       const profileChain = createMockQueryChain({
-        data: { id: 'u1', username: 'User1', is_active_mentee: true, mentee_bio: 'learning' },
+        data: {
+          id: 'u1',
+          username: 'User1',
+          is_active_mentee: true,
+          mentee_bio: 'learning',
+        },
         error: null,
       });
 
@@ -303,16 +326,24 @@ describe('UnifiedProfileService', () => {
     });
 
     it('should throw BadRequestException if username taken', async () => {
-      const existingUserChain = createMockQueryChain({ data: { id: 'other-u' }, error: null });
+      const existingUserChain = createMockQueryChain({
+        data: { id: 'other-u' },
+        error: null,
+      });
       mockClient.from.mockReturnValueOnce(existingUserChain);
 
       await expect(
-        service.updateProfile('u1', { basic: { username: 'takenName' } } as any),
+        service.updateProfile('u1', {
+          basic: { username: 'takenName' },
+        } as any),
       ).rejects.toThrow();
     });
 
     it('should throw on update error', async () => {
-      const updateChain = createMockQueryChain({ data: null, error: { message: 'fail' } });
+      const updateChain = createMockQueryChain({
+        data: null,
+        error: { message: 'fail' },
+      });
       mockClient.from.mockReturnValueOnce(updateChain);
 
       await expect(
@@ -323,10 +354,18 @@ describe('UnifiedProfileService', () => {
     it('should encrypt identity fields', async () => {
       const updateChain = createMockQueryChain({ data: null, error: null });
       const profileChain = createMockQueryChain({
-        data: { id: 'u1', username: 'User1', career_level_encrypted: 'enc_senior' },
+        data: {
+          id: 'u1',
+          username: 'User1',
+          career_level_encrypted: 'enc_senior',
+        },
         error: null,
       });
-      const countChain = createMockQueryChain({ data: null, error: null, count: 0 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 0,
+      });
 
       mockClient.from
         .mockReturnValueOnce(updateChain)
@@ -334,7 +373,12 @@ describe('UnifiedProfileService', () => {
         .mockReturnValue(countChain);
 
       const result = await service.updateProfile('u1', {
-        identity: { career_level: 'senior', race: 'x', gender: 'y', affinity_tags: ['a'] },
+        identity: {
+          career_level: 'senior',
+          race: 'x',
+          gender: 'y',
+          affinity_tags: ['a'],
+        },
       } as any);
       expect(result.success).toBe(true);
     });
@@ -345,7 +389,11 @@ describe('UnifiedProfileService', () => {
         data: { id: 'u1', username: 'User1', mentor_bio: 'expert mentor' },
         error: null,
       });
-      const countChain = createMockQueryChain({ data: null, error: null, count: 0 });
+      const countChain = createMockQueryChain({
+        data: null,
+        error: null,
+        count: 0,
+      });
 
       mockClient.from
         .mockReturnValueOnce(updateChain)
@@ -372,15 +420,21 @@ describe('UnifiedProfileService', () => {
 
     it('saves the country code', async () => {
       mockClient.from.mockReturnValue(chain({ id: 'u1' }));
-      await service.updateProfile('u1', { basic: { country_code: 'GB' } } as any);
+      await service.updateProfile('u1', {
+        basic: { country_code: 'GB' },
+      } as any);
       expect(savedUpdate().country_code).toBe('GB');
     });
 
     it('keeps the school as a past school when student is turned off', async () => {
       mockClient.from
-        .mockReturnValueOnce(chain({ is_student: true, school_encrypted: 'enc_Unilag' }))
+        .mockReturnValueOnce(
+          chain({ is_student: true, school_encrypted: 'enc_Unilag' }),
+        )
         .mockReturnValue(chain({ id: 'u1' }));
-      await service.updateProfile('u1', { school: { is_student: false } } as any);
+      await service.updateProfile('u1', {
+        school: { is_student: false },
+      } as any);
       const saved = savedUpdate();
       expect(saved.is_student).toBe(false);
       expect(saved.school_alumni_encrypted).toBe('enc_Unilag');
@@ -389,7 +443,9 @@ describe('UnifiedProfileService', () => {
     });
 
     it('needs a school name to turn student on', async () => {
-      mockClient.from.mockReturnValue(chain({ is_student: false, school_encrypted: null }));
+      mockClient.from.mockReturnValue(
+        chain({ is_student: false, school_encrypted: null }),
+      );
       await expect(
         service.updateProfile('u1', { school: { is_student: true } } as any),
       ).rejects.toThrow('Add your school or university');
@@ -397,27 +453,71 @@ describe('UnifiedProfileService', () => {
 
     it('removes the company when the name is empty', async () => {
       mockClient.from
-        .mockReturnValueOnce(chain({ company_encrypted: 'enc_OldCo', company_alumni_encrypted: [] }))
+        .mockReturnValueOnce(
+          chain({
+            company_encrypted: 'enc_OldCo',
+            company_alumni_encrypted: [],
+          }),
+        )
         .mockReturnValue(chain({ id: 'u1' }));
-      await service.updateProfile('u1', { company: { company_name: '' } } as any);
+      await service.updateProfile('u1', {
+        company: { company_name: '' },
+      } as any);
       const saved = savedUpdate();
       expect(saved.company_encrypted).toBeNull();
       expect(saved.company_type).toBeNull();
-      expect(saved.company_alumni_encrypted).toEqual([expect.stringContaining('OldCo')]);
+      expect(saved.company_alumni_encrypted).toEqual([
+        expect.stringContaining('OldCo'),
+      ]);
     });
 
     it('sets the company type from the company list', async () => {
       mockCompanies.resolve.mockResolvedValueOnce({
         name: 'Dangote',
-        columns: { company_encrypted: 'enc_Dangote', company_type: 'other', company_key: 'k1' },
+        columns: {
+          company_encrypted: 'enc_Dangote',
+          company_type: 'other',
+          company_key: 'k1',
+        },
       });
       mockClient.from
-        .mockReturnValueOnce(chain({ company_encrypted: null, company_alumni_encrypted: [] }))
+        .mockReturnValueOnce(
+          chain({ company_encrypted: null, company_alumni_encrypted: [] }),
+        )
         .mockReturnValue(chain({ id: 'u1' }));
-      await service.updateProfile('u1', { company: { company_name: 'dangote' } } as any);
+      await service.updateProfile('u1', {
+        company: { company_name: 'dangote' },
+      } as any);
       expect(savedUpdate()).toEqual(
         expect.objectContaining({ company_type: 'other', company_key: 'k1' }),
       );
+    });
+
+    it('does not save a school for someone who is not a student', async () => {
+      mockClient.from
+        .mockReturnValueOnce(
+          chain({ is_student: false, school_encrypted: null }),
+        )
+        .mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', {
+        school: { school_name: 'Unilag' },
+      } as any);
+      expect(savedUpdate()?.school_encrypted).toBeUndefined();
+    });
+
+    it('treats a null company as removing it', async () => {
+      mockClient.from
+        .mockReturnValueOnce(
+          chain({
+            company_encrypted: 'enc_OldCo',
+            company_alumni_encrypted: [],
+          }),
+        )
+        .mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', {
+        company: { company_name: null },
+      } as any);
+      expect(savedUpdate().company_encrypted).toBeNull();
     });
 
     it('joins several ethnicities into one value', async () => {

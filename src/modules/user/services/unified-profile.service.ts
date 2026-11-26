@@ -181,8 +181,12 @@ export class UnifiedProfileService {
       .single();
     const willBeStudent = school.is_student ?? !!current?.is_student;
 
-    if (school.school_name !== undefined) {
+    // A school is only saved for someone who is (or is becoming) a student.
+    if (school.school_name != null && willBeStudent) {
       const name = titleCaseWords(school.school_name);
+      if (name.length < 2) {
+        throw new BadRequestException('Add your school or university');
+      }
       if (isReservedSpaceName(name)) {
         throw new BadRequestException(
           `"${name}" can't be used as a school name`,
@@ -265,7 +269,7 @@ export class UnifiedProfileService {
           updateData.years_experience = dto.basic.years_experience;
         if (dto.basic.skills !== undefined)
           updateData.skills = dto.basic.skills;
-        if (dto.basic.country_code !== undefined)
+        if (dto.basic.country_code)
           updateData.country_code = dto.basic.country_code;
       }
 
@@ -288,9 +292,8 @@ export class UnifiedProfileService {
             currentProfile?.company_encrypted,
           );
           // An empty name removes the company; any other name is checked against the list.
-          const resolved = dto.company.company_name.trim()
-            ? await this.companies.resolve(dto.company.company_name)
-            : null;
+          const typed = (dto.company.company_name ?? '').trim();
+          const resolved = typed ? await this.companies.resolve(typed) : null;
           const newCompany = resolved?.name ?? '';
 
           if (

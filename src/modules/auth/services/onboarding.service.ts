@@ -63,11 +63,14 @@ export class OnboardingService {
           String(data.race).trim(),
         );
       }
-      if (data.country !== undefined) {
+      if (data.country) {
         encryptedData.country_code = data.country.toUpperCase();
       }
       if (data.isStudent === true) {
         const school = titleCaseWords(String(data.school ?? ''));
+        if (school.length < 2) {
+          throw new BadRequestException('Add your school or university');
+        }
         if (isReservedSpaceName(school)) {
           throw new BadRequestException(
             `"${school}" can't be used as a school name`,
@@ -91,7 +94,7 @@ export class OnboardingService {
         );
       }
       // The company type comes from the company list, not from the app.
-      if (data.company !== undefined && String(data.company).trim()) {
+      if (data.company && String(data.company).trim()) {
         const company = await this.companies.resolve(String(data.company));
         Object.assign(encryptedData, company.columns);
       }

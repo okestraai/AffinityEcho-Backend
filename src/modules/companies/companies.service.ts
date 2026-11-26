@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'crypto';
@@ -93,16 +94,31 @@ export class CompaniesService {
     };
   }
 
-  private async findListed(name: string) {
-    const { data } = await this.admin
+  // A company has its own space if it is on the list (shown or hidden) or already has company forums.
+  // Its members join that space by name, so a typed match must use it too.
+  private async findListed(
+    name: string,
+  ): Promise<{ name: string } | undefined> {
+    const pattern = escapeLike(name);
+    const { data, error } = await this.admin
       .from('companies')
       .select('id, name')
-      .eq('is_active', true)
-      .ilike(
-        'name',
-        name.replace(/[\\%_]/g, (c) => `\\${c}`),
-      );
-    return (data ?? [])[0] as { id: string; name: string } | undefined;
+      .ilike('name', pattern);
+    if (error)
+      throw new ServiceUnavailableException('Could not check the company list');
+    if (data?.length) return data[0];
+    const { data: forums, error: forumError } = await this.admin
+      .from('forums')
+      .select('company_name')
+      .eq('is_global', false)
+      .ilike('company_name', pattern)
+      .limit(1);
+    if (forumError)
+      throw new ServiceUnavailableException('Could not check the company list');
+    const spaceName = forums?.[0]?.company_name as string | undefined;
+    return spaceName && !isReservedSpaceName(spaceName)
+      ? { name: spaceName }
+      : undefined;
   }
 
   async listForAdmin() {
@@ -139,7 +155,14 @@ export class CompaniesService {
       }
       throw new BadRequestException('Could not add the company');
     }
-    await this.forums.bootstrapFoundationForums(company.name);
+    const forums = await this.forums.bootstrapFoundationForums(company.name);
+    if (!forums?.success) {
+      // Without its forums the company would be an empty space, so it isn't kept.
+      await this.admin.from('companies').delete().eq('id', company.id);
+      throw new ServiceUnavailableException(
+        "Couldn't create the company's forums. Nothing was added; try again.",
+      );
+    }
     const membersMoved = await this.moveTypedMembers(company.name);
     return { company, membersMoved };
   }
@@ -153,11 +176,14 @@ export class CompaniesService {
       .maybeSingle();
     if (error) throw new BadRequestException('Could not update the company');
     if (!data) throw new NotFoundException('Company not found');
+    // Members who typed it while it was hidden join its space once it is shown again.
+    if (isActive) await this.moveTypedMembers(data.name);
     return data;
   }
 
   // Typed companies shared by enough members to deserve their own space.
   async suggestions() {
+    await this.backfillKeys();
     const { data, error } = await this.admin
       .from('user_profiles')
       .select('company_key, company_encrypted')
@@ -182,22 +208,46 @@ export class CompaniesService {
   }
 
   private async findAnyByName(name: string) {
-    const { data } = await this.admin
+    const { data, error } = await this.admin
       .from('companies')
       .select('id')
-      .ilike(
-        'name',
-        name.replace(/[\\%_]/g, (c) => `\\${c}`),
-      );
+      .ilike('name', escapeLike(name));
+    if (error)
+      throw new ServiceUnavailableException('Could not check the company list');
     return (data ?? [])[0];
   }
 
+  // Members who typed a company before keys existed get one, so they can be grouped and moved.
+  private async backfillKeys(): Promise<void> {
+    const { data, error } = await this.admin
+      .from('user_profiles')
+      .select('id, company_encrypted')
+      .eq('company_type', 'other')
+      .is('company_key', null)
+      .not('company_encrypted', 'is', null);
+    if (error)
+      throw new ServiceUnavailableException('Could not read typed companies');
+    for (const row of data ?? []) {
+      const name = this.safeDecrypt(row.company_encrypted);
+      if (!name) continue;
+      await this.admin
+        .from('user_profiles')
+        .update({ company_key: this.companyKey(name) })
+        .eq('id', row.id)
+        .is('company_key', null);
+    }
+  }
+
   private async moveTypedMembers(name: string): Promise<number> {
-    const { data } = await this.admin
+    await this.backfillKeys();
+    const key = this.companyKey(name);
+    const { data, error: readError } = await this.admin
       .from('user_profiles')
       .select('id')
       .eq('company_type', 'other')
-      .eq('company_key', this.companyKey(name));
+      .eq('company_key', key);
+    if (readError)
+      throw new ServiceUnavailableException('Could not read typed companies');
     let moved = 0;
     for (const row of data ?? []) {
       const { error } = await this.admin
@@ -208,7 +258,10 @@ export class CompaniesService {
           company_key: null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', row.id);
+        .eq('id', row.id)
+        // Skips a member who changed their company since the read.
+        .eq('company_type', 'other')
+        .eq('company_key', key);
       if (error)
         logger.warn('Could not move a member to a new company space', {
           userId: row.id,
@@ -225,4 +278,8 @@ export class CompaniesService {
       return null;
     }
   }
+}
+
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
