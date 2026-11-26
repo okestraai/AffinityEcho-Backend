@@ -734,7 +734,7 @@ function checkInCode(): string {
 }
 
 // Spreadsheet apps run cells that start with these, so they are made plain text.
-function csvCell(value: unknown): string {
+function csvCell(value: string | number | null | undefined): string {
   let text = String(value ?? '');
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
