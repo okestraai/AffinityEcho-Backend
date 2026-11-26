@@ -31,6 +31,7 @@ import { DigestCronJobs } from './jobs/digest-cron.jobs';
 import { HealthCronJobs } from './jobs/health-cron.jobs';
 import { EventsModule } from './modules/events/events.module';
 import { StudentStatusJobs } from './jobs/student-status.jobs';
+import { CoverBucketSweepJobs } from './jobs/cover-bucket-sweep.jobs';
 import { ModerationSweepJobs } from './jobs/moderation-sweep.jobs';
 import { DeleteSweepJobs } from './jobs/delete-sweep.jobs';
 import { AdminHealthService } from './modules/admin/services/admin-health.service';
@@ -89,6 +90,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     DigestCronJobs,
     HealthCronJobs,
     StudentStatusJobs,
+    CoverBucketSweepJobs,
     ModerationSweepJobs,
     DeleteSweepJobs,
     AdminHealthService,

@@ -650,7 +650,8 @@ export class EventsService {
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       logger.error('Cover save failed', { error });
-      if (key) await this.removeObject(key);
+      // In the background, so a struggling bucket doesn't double the wait; the daily sweep catches misses.
+      if (key) void this.removeObject(key);
       throw new BadRequestException('Could not save the picture');
     } finally {
       client.release();

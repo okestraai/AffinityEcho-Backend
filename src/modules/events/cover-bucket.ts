@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -12,6 +13,7 @@ export interface CoverBucket {
   put(key: string, data: Buffer, mime: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
+  list(prefix: string): AsyncGenerator<{ key: string; lastModified: Date }>;
 }
 
 const BUCKET_KEYS = [
@@ -41,8 +43,14 @@ export function coverBucketFrom(config: ConfigService): CoverBucket | null {
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
     forcePathStyle: true,
-    // A slow bucket must not hold public picture requests open.
-    requestHandler: { connectionTimeout: 3_000, requestTimeout: 10_000 },
+    // A slow bucket must not hold picture requests open: two 4-second tries, then give up.
+    // Without throwOnRequestTimeout the client only logs a warning and keeps waiting.
+    requestHandler: {
+      connectionTimeout: 3_000,
+      requestTimeout: 4_000,
+      throwOnRequestTimeout: true,
+    },
+    maxAttempts: 2,
   });
   return {
     name,
@@ -65,6 +73,22 @@ export function coverBucketFrom(config: ConfigService): CoverBucket | null {
     },
     async remove(key) {
       await client.send(new DeleteObjectCommand({ Bucket: name, Key: key }));
+    },
+    async *list(prefix) {
+      let token: string | undefined;
+      do {
+        const page = await client.send(
+          new ListObjectsV2Command({
+            Bucket: name,
+            Prefix: prefix,
+            ContinuationToken: token,
+          }),
+        );
+        for (const o of page.Contents ?? [])
+          if (o.Key && o.LastModified)
+            yield { key: o.Key, lastModified: o.LastModified };
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
     },
   };
 }
