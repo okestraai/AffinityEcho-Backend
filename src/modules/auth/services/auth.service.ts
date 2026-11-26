@@ -28,6 +28,7 @@ import { MSG } from '../../../common/constants/messages';
 import { RedisService } from '../../../common/services/redis.service';
 import { AttemptCounter } from '../../../common/utils/attempt-counter';
 import { OtpStore, OtpType, newOtp } from '../../../common/utils/otp-store';
+import { splitEthnicities } from '../../../common/constants/onboarding-options';
 
 @Injectable()
 export class AuthService {
@@ -1238,7 +1239,13 @@ export class AuthService {
         gender_encrypted,
         career_level_encrypted,
         company_encrypted,
-        affinity_tags_encrypted
+        affinity_tags_encrypted,
+        country_code,
+        country_prompt_dismissed_at,
+        is_student,
+        school_encrypted,
+        expected_grad_year,
+        show_school
       `,
         )
         .eq('id', userId)
@@ -1500,6 +1507,11 @@ export class AuthService {
       last_active_at: p.last_active_at,
 
       company_type: p.company_type,
+      country_code: p.country_code ?? null,
+      country_prompt_dismissed_at: p.country_prompt_dismissed_at ?? null,
+      is_student: !!p.is_student,
+      expected_grad_year: p.expected_grad_year ?? null,
+      show_school: !!p.show_school,
       race_encrypted: p.race_encrypted,
       gender_encrypted: p.gender_encrypted,
       career_level_encrypted: p.career_level_encrypted,
@@ -1520,6 +1532,8 @@ export class AuthService {
         careerLevel: this.decryptField(p.career_level_encrypted),
         company: this.decryptField(p.company_encrypted),
         affinityTags: this.decryptAffinityTags(p.affinity_tags_encrypted),
+        ethnicities: splitEthnicities(this.decryptField(p.race_encrypted)),
+        school: this.decryptField(p.school_encrypted),
       },
     };
   }

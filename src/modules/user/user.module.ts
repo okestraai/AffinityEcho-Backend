@@ -9,6 +9,7 @@ import { UserBlockingService } from './services/user-blocking.service';
 import { UserResourcesService } from './services/user-resources.service';
 import { HarassmentReportService } from './services/harassment-report.service';
 import { EncryptionModule } from '../encryption/encryption.module';
+import { CompaniesModule } from '../companies/companies.module';
 import { FeedsModule } from '../feeds/feeds.module';
 import { CompanyVerificationController } from './controllers/company-verification.controller';
 import { CompanyVerificationService } from './services/company-verification.service';
@@ -17,7 +18,7 @@ import { EmailService } from '../../common/utils/email/email.service';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 
 @Module({
-  imports: [EncryptionModule, FeedsModule],
+  imports: [EncryptionModule, FeedsModule, CompaniesModule],
   controllers: [CompanyVerificationController, UserController],
   providers: [
     UserService,

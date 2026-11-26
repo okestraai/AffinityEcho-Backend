@@ -12,6 +12,12 @@ import { EmailService } from '../../../common/utils/email/email.service';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { MSG } from '../../../common/constants/messages';
 import { isValidAffinityTag } from '../../../common/constants/affinity-groups';
+import {
+  ETHNICITY_SEPARATOR,
+  isReservedSpaceName,
+  titleCaseWords,
+} from '../../../common/constants/onboarding-options';
+import { CompaniesService } from '../../companies/companies.service';
 
 @Injectable()
 export class OnboardingService {
@@ -21,6 +27,7 @@ export class OnboardingService {
     private config: ConfigService,
     private emailService: EmailService,
     private encryption: EncryptionUtil,
+    private companies: CompaniesService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -44,10 +51,34 @@ export class OnboardingService {
       );
 
       // Only these fields are allowed in onboarding
-      if (data.race !== undefined) {
+      if (data.ethnicities !== undefined) {
+        const chosen = [
+          ...new Set(data.ethnicities.map((e) => e.trim()).filter(Boolean)),
+        ];
+        encryptedData.race_encrypted = chosen.length
+          ? this.encryption.encrypt(chosen.join(ETHNICITY_SEPARATOR))
+          : null;
+      } else if (data.race !== undefined) {
         encryptedData.race_encrypted = this.encryption.encrypt(
           String(data.race).trim(),
         );
+      }
+      if (data.country !== undefined) {
+        encryptedData.country_code = data.country.toUpperCase();
+      }
+      if (data.isStudent === true) {
+        const school = titleCaseWords(String(data.school ?? ''));
+        if (isReservedSpaceName(school)) {
+          throw new BadRequestException(
+            `"${school}" can't be used as a school name`,
+          );
+        }
+        encryptedData.is_student = true;
+        encryptedData.school_encrypted = this.encryption.encrypt(school);
+        encryptedData.expected_grad_year = data.expectedGradYear ?? null;
+        encryptedData.show_school = data.showSchool === true;
+      } else if (data.isStudent === false) {
+        encryptedData.is_student = false;
       }
       if (data.gender !== undefined) {
         encryptedData.gender_encrypted = this.encryption.encrypt(
@@ -59,13 +90,10 @@ export class OnboardingService {
           String(data.careerLevel),
         );
       }
-      if (data.company !== undefined) {
-        encryptedData.company_encrypted = this.encryption.encrypt(
-          String(data.company).trim(),
-        );
-      }
-      if (data.companyType !== undefined) {
-        encryptedData.company_type = data.companyType;
+      // The company type comes from the company list, not from the app.
+      if (data.company !== undefined && String(data.company).trim()) {
+        const company = await this.companies.resolve(String(data.company));
+        Object.assign(encryptedData, company.columns);
       }
       if (data.affinityTags && data.affinityTags.length > 0) {
         const invalidTags = data.affinityTags.filter(

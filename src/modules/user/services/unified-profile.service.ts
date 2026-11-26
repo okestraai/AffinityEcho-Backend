@@ -9,6 +9,13 @@ import { supabaseAdmin } from '../../../database/supabase.client';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { UnifiedProfileEditDto } from '../dto/unified-profile-edit.dto';
 import { MSG } from '../../../common/constants/messages';
+import { CompaniesService } from '../../companies/companies.service';
+import {
+  ETHNICITY_SEPARATOR,
+  isReservedSpaceName,
+  splitEthnicities,
+  titleCaseWords,
+} from '../../../common/constants/onboarding-options';
 
 @Injectable()
 export class UnifiedProfileService {
@@ -18,6 +25,7 @@ export class UnifiedProfileService {
   constructor(
     private config: ConfigService,
     private encryption: EncryptionUtil,
+    private companies: CompaniesService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -74,7 +82,8 @@ export class UnifiedProfileService {
           mentor_availability, mentor_response_time, mentor_style, mentor_languages, mentor_hourly_rate,
           is_active_mentee, mentee_bio, mentee_goals, mentee_interests, mentee_industries,
           mentee_availability, mentee_urgency, mentee_topic, mentored_style, mentee_languages,
-          communication_method
+          communication_method,
+          country_code, is_student, school_encrypted, expected_grad_year, show_school
         `,
         )
         .eq('id', userId)
@@ -101,6 +110,13 @@ export class UnifiedProfileService {
             location: profile.location,
             years_experience: profile.years_experience,
             skills: profile.skills || [],
+            country_code: profile.country_code ?? null,
+          },
+          school: {
+            is_student: !!profile.is_student,
+            school_name: this.decryptField(profile.school_encrypted),
+            expected_grad_year: profile.expected_grad_year ?? null,
+            show_school: !!profile.show_school,
           },
           company: {
             company_name: this.decryptField(profile.company_encrypted),
@@ -109,6 +125,9 @@ export class UnifiedProfileService {
           identity: {
             career_level: this.decryptField(profile.career_level_encrypted),
             race: this.decryptField(profile.race_encrypted),
+            ethnicities: splitEthnicities(
+              this.decryptField(profile.race_encrypted),
+            ),
             gender: this.decryptField(profile.gender_encrypted),
             affinity_tags: this.decryptAffinityTags(
               profile.affinity_tags_encrypted,
@@ -147,6 +166,59 @@ export class UnifiedProfileService {
       this.logger.error(MSG.USER.PROFILE_FAILED, error);
       throw new BadRequestException(MSG.USER.PROFILE_FAILED);
     }
+  }
+
+  // Turning student off keeps the school as a past school; turning it on needs a school name.
+  private async applySchool(
+    userId: string,
+    school: NonNullable<UnifiedProfileEditDto['school']>,
+    updateData: Record<string, unknown>,
+  ) {
+    const { data: current } = await this.admin
+      .from('user_profiles')
+      .select('is_student, school_encrypted')
+      .eq('id', userId)
+      .single();
+    const willBeStudent = school.is_student ?? !!current?.is_student;
+
+    if (school.school_name !== undefined) {
+      const name = titleCaseWords(school.school_name);
+      if (isReservedSpaceName(name)) {
+        throw new BadRequestException(
+          `"${name}" can't be used as a school name`,
+        );
+      }
+      updateData.school_encrypted = this.encryption.encrypt(name);
+    }
+    if (willBeStudent) {
+      if (!updateData.school_encrypted && !current?.school_encrypted) {
+        throw new BadRequestException('Add your school or university');
+      }
+      updateData.is_student = true;
+    } else if (school.is_student === false && current?.is_student) {
+      updateData.is_student = false;
+      updateData.school_alumni_encrypted =
+        updateData.school_encrypted ?? current.school_encrypted;
+      updateData.school_encrypted = null;
+      updateData.expected_grad_year = null;
+    }
+    if (school.expected_grad_year !== undefined) {
+      updateData.expected_grad_year = willBeStudent
+        ? school.expected_grad_year
+        : null;
+    }
+    if (school.show_school !== undefined) {
+      updateData.show_school = school.show_school;
+    }
+  }
+
+  async dismissCountryPrompt(userId: string) {
+    const { error } = await this.admin
+      .from('user_profiles')
+      .update({ country_prompt_dismissed_at: new Date().toISOString() })
+      .eq('id', userId);
+    if (error) throw new BadRequestException(MSG.USER.PROFILE_FAILED);
+    return { dismissed: true };
   }
 
   // ============ UPDATE PROFILE ============
@@ -193,6 +265,13 @@ export class UnifiedProfileService {
           updateData.years_experience = dto.basic.years_experience;
         if (dto.basic.skills !== undefined)
           updateData.skills = dto.basic.skills;
+        if (dto.basic.country_code !== undefined)
+          updateData.country_code = dto.basic.country_code;
+      }
+
+      // ---- SCHOOL SECTION ----
+      if (dto.school) {
+        await this.applySchool(userId, dto.school, updateData);
       }
 
       // ---- COMPANY SECTION (with alumni logic) ----
@@ -208,7 +287,11 @@ export class UnifiedProfileService {
           const currentCompany = this.decryptField(
             currentProfile?.company_encrypted,
           );
-          const newCompany = dto.company.company_name;
+          // An empty name removes the company; any other name is checked against the list.
+          const resolved = dto.company.company_name.trim()
+            ? await this.companies.resolve(dto.company.company_name)
+            : null;
+          const newCompany = resolved?.name ?? '';
 
           if (
             currentCompany &&
@@ -252,7 +335,13 @@ export class UnifiedProfileService {
               .is('used_at', null);
           }
 
-          updateData.company_encrypted = this.encryption.encrypt(newCompany);
+          if (resolved) {
+            Object.assign(updateData, resolved.columns);
+          } else {
+            updateData.company_encrypted = null;
+            updateData.company_type = null;
+            updateData.company_key = null;
+          }
         }
       }
 
@@ -263,7 +352,16 @@ export class UnifiedProfileService {
             dto.identity.career_level,
           );
         }
-        if (dto.identity.race !== undefined) {
+        if (dto.identity.ethnicities !== undefined) {
+          const chosen = [
+            ...new Set(
+              dto.identity.ethnicities.map((e) => e.trim()).filter(Boolean),
+            ),
+          ];
+          updateData.race_encrypted = chosen.length
+            ? this.encryption.encrypt(chosen.join(ETHNICITY_SEPARATOR))
+            : null;
+        } else if (dto.identity.race !== undefined) {
           updateData.race_encrypted = this.encryption.encrypt(
             dto.identity.race,
           );

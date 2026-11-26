@@ -24,6 +24,17 @@ jest.mock('../../common/utils/logger.util', () => ({
   },
 }));
 
+const mockCompanies = {
+  resolve: jest.fn(async (name: string) => ({
+    name,
+    columns: {
+      company_encrypted: 'enc_' + name,
+      company_type: 'static',
+      company_key: null,
+    },
+  })),
+};
+
 describe('OnboardingService', () => {
   let service: OnboardingService;
   let mockClient: any;
@@ -44,6 +55,7 @@ describe('OnboardingService', () => {
       createMockConfigService() as any,
       mockEmailService,
       mockEncryption,
+      mockCompanies as any,
     );
   });
 
@@ -73,7 +85,7 @@ describe('OnboardingService', () => {
       expect(mockEncryption.encrypt).toHaveBeenCalledWith('Black');
       expect(mockEncryption.encrypt).toHaveBeenCalledWith('Male');
       expect(mockEncryption.encrypt).toHaveBeenCalledWith('Senior');
-      expect(mockEncryption.encrypt).toHaveBeenCalledWith('Google');
+      expect(mockCompanies.resolve).toHaveBeenCalledWith('Google');
       expect(mockEmailService.sendWelcomeEmail).toHaveBeenCalledWith(
         'test@test.com',
         'TestUser',
@@ -157,6 +169,61 @@ describe('OnboardingService', () => {
       expect(result.has_completed_onboarding).toBe(true);
       expect(mockEncryption.encrypt).toHaveBeenCalledWith('Jane');
       expect(mockEncryption.encrypt).toHaveBeenCalledWith('Smith');
+    });
+  });
+
+  describe('global and student fields', () => {
+    const base = { firstName: 'Ada', lastName: 'Obi' };
+    const lastUpdate = () => mockClient.from.mock.results.at(-1).value.update.mock.calls.at(-1)[0];
+
+    beforeEach(() => {
+      mockClient.from.mockReturnValue(
+        createMockQueryChain({ data: { username: 'u', email: 'u@x.co' }, error: null }),
+      );
+    });
+
+    it('saves the country, joined ethnicities and student details', async () => {
+      await service.saveOnboardingData('u1', {
+        ...base,
+        country: 'ng',
+        ethnicities: ['Black / African', 'Caribbean', 'Caribbean'],
+        isStudent: true,
+        school: '  university of  lagos ',
+        expectedGradYear: new Date().getFullYear() + 1,
+        showSchool: true,
+      } as any);
+      const saved = lastUpdate();
+      expect(saved.country_code).toBe('NG');
+      expect(saved.race_encrypted).toBe('enc_Black / African, Caribbean');
+      expect(saved.is_student).toBe(true);
+      expect(saved.school_encrypted).toBe('enc_University Of Lagos');
+      expect(saved.show_school).toBe(true);
+    });
+
+    it('takes the company type from the company list, not the app', async () => {
+      mockCompanies.resolve.mockResolvedValueOnce({
+        name: 'Dangote',
+        columns: { company_encrypted: 'enc_Dangote', company_type: 'other', company_key: 'k1' },
+      });
+      await service.saveOnboardingData('u1', {
+        ...base,
+        company: 'dangote',
+        companyType: 'static',
+      } as any);
+      const saved = lastUpdate();
+      expect(saved.company_type).toBe('other');
+      expect(saved.company_key).toBe('k1');
+    });
+
+    it('saves no company when none is given', async () => {
+      await service.saveOnboardingData('u1', { ...base, company: '  ' } as any);
+      expect(lastUpdate().company_encrypted).toBeUndefined();
+    });
+
+    it('refuses a school named like a forum space', async () => {
+      await expect(
+        service.saveOnboardingData('u1', { ...base, isStudent: true, school: 'students' } as any),
+      ).rejects.toThrow("can't be used as a school name");
     });
   });
 });

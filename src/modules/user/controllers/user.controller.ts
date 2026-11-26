@@ -12,6 +12,7 @@ import {
   UseGuards,
   Req,
   HttpCode,
+  HttpStatus,
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -382,6 +383,13 @@ export class UserController {
     @Body() dto: UnifiedProfileEditDto,
   ) {
     return this.unifiedProfileService.updateProfile(req.user.sub, dto);
+  }
+
+  @Post('country-prompt/dismiss')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Stop showing the "Where are you based?" prompt' })
+  async dismissCountryPrompt(@Req() req: any) {
+    return this.unifiedProfileService.dismissCountryPrompt(req.user.sub);
   }
 
   // ============ COMPANY VERIFICATION ============

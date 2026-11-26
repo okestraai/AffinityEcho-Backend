@@ -49,7 +49,14 @@ export interface UserProfileResponse {
     careerLevel: string | null;
     company: string | null;
     affinityTags: string[];
+    ethnicities: string[];
+    school: string | null;
   };
+  country_code?: string | null;
+  country_prompt_dismissed_at?: string | null;
+  is_student?: boolean;
+  expected_grad_year?: number | null;
+  show_school?: boolean;
 
   // Admin permissions (only present for admin role; null for super_admin; undefined for other roles)
   permissions?: string[] | null;

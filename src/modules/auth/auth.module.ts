@@ -11,6 +11,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'; // Add this
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 import { EmailService } from '../../common/utils/email/email.service';
 import { PassportModule } from '@nestjs/passport';
+import { CompaniesModule } from '../companies/companies.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PassportModule } from '@nestjs/passport';
       inject: [ConfigService],
     }),
     ConfigModule,
+    CompaniesModule,
   ],
   controllers: [AuthController, AffinityGroupsController],
   providers: [

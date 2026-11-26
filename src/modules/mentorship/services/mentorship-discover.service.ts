@@ -46,7 +46,7 @@ export class MentorshipDiscoverService {
         this.admin
           .from('user_profiles')
           .select(
-            'mentor_expertise, mentor_industries, location, career_level_encrypted, affinity_tags_encrypted',
+            'mentor_expertise, mentor_industries, location, country_code, career_level_encrypted, affinity_tags_encrypted',
           )
           .eq('id', currentUserId)
           .single(),
@@ -95,6 +95,7 @@ export class MentorshipDiscoverService {
       bio,
       job_title,
       location,
+      country_code,
       years_experience,
       mentor_expertise,
       mentor_industries,
@@ -323,6 +324,7 @@ export class MentorshipDiscoverService {
         delete profile.last_name_encrypted;
         delete profile.affinity_tags_encrypted;
         delete profile.career_level_encrypted;
+        delete profile.country_code;
       });
 
       // Re-sort by match score if requested
@@ -406,7 +408,7 @@ export class MentorshipDiscoverService {
       const { data: currentUser } = await this.admin
         .from('user_profiles')
         .select(
-          'mentor_expertise, mentor_industries, location, mentee_interests, career_level_encrypted, affinity_tags_encrypted, is_willing_to_mentor, mentoring_as',
+          'mentor_expertise, mentor_industries, location, country_code, mentee_interests, career_level_encrypted, affinity_tags_encrypted, is_willing_to_mentor, mentoring_as',
         )
         .eq('id', currentUserId)
         .single();
@@ -425,6 +427,7 @@ export class MentorshipDiscoverService {
           bio,
           job_title,
           location,
+          country_code,
           years_experience,
           mentor_bio,
           mentor_expertise,
@@ -481,8 +484,9 @@ export class MentorshipDiscoverService {
               }
             }
 
+            const { country_code: _country, ...shown } = profile;
             return {
-              ...profile,
+              ...shown,
               career_level: this.decryptField(profile.career_level_encrypted),
               affinity_tags: affinityTags,
               matchScore: this.calculateSuggestionScore(profile, currentUser),
@@ -662,6 +666,8 @@ export class MentorshipDiscoverService {
       score += 10;
     }
 
+    score += sameCountryBonus(currentUser, profile);
+
     // Activity indicators — up to 10 points
     let activityScore = 0;
     if (profile.reputation_score) {
@@ -731,6 +737,8 @@ export class MentorshipDiscoverService {
       score += 10;
     }
 
+    score += sameCountryBonus(currentUser, profile);
+
     // Career level compatibility — up to 15 points
     if (currentUser.career_level_encrypted && profile.career_level_encrypted) {
       const currentLevel = this.parseCareerLevel(
@@ -787,4 +795,16 @@ export class MentorshipDiscoverService {
       return 5;
     return 0;
   }
+}
+
+// People in the same country get a small bonus; a different country never costs points.
+export const SAME_COUNTRY_BONUS = 5;
+
+export function sameCountryBonus(
+  a: { country_code?: string | null } | null | undefined,
+  b: { country_code?: string | null } | null | undefined,
+): number {
+  return a?.country_code && b?.country_code && a.country_code === b.country_code
+    ? SAME_COUNTRY_BONUS
+    : 0;
 }

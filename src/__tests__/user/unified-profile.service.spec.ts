@@ -21,6 +21,17 @@ import {
   createMockConfigService,
 } from '../helpers/mock-supabase';
 
+const mockCompanies = {
+  resolve: jest.fn(async (name: string) => ({
+    name,
+    columns: {
+      company_encrypted: 'enc_' + name,
+      company_type: 'static',
+      company_key: null,
+    },
+  })),
+};
+
 describe('UnifiedProfileService', () => {
   let service: UnifiedProfileService;
   let mockClient: any;
@@ -37,6 +48,7 @@ describe('UnifiedProfileService', () => {
     service = new UnifiedProfileService(
       createMockConfigService() as any,
       mockEncryption,
+      mockCompanies as any,
     );
   });
 
@@ -344,6 +356,76 @@ describe('UnifiedProfileService', () => {
         mentor: { mentor_bio: 'expert mentor', expertise: ['leadership'] },
       } as any);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('country, school and company rules', () => {
+    // Returns the object passed to the main profile update.
+    const savedUpdate = () => {
+      for (const r of mockClient.from.mock.results) {
+        const calls = r.value.update?.mock?.calls ?? [];
+        if (calls.length) return calls[0][0];
+      }
+      return undefined;
+    };
+    const chain = (data: any) => createMockQueryChain({ data, error: null });
+
+    it('saves the country code', async () => {
+      mockClient.from.mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', { basic: { country_code: 'GB' } } as any);
+      expect(savedUpdate().country_code).toBe('GB');
+    });
+
+    it('keeps the school as a past school when student is turned off', async () => {
+      mockClient.from
+        .mockReturnValueOnce(chain({ is_student: true, school_encrypted: 'enc_Unilag' }))
+        .mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', { school: { is_student: false } } as any);
+      const saved = savedUpdate();
+      expect(saved.is_student).toBe(false);
+      expect(saved.school_alumni_encrypted).toBe('enc_Unilag');
+      expect(saved.school_encrypted).toBeNull();
+      expect(saved.expected_grad_year).toBeNull();
+    });
+
+    it('needs a school name to turn student on', async () => {
+      mockClient.from.mockReturnValue(chain({ is_student: false, school_encrypted: null }));
+      await expect(
+        service.updateProfile('u1', { school: { is_student: true } } as any),
+      ).rejects.toThrow('Add your school or university');
+    });
+
+    it('removes the company when the name is empty', async () => {
+      mockClient.from
+        .mockReturnValueOnce(chain({ company_encrypted: 'enc_OldCo', company_alumni_encrypted: [] }))
+        .mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', { company: { company_name: '' } } as any);
+      const saved = savedUpdate();
+      expect(saved.company_encrypted).toBeNull();
+      expect(saved.company_type).toBeNull();
+      expect(saved.company_alumni_encrypted).toEqual([expect.stringContaining('OldCo')]);
+    });
+
+    it('sets the company type from the company list', async () => {
+      mockCompanies.resolve.mockResolvedValueOnce({
+        name: 'Dangote',
+        columns: { company_encrypted: 'enc_Dangote', company_type: 'other', company_key: 'k1' },
+      });
+      mockClient.from
+        .mockReturnValueOnce(chain({ company_encrypted: null, company_alumni_encrypted: [] }))
+        .mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', { company: { company_name: 'dangote' } } as any);
+      expect(savedUpdate()).toEqual(
+        expect.objectContaining({ company_type: 'other', company_key: 'k1' }),
+      );
+    });
+
+    it('joins several ethnicities into one value', async () => {
+      mockClient.from.mockReturnValue(chain({ id: 'u1' }));
+      await service.updateProfile('u1', {
+        identity: { ethnicities: ['South Asian', 'White'] },
+      } as any);
+      expect(savedUpdate().race_encrypted).toBe('enc_South Asian, White');
     });
   });
 });
