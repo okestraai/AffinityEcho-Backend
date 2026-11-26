@@ -223,6 +223,8 @@ export class NotificationsService {
               reference_type: dto.reference_type,
               notification_id: data.id,
               metadata: dto.metadata,
+              // The app opens this page on tap when it knows it.
+              action_url: dto.action_url,
             },
             { badge },
           );

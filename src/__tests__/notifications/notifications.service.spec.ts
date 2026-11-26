@@ -34,6 +34,8 @@ describe('NotificationsService', () => {
   let mockClient: any;
   let mockChatGateway: { emitToUser: jest.Mock };
 
+  let mockPushService: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -43,7 +45,7 @@ describe('NotificationsService', () => {
 
     mockChatGateway = { emitToUser: jest.fn() };
     const mockConfig = createMockConfigService();
-    const mockPushService = {
+    mockPushService = {
       sendPushNotification: jest.fn().mockResolvedValue(undefined),
       sendToUser: jest.fn().mockResolvedValue(undefined),
     };
@@ -118,6 +120,24 @@ describe('NotificationsService', () => {
         dto.user_id,
         'new_notification',
         createdNotification,
+      );
+    });
+
+    it('sends the action URL with the push, so the app can open that page', async () => {
+      const prefChain = createMockQueryChain({ data: { push_notifications: true, notify_on_connection_request: true }, error: null });
+      const insertChain = createMockQueryChain({ data: { id: 'notif-2' }, error: null });
+      const countChain = createMockQueryChain({ data: null, error: null, count: 3 });
+      mockClient.from.mockReturnValueOnce(prefChain).mockReturnValueOnce(insertChain).mockReturnValue(countChain);
+
+      await service.createNotification(dto as any);
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockPushService.sendToUser).toHaveBeenCalledWith(
+        dto.user_id,
+        dto.title,
+        dto.message,
+        expect.objectContaining({ action_url: '/mentorship/requests', type: dto.type }),
+        expect.anything(),
       );
     });
 
