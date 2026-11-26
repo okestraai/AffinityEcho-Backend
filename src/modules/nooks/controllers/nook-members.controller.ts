@@ -21,6 +21,8 @@ import { JoinNookDto } from '../dto/join-nook.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { NookActiveGuard } from '../guards/nook-active.guard';
+import { PermissionGuard } from '../../../common/guards/permission.guard';
+import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
 
 @ApiTags('Nook Members')
 @Controller('nooks/:id/members')
@@ -71,6 +73,8 @@ export class NookMembersController {
   }
 
   @Get()
+  @UseGuards(PermissionGuard)
+  @RequirePermission('nooks:view')
   @ApiOperation({
     summary: 'Get nook members',
     description: 'Get list of nook members (admin only)',
@@ -84,11 +88,7 @@ export class NookMembersController {
     status: 403,
     description: 'Forbidden - admin only',
   })
-  async getMembers(
-    @Param('id', ParseUUIDPipe) nookId: string,
-    @CurrentUser() user: any,
-  ) {
-    // TODO: Add admin check
+  async getMembers(@Param('id', ParseUUIDPipe) nookId: string) {
     return this.membersService.getMembers(nookId);
   }
 }

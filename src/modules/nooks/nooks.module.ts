@@ -21,6 +21,8 @@ import { OkestraModule } from '../okestra/okestra.module';
 import { ContentSafetyModule } from '../content-safety/content-safety.module';
 import { RedisService } from '../../common/services/redis.service';
 
+import { PermissionGuard } from '../../common/guards/permission.guard';
+
 @Module({
   imports: [
     JwtModule,
@@ -47,6 +49,7 @@ import { RedisService } from '../../common/services/redis.service';
     NookCreatorGuard,
     NookActiveGuard,
     RedisService,
+    PermissionGuard,
   ],
   exports: [NooksService],
 })
