@@ -22,6 +22,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { FeedsModule } from './modules/feeds/feeds.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './common/services/redis.module';
+import { CompaniesModule } from './modules/companies/companies.module';
 import { BullModule } from '@nestjs/bullmq';
 import { getBullConfig } from './config/bull.config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -75,6 +76,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     ContentSafetyModule,
     CoachingModule,
     AnalyticsModule,
+    CompaniesModule,
   ],
   controllers: [AppController],
   providers: [

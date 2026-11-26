@@ -72,6 +72,15 @@ model user_profiles {
 
   // Company Type (static or other)
   company_type             String?   @default("static") @db.VarChar(20)
+  country_code                String?   @db.Char(2)
+  country_prompt_dismissed_at DateTime? @db.Timestamptz(3)
+  is_student                  Boolean   @default(false)
+  school_encrypted            String?
+  school_alumni_encrypted     String?
+  expected_grad_year          Int?      @db.SmallInt
+  show_school                 Boolean   @default(false)
+  student_status_checked_at   DateTime? @db.Timestamptz(3)
+  company_key                 String?
   communication_method String?   @db.VarChar(50)
   mentoring_as             String?   @db.VarChar(20) // 'mentor', 'mentee', 'both', null
 
@@ -1581,4 +1590,14 @@ model analytics_events {
   @@index([type, created_at])
   @@index([session_key])
   @@map("analytics_events")
+}
+
+// Companies members can pick in onboarding, managed by admins.
+model companies {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @db.VarChar(120)
+  is_active  Boolean  @default(true)
+  created_by String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  updated_at DateTime @default(now()) @db.Timestamptz(3)
 }
