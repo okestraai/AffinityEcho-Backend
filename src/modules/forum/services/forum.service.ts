@@ -261,6 +261,7 @@ export class ForumService {
             id,
             title,
             content,
+            label,
             created_at,
             views_count,
             comments_count,
