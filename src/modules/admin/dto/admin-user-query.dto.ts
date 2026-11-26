@@ -30,6 +30,14 @@ export class AdminUserQueryDto {
   role?: string;
 
   @ApiPropertyOptional({
+    description: 'Students only (true) or non-students only (false)',
+    enum: ['true', 'false'],
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  student?: string;
+
+  @ApiPropertyOptional({
     description: 'Filter by account status',
     enum: ['active', 'suspended', 'deactivated', 'deleted'],
     example: 'active',

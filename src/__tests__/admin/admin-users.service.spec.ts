@@ -1064,6 +1064,33 @@ describe('AdminUsersService', () => {
   // =============================================
   // logAction
   // =============================================
+  describe('student status', () => {
+    it('filters the list to students', async () => {
+      const users = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValue(users);
+      await service.listUsers({ student: 'true' } as any);
+      expect(users.eq).toHaveBeenCalledWith('is_student', true);
+    });
+
+    it('removes student status and logs it', async () => {
+      const log = jest.spyOn(service, 'logAction').mockResolvedValue(undefined as any);
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { is_student: true, school_encrypted: null }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [{ id: 'u1' }], error: null }));
+      const result = await service.removeStudentStatus('a1', 'Admin', 'u1');
+      expect(result.data.changed).toBe(true);
+      expect(log).toHaveBeenCalledWith('a1', 'Admin', 'remove_student_status', 'user', 'u1', undefined, {}, undefined);
+    });
+
+    it("doesn't log when the member wasn't a student", async () => {
+      const log = jest.spyOn(service, 'logAction').mockResolvedValue(undefined as any);
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: { is_student: false }, error: null }));
+      const result = await service.removeStudentStatus('a1', 'Admin', 'u1');
+      expect(result.data.changed).toBe(false);
+      expect(log).not.toHaveBeenCalled();
+    });
+  });
+
   describe('logAction', () => {
     it('should insert an admin log entry', async () => {
       const logChain = createMockQueryChain({ data: null, error: null });

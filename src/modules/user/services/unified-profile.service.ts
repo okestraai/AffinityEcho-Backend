@@ -17,6 +17,8 @@ import {
   titleCaseWords,
 } from '../../../common/constants/onboarding-options';
 
+import { endStudentStatus } from '../../spaces/student-status';
+import { StudentStatusDto } from '../dto/student-status.dto';
 @Injectable()
 export class UnifiedProfileService {
   private admin;
@@ -214,6 +216,34 @@ export class UnifiedProfileService {
     if (school.show_school !== undefined) {
       updateData.show_school = school.show_school;
     }
+  }
+
+  // Answer to the twice-yearly "Still a student?" check.
+  async answerStudentCheck(userId: string, dto: StudentStatusDto) {
+    if (!dto.stillStudent) {
+      await endStudentStatus(this.admin, userId);
+      return { success: true, data: { is_student: false } };
+    }
+    const { data: current } = await this.admin
+      .from('user_profiles')
+      .select('is_student')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!current?.is_student)
+      throw new BadRequestException('Add your school in Edit Profile first');
+    const now = new Date().toISOString();
+    const update: Record<string, unknown> = {
+      student_status_checked_at: now,
+      updated_at: now,
+    };
+    if (dto.expectedGradYear !== undefined)
+      update.expected_grad_year = dto.expectedGradYear;
+    const { error } = await this.admin
+      .from('user_profiles')
+      .update(update)
+      .eq('id', userId);
+    if (error) throw new BadRequestException('Could not save your answer');
+    return { success: true, data: { is_student: true } };
   }
 
   async dismissCountryPrompt(userId: string) {

@@ -13,13 +13,21 @@ export class AdminForumQueryDto {
   limit?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by forum scope',
-    enum: ['global', 'company'],
-    example: 'global',
+    description: 'Filter by space tab',
+    enum: ['global', 'shared', 'company', 'students'],
+    example: 'students',
+  })
+  @IsOptional()
+  @IsIn(['global', 'shared', 'company', 'students'])
+  type?: string;
+
+  @ApiPropertyOptional({
+    description: 'One company space by name',
+    example: 'Google',
   })
   @IsOptional()
   @IsString()
-  type?: string;
+  space?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by forum name (partial match)',

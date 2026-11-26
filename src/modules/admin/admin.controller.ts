@@ -649,6 +649,25 @@ export class AdminController {
     );
   }
 
+  @Post('users/:userId/student-status/remove')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(PermissionGuard)
+  @RequirePermission('users:change_role')
+  @ApiOperation({
+    summary: 'Remove student status',
+    description:
+      'Takes the member out of the Students space. Their school is kept as a past school.',
+  })
+  @ApiParam({ name: 'userId', description: 'Target user UUID' })
+  removeStudentStatus(@Req() req: any, @Param('userId') userId: string) {
+    return this.users.removeStudentStatus(
+      req.user.userId,
+      req.user.username,
+      userId,
+      ip(req),
+    );
+  }
+
   @Patch('users/:userId/role')
   @UseGuards(PermissionGuard)
   @RequirePermission('users:change_role')
@@ -1439,6 +1458,76 @@ export class AdminController {
   })
   createForum(@Req() req: any, @Body() body: any) {
     return this.forums.createForum(
+      req.user.userId,
+      req.user.username,
+      body,
+      ip(req),
+    );
+  }
+
+  @Post('forums/reorder')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(PermissionGuard)
+  @RequirePermission('forums:update')
+  @ApiOperation({
+    summary: "Set the order of a space's forums",
+    description:
+      'List every forum to order, in order. Use space for a company or Students, shared for Shared forums, neither for Global.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['forum_ids'],
+      properties: {
+        space: { type: 'string', example: 'Students' },
+        shared: { type: 'boolean', example: false },
+        forum_ids: { type: 'array', items: { type: 'string', format: 'uuid' } },
+      },
+    },
+  })
+  reorderForums(@Req() req: any, @Body() body: any) {
+    return this.forums.reorderForums(
+      req.user.userId,
+      req.user.username,
+      body,
+      ip(req),
+    );
+  }
+
+  @Get('forums/labels')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('forums:view')
+  @ApiOperation({
+    summary: "Most used labels in a space's Other topics",
+  })
+  @ApiQuery({ name: 'space', required: false, example: 'Students' })
+  topForumLabels(@Query('space') space?: string) {
+    return this.forums.topLabels(space);
+  }
+
+  @Post('forums/labels/promote')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('forums:create')
+  @ApiOperation({
+    summary: 'Make a label a forum',
+    description:
+      "Creates a forum in the same space and moves that label's topics out of Other topics.",
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['label'],
+      properties: {
+        space: { type: 'string', example: 'Students' },
+        label: { type: 'string', example: 'Visas' },
+        name: { type: 'string', example: 'Visas & Permits' },
+        description: { type: 'string' },
+        icon: { type: 'string', example: '🛂' },
+      },
+    },
+  })
+  promoteForumLabel(@Req() req: any, @Body() body: any) {
+    return this.forums.promoteLabel(
       req.user.userId,
       req.user.username,
       body,

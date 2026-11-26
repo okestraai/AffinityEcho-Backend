@@ -31,6 +31,7 @@ interface ExportResult {
   };
 }
 
+import { endStudentStatus } from '../../spaces/student-status';
 @Injectable()
 export class AdminUsersService {
   private admin;
@@ -59,7 +60,7 @@ export class AdminUsersService {
       let q = this.admin
         .from('user_profiles')
         .select(
-          'id, username, email, role, avatar, job_title, auth_provider, is_suspended, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments',
+          'id, username, email, role, avatar, job_title, auth_provider, is_suspended, is_deactivated, is_deleted, has_completed_onboarding, is_student, created_at, last_active_at, total_posts, total_comments',
           { count: 'exact' },
         )
         .order(sortBy === 'reports_against' ? 'created_at' : sortBy, {
@@ -73,6 +74,8 @@ export class AdminUsersService {
         );
       }
       if (query.role) q = q.eq('role', query.role);
+      if (query.student === 'true') q = q.eq('is_student', true);
+      else if (query.student === 'false') q = q.eq('is_student', false);
       if (query.provider) q = q.eq('auth_provider', query.provider);
 
       if (query.status === 'suspended') q = q.eq('is_suspended', true);
@@ -144,7 +147,7 @@ export class AdminUsersService {
     const { data: profile, error } = await this.admin
       .from('user_profiles')
       .select(
-        'id, username, email, role, avatar, job_title, auth_provider, google_id, apple_id, company_type, location, is_suspended, suspension_reason, suspended_at, suspension_expires_at, suspended_by, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments, mentorship_sessions_completed',
+        'id, username, email, role, avatar, job_title, auth_provider, google_id, apple_id, company_type, location, is_student, expected_grad_year, student_status_checked_at, is_suspended, suspension_reason, suspended_at, suspension_expires_at, suspended_by, is_deactivated, is_deleted, has_completed_onboarding, created_at, last_active_at, total_posts, total_comments, mentorship_sessions_completed',
       )
       .eq('id', userId)
       .single();
@@ -1136,6 +1139,28 @@ export class AdminUsersService {
       throw new ForbiddenException(
         'Only super_admin can act on admin accounts',
       );
+  }
+
+  async removeStudentStatus(
+    adminId: string,
+    adminUsername: string,
+    userId: string,
+    ip?: string,
+  ) {
+    const changed = await endStudentStatus(this.admin, userId);
+    if (changed) {
+      await this.logAction(
+        adminId,
+        adminUsername,
+        'remove_student_status',
+        'user',
+        userId,
+        undefined,
+        {},
+        ip,
+      );
+    }
+    return { success: true, data: { id: userId, is_student: false, changed } };
   }
 
   async logAction(

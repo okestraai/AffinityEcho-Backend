@@ -58,6 +58,7 @@ import {
   ChangePasswordDto,
 } from '../dto/update-profile.dto';
 
+import { StudentStatusDto } from '../dto/student-status.dto';
 @ApiTags('User')
 @ApiBearerAuth()
 @Controller('user')
@@ -390,6 +391,13 @@ export class UserController {
   @ApiOperation({ summary: 'Stop showing the "Where are you based?" prompt' })
   async dismissCountryPrompt(@Req() req: any) {
     return this.unifiedProfileService.dismissCountryPrompt(req.user.sub);
+  }
+
+  @Post('student-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Answer "Still a student?"' })
+  async answerStudentCheck(@Req() req: any, @Body() dto: StudentStatusDto) {
+    return this.unifiedProfileService.answerStudentCheck(req.user.sub, dto);
   }
 
   // ============ COMPANY VERIFICATION ============

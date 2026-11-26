@@ -29,6 +29,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { NookCronJobs } from './jobs/nook-cron.jobs';
 import { DigestCronJobs } from './jobs/digest-cron.jobs';
 import { HealthCronJobs } from './jobs/health-cron.jobs';
+import { StudentStatusJobs } from './jobs/student-status.jobs';
 import { ModerationSweepJobs } from './jobs/moderation-sweep.jobs';
 import { DeleteSweepJobs } from './jobs/delete-sweep.jobs';
 import { AdminHealthService } from './modules/admin/services/admin-health.service';
@@ -85,6 +86,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     NookCronJobs,
     DigestCronJobs,
     HealthCronJobs,
+    StudentStatusJobs,
     ModerationSweepJobs,
     DeleteSweepJobs,
     AdminHealthService,

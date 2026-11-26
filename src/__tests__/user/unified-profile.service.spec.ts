@@ -12,7 +12,7 @@ jest.mock('../../common/utils/logger.util', () => ({
   },
 }));
 
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UnifiedProfileService } from '../../modules/user/services/unified-profile.service';
 import { supabaseAdmin } from '../../database/supabase.client';
 import {
@@ -404,6 +404,36 @@ describe('UnifiedProfileService', () => {
         mentor: { mentor_bio: 'expert mentor', expertise: ['leadership'] },
       } as any);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('answerStudentCheck', () => {
+    it('ends student status on "no", keeping the school as a past school', async () => {
+      const update = createMockQueryChain({ data: [{ id: 'u1' }], error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { is_student: true, school_encrypted: 'enc_UNILAG' }, error: null }))
+        .mockReturnValueOnce(update);
+      const result = await service.answerStudentCheck('u1', { stillStudent: false });
+      expect(result.data.is_student).toBe(false);
+      expect(update.update).toHaveBeenCalledWith(
+        expect.objectContaining({ is_student: false, school_alumni_encrypted: 'enc_UNILAG' }),
+      );
+    });
+
+    it('records "yes" and an updated finish year', async () => {
+      const update = createMockQueryChain({ data: null, error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { is_student: true }, error: null }))
+        .mockReturnValueOnce(update);
+      await service.answerStudentCheck('u1', { stillStudent: true, expectedGradYear: 2029 });
+      expect(update.update).toHaveBeenCalledWith(
+        expect.objectContaining({ expected_grad_year: 2029, student_status_checked_at: expect.any(String) }),
+      );
+    });
+
+    it('refuses "yes" from a member who is not a student', async () => {
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: { is_student: false }, error: null }));
+      await expect(service.answerStudentCheck('u1', { stillStudent: true })).rejects.toThrow(BadRequestException);
     });
   });
 

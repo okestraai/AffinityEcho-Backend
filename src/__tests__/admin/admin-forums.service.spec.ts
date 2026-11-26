@@ -12,7 +12,7 @@ jest.mock('../../common/utils/logger.util', () => ({
   },
 }));
 
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AdminForumsService } from '../../modules/admin/services/admin-forums.service';
 import { supabaseAdmin } from '../../database/supabase.client';
 import {
@@ -100,8 +100,8 @@ describe('AdminForumsService', () => {
 
   describe('createForum', () => {
     it('should create forum', async () => {
-      // createForum: 1) check existing name 2) insert 3) logAction (mocked)
-      const existsChain = createMockQueryChain({ data: null, error: null });
+      // createForum: 1) check the name 2) read the last sort order 3) insert 4) logAction (mocked)
+      const existsChain = createMockQueryChain({ data: [], error: null });
       const insertChain = createMockQueryChain({
         data: { id: 'f1', name: 'New Forum' },
         error: null,
@@ -109,6 +109,7 @@ describe('AdminForumsService', () => {
 
       mockClient.from
         .mockReturnValueOnce(existsChain)
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
         .mockReturnValueOnce(insertChain)
         .mockReturnValue(createMockQueryChain({ data: null, error: null }));
 
@@ -127,9 +128,9 @@ describe('AdminForumsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw if name already exists', async () => {
+    it('should throw if name already exists in the space', async () => {
       const chain = createMockQueryChain({
-        data: { id: 'existing' },
+        data: [{ id: 'existing' }],
         error: null,
       });
       mockClient.from.mockReturnValue(chain);
@@ -137,9 +138,40 @@ describe('AdminForumsService', () => {
       await expect(
         service.createForum('admin-1', 'AdminUser', {
           name: 'Existing',
-          scope: 'global',
+          scope: 'company',
+          company_name: 'Google',
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(ConflictException);
+      expect(chain.eq).toHaveBeenCalledWith('company_name', 'Google');
+      expect(chain.ilike).toHaveBeenCalledWith('name', 'Existing');
+    });
+
+    it('creates a Students forum and a Shared forum in their own spaces', async () => {
+      const insert = createMockQueryChain({ data: { id: 'f2' }, error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [{ sort_order: 7 }], error: null }))
+        .mockReturnValueOnce(insert);
+      await service.createForum('admin-1', 'AdminUser', { name: ' Night Owls ', scope: 'students' });
+      expect(insert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Night Owls', company_name: 'Students', is_global: false, is_shared: false, sort_order: 8 }),
+      );
+
+      const shared = createMockQueryChain({ data: { id: 'f3' }, error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(shared);
+      await service.createForum('admin-1', 'AdminUser', { name: 'Grief', scope: 'shared' });
+      expect(shared.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ company_name: null, is_global: true, is_shared: true, sort_order: 1 }),
+      );
+    });
+
+    it('refuses a reserved space name', async () => {
+      await expect(
+        service.createForum('admin-1', 'AdminUser', { name: 'X', scope: 'company', company_name: 'other companies' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -168,6 +200,7 @@ describe('AdminForumsService', () => {
       const deleteChain = createMockQueryChain({ data: null, error: null });
 
       mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'f1' }, error: null }))
         .mockReturnValueOnce(deleteChain)
         .mockReturnValue(createMockQueryChain({ data: null, error: null }));
 
@@ -178,6 +211,93 @@ describe('AdminForumsService', () => {
         'Not needed anymore',
       );
       expect(result).toBeNull();
+    });
+  });
+
+  describe('Other topics', () => {
+    const otherTopics = () =>
+      createMockQueryChain({ data: { id: 'ot', is_other_topics: true }, error: null });
+
+    it("can't be renamed, hidden or deleted", async () => {
+      mockClient.from.mockReturnValue(otherTopics());
+      await expect(service.updateForum('a', 'A', 'ot', { name: 'Misc' })).rejects.toThrow(ConflictException);
+      await expect(service.updateForum('a', 'A', 'ot', { is_hidden: true })).rejects.toThrow(ConflictException);
+      await expect(service.deleteForum('a', 'A', 'ot', 'r')).rejects.toThrow(ConflictException);
+    });
+
+    it('can still be locked', async () => {
+      mockClient.from
+        .mockReturnValueOnce(otherTopics())
+        .mockReturnValue(createMockQueryChain({ data: { id: 'ot' }, error: null }));
+      const result = await service.updateForum('a', 'A', 'ot', { is_locked: true });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('reorderForums', () => {
+    it('sets the order and logs it', async () => {
+      const check = createMockQueryChain({ data: [{ id: 'a' }, { id: 'b' }], error: null });
+      const update = createMockQueryChain({ data: null, error: null });
+      mockClient.from.mockReturnValueOnce(check).mockReturnValue(update);
+
+      await service.reorderForums('admin-1', 'A', { space: 'Students', forum_ids: ['b', 'a'] });
+
+      expect(check.eq).toHaveBeenCalledWith('company_name', 'Students');
+      expect(update.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ sort_order: 1 }));
+      expect(update.eq).toHaveBeenNthCalledWith(1, 'id', 'b');
+      expect(mockAdminUsers.logAction).toHaveBeenCalledWith(
+        'admin-1', 'A', 'reorder_forums', 'forum', 'b', undefined,
+        expect.objectContaining({ space: 'Students' }), undefined,
+      );
+    });
+
+    it('refuses a forum from another space', async () => {
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: [{ id: 'a' }], error: null }));
+      await expect(
+        service.reorderForums('admin-1', 'A', { space: 'Students', forum_ids: ['a', 'x'] }),
+      ).rejects.toThrow('Every forum must be in the space being ordered');
+    });
+
+    it('refuses repeated ids', async () => {
+      await expect(
+        service.reorderForums('admin-1', 'A', { forum_ids: ['a', 'a'] }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('labels', () => {
+    it('counts labels ignoring case', async () => {
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'ot' }, error: null }))
+        .mockReturnValueOnce(
+          createMockQueryChain({
+            data: [{ label: 'Visas' }, { label: 'visas' }, { label: 'Rent' }],
+            error: null,
+          }),
+        );
+      const result = await service.topLabels('Students');
+      expect(result.data).toEqual([
+        { label: 'Visas', topics: 2 },
+        { label: 'Rent', topics: 1 },
+      ]);
+    });
+
+    it("makes a label a forum and moves the label's topics", async () => {
+      const move = createMockQueryChain({ data: [{ id: 't1' }, { id: 't2' }], error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'ot' }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'new' }, error: null }))
+        .mockReturnValueOnce(move)
+        .mockReturnValue(createMockQueryChain({ data: null, error: null, count: 2 }));
+
+      const result = await service.promoteLabel('admin-1', 'A', { space: 'Students', label: ' Visas ' });
+
+      expect(move.update).toHaveBeenCalledWith({ forum_id: 'new' });
+      expect(move.eq).toHaveBeenCalledWith('forum_id', 'ot');
+      expect(move.ilike).toHaveBeenCalledWith('label', 'Visas');
+      expect(result.data.topics_moved).toBe(2);
     });
   });
 });
