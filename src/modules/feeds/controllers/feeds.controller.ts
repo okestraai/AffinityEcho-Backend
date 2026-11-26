@@ -27,6 +27,7 @@ import { QueryFeedDto } from '../dto/query-feed.dto';
 import { CreateFeedCommentDto } from '../dto/create-comment.dto';
 import { ShareFeedItemDto } from '../dto/share-feed-item.dto';
 
+import { SpacesService } from '../../spaces/spaces.service';
 @ApiTags('Feeds')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -36,6 +37,7 @@ export class FeedsController {
     private readonly feedsService: FeedsService,
     private readonly feedPostsService: FeedPostsService,
     private readonly feedEngagementService: FeedEngagementService,
+    private readonly spaces: SpacesService,
   ) {}
 
   // ============ FEED AGGREGATION ============
@@ -132,6 +134,12 @@ export class FeedsController {
     @Param('contentId') contentId: string,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.like',
+    );
     return this.feedEngagementService.toggleLike(
       contentType,
       contentId,
@@ -166,6 +174,12 @@ export class FeedsController {
     @Body('reactionType') reactionType: string,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.react',
+    );
     return this.feedEngagementService.toggleReaction(
       contentType,
       contentId,
@@ -190,6 +204,12 @@ export class FeedsController {
     @Body() dto: CreateFeedCommentDto,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.comments',
+    );
     return this.feedEngagementService.addComment(
       contentType,
       contentId,
@@ -213,6 +233,12 @@ export class FeedsController {
     @Query('limit') limit?: number,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.comments',
+    );
     return this.feedEngagementService.getComments(
       contentType,
       contentId,
@@ -264,6 +290,12 @@ export class FeedsController {
     @Body() dto: ShareFeedItemDto,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.share',
+    );
     return this.feedEngagementService.shareItem(
       contentType,
       contentId,
@@ -285,6 +317,12 @@ export class FeedsController {
     @Param('contentId') contentId: string,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.share',
+    );
     return this.feedEngagementService.unshareItem(
       contentType,
       contentId,
@@ -306,6 +344,12 @@ export class FeedsController {
     @Param('contentId') contentId: string,
   ) {
     const userId = req.user.sub;
+    await this.spaces.assertContent(
+      userId,
+      contentType,
+      contentId,
+      'feed.bookmark',
+    );
     return this.feedEngagementService.toggleBookmark(
       contentType,
       contentId,

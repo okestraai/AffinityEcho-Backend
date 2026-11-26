@@ -83,11 +83,19 @@ export class TopicService {
       )
       .eq('is_other_topics', true)
       .is('deleted_at', null);
-    query = space ? query.eq('company_name', space) : query.is('company_name', null);
+    // Spaces are matched ignoring case, as membership is.
+    query = space
+      ? query.ilike(
+          'company_name',
+          space.replace(/[\\%_]/g, (c) => `\\${c}`),
+        )
+      : query.is('company_name', null);
     const { data: forum } = await query.maybeSingle();
     if (!forum) {
       logger.error('Other topics forum is missing', { space });
-      throw new NotFoundException(`${OTHER_TOPICS_FORUM} isn't set up for this space yet`);
+      throw new NotFoundException(
+        `${OTHER_TOPICS_FORUM} isn't set up for this space yet`,
+      );
     }
     return { forum, user };
   }
@@ -276,7 +284,10 @@ export class TopicService {
     }
 
     if (filters.label) {
-      query = query.ilike('label', filters.label.trim().replace(/[\\%_]/g, (c) => `\\${c}`));
+      query = query.ilike(
+        'label',
+        filters.label.trim().replace(/[\\%_]/g, (c) => `\\${c}`),
+      );
     }
 
     // Topics in hidden or deleted forums are left out.

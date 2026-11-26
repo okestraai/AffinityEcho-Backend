@@ -30,5 +30,21 @@ export async function endStudentStatus(
     .eq('id', userId)
     .eq('is_student', true)
     .select('id');
-  return (data ?? []).length > 0;
+  const ended = (data ?? []).length > 0;
+  if (ended) {
+    // Their Students forum memberships go too, so those forums leave their lists.
+    const { data: forums } = await admin
+      .from('forums')
+      .select('id')
+      .eq('company_name', 'Students');
+    const ids = (forums ?? []).map((f: { id: string }) => f.id);
+    if (ids.length) {
+      await admin
+        .from('forum_members')
+        .delete()
+        .eq('user_id', userId)
+        .in('forum_id', ids);
+    }
+  }
+  return ended;
 }

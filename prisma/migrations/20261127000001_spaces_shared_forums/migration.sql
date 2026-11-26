@@ -71,3 +71,11 @@ WHERE NOT EXISTS (
   WHERE f."is_other_topics" AND f."deleted_at" IS NULL
     AND coalesce(f."company_name", '') = coalesce(s.company_name, '')
 );
+
+-- Topics in Global and Shared forums are open to everyone, whatever company an older app sent with them.
+UPDATE "forum_topics" t
+   SET "company_name" = NULL, "scope" = 'global'
+  FROM "forums" f
+ WHERE f."id" = t."forum_id"
+   AND f."is_global"
+   AND (t."company_name" IS NOT NULL OR t."scope" <> 'global');

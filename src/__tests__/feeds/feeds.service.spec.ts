@@ -196,6 +196,18 @@ describe('FeedsService', () => {
   }
 
   describe('getAggregatedFeed', () => {
+    // Most cases don't care about spaces; the company cases read the profile for real.
+    beforeEach(() => {
+      jest.spyOn((service as any).spaces, 'forUser').mockResolvedValue({
+        company: null,
+        spaces: [],
+        isStudent: false,
+        isStaff: false,
+      });
+    });
+    const readProfileForReal = () =>
+      ((service as any).spaces.forUser as jest.Mock).mockRestore();
+
     it('should return mixed feed items from posts, topics, and nooks', async () => {
       const userId = 'user-123';
       const queryDto = {
@@ -348,7 +360,38 @@ describe('FeedsService', () => {
       );
     });
 
+    it("keeps other spaces' posts, topics and nooks out of the default feed", async () => {
+      ((service as any).spaces.forUser as jest.Mock).mockResolvedValue({
+        company: 'Google',
+        spaces: ['Google', 'Students'],
+        isStudent: true,
+        isStaff: false,
+      });
+      const posts = createMockQueryChain({ data: [], error: null });
+      const topics = createMockQueryChain({ data: [], error: null });
+      const nooks = createMockQueryChain({ data: [], error: null });
+      mockClient.from
+        .mockReturnValueOnce(posts)
+        .mockReturnValueOnce(topics)
+        .mockReturnValueOnce(nooks)
+        .mockReturnValue(createMockQueryChain({ data: [], error: null }));
+
+      await service.getAggregatedFeed('user-123', {
+        filter: FeedFilter.ALL,
+        contentType: ContentTypeFilter.ALL,
+        sortBy: FeedSortBy.ENGAGEMENT,
+        page: 1,
+        limit: 20,
+      } as any);
+
+      const spaces = 'company_name.in.("Google","Students")';
+      expect(posts.or).toHaveBeenCalledWith(`visibility.neq.company,${spaces}`);
+      expect(topics.or).toHaveBeenCalledWith(`scope.eq.global,company_name.is.null,${spaces}`);
+      expect(nooks.or).toHaveBeenCalledWith(`scope.eq.global,company_name.is.null,${spaces}`);
+    });
+
     it('should call getUserCompanyList for COMPANY filter', async () => {
+      readProfileForReal();
       const userId = 'user-123';
       const queryDto = {
         filter: FeedFilter.COMPANY,
@@ -378,6 +421,7 @@ describe('FeedsService', () => {
     });
 
     it('should decrypt alumni companies for COMPANY filter', async () => {
+      readProfileForReal();
       const userId = 'user-123';
       const queryDto = {
         filter: FeedFilter.COMPANY,
@@ -413,6 +457,7 @@ describe('FeedsService', () => {
     });
 
     it('should handle getUserCompanyList when profile is null', async () => {
+      readProfileForReal();
       const userId = 'user-123';
       const queryDto = {
         filter: FeedFilter.COMPANY,
@@ -558,6 +603,12 @@ describe('FeedsService', () => {
         mockContentSafety as any,
         createTestSpaces(mockEncryption),
       );
+      jest.spyOn((service as any).spaces, 'forUser').mockResolvedValue({
+        company: null,
+        spaces: [],
+        isStudent: false,
+        isStaff: false,
+      });
 
       setupSingleContentFeed('feed_posts', [
         makeMockPost('post-1', 'user-a01'),
@@ -595,6 +646,12 @@ describe('FeedsService', () => {
         mockContentSafety as any,
         createTestSpaces(mockEncryption),
       );
+      jest.spyOn((service as any).spaces, 'forUser').mockResolvedValue({
+        company: null,
+        spaces: [],
+        isStudent: false,
+        isStaff: false,
+      });
 
       setupSingleContentFeed('feed_posts', [
         makeMockPost('post-1', 'user-a01'),
@@ -882,6 +939,7 @@ describe('FeedsService', () => {
     });
 
     it('should handle company param in queryDto triggering getUserCompanyList', async () => {
+      readProfileForReal();
       const userId = 'user-123';
       const queryDto = {
         filter: FeedFilter.ALL,

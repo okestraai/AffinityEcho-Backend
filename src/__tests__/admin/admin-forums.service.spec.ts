@@ -233,6 +233,11 @@ describe('AdminForumsService', () => {
       expect(result.success).toBe(true);
     });
 
+    it('takes only true or false for hidden and locked', async () => {
+      await expect(service.updateForum('a', 'A', 'ot', { is_hidden: 'true' })).rejects.toThrow(BadRequestException);
+      await expect(service.updateForum('a', 'A', 'ot', { is_locked: 1 })).rejects.toThrow(BadRequestException);
+    });
+
     it('can still be locked', async () => {
       mockClient.from
         .mockReturnValueOnce(otherTopics())

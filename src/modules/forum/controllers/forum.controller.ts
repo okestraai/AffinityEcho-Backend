@@ -496,7 +496,11 @@ export class ForumController {
     @Body() reactionDto: TopicReactionDto,
     @CurrentUser() user: any,
   ) {
-    await this.spaces.assertTopic(user.userId, reactionDto.topicId, 'topic.react');
+    await this.spaces.assertTopic(
+      user.userId,
+      reactionDto.topicId,
+      'topic.react',
+    );
     return this.topicService.addReaction(
       reactionDto.topicId,
       user.userId,
@@ -620,6 +624,11 @@ export class ForumController {
     @Body() reactionDto: CommentReactionDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertComment(
+      user.userId,
+      reactionDto.commentId,
+      'comment.react',
+    );
     return this.commentService.addCommentReaction(
       reactionDto.commentId,
       user.userId,

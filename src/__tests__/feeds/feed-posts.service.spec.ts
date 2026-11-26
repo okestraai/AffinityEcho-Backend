@@ -138,6 +138,25 @@ describe('FeedPostsService', () => {
     });
   });
 
+  describe("someone else's posts", () => {
+    it("shows another member's company and Students posts only to members of that space", async () => {
+      const posts = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', company_encrypted: 'Acme', company_type: 'static' }, error: null }))
+        .mockReturnValueOnce(posts)
+        .mockReturnValue(createMockQueryChain({ data: [], error: null }));
+      await service.getUserPosts('author', 1, 20, 'viewer');
+      expect(posts.or).toHaveBeenCalledWith('visibility.neq.company,company_name.in.("Acme_dec")');
+    });
+
+    it('shows the author all of their own posts', async () => {
+      const posts = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(posts).mockReturnValue(createMockQueryChain({ data: [], error: null }));
+      await service.getUserPosts('author', 1, 20, 'author');
+      expect(posts.or).not.toHaveBeenCalledWith(expect.stringContaining('visibility.neq.company'));
+    });
+  });
+
   describe('audience', () => {
     it('posts to Students for a student, as a company-visibility post', async () => {
       const insertChain = createMockQueryChain({ data: mockPost, error: null });

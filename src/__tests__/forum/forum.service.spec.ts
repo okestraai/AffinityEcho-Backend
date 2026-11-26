@@ -292,6 +292,14 @@ describe('ForumService', () => {
       expect(result).toEqual(updatedForum);
     });
 
+    it("refuses to delete or move Other topics", async () => {
+      const otherTopics = { id: 'ot', name: 'Other topics', is_other_topics: true, forum_topics: [] };
+      mockClient.from.mockReturnValue(createMockQueryChain({ data: otherTopics, error: null }));
+      await expect(service.deleteForum('ot')).rejects.toThrow(ConflictException);
+      await expect(service.updateForum('ot', { isGlobal: true } as any)).rejects.toThrow(ConflictException);
+      await expect(service.updateForum('ot', { name: 'Misc' } as any)).rejects.toThrow(ConflictException);
+    });
+
     it('should throw NotFoundException when forum does not exist', async () => {
       const chain = createMockQueryChain({ data: null, error: { code: 'PGRST116', message: 'not found' } });
       mockClient.from.mockReturnValueOnce(chain);

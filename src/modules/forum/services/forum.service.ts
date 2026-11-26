@@ -319,7 +319,18 @@ export class ForumService {
 
     try {
       // Check if forum exists
-      await this.findForumById(id);
+      const current = await this.findForumById(id);
+      if (
+        current.is_other_topics &&
+        (updateForumDto.isGlobal !== undefined ||
+          updateForumDto.companyName !== undefined ||
+          (updateForumDto.name !== undefined &&
+            updateForumDto.name !== current.name))
+      ) {
+        throw new ConflictException(
+          "Other topics can't be renamed or moved to another space",
+        );
+      }
 
       const updateData: any = {
         updated_at: new Date().toISOString(),
@@ -363,7 +374,8 @@ export class ForumService {
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
       ) {
         throw error;
       }
@@ -380,7 +392,12 @@ export class ForumService {
 
     try {
       // Check if forum exists
-      await this.findForumById(id);
+      const current = await this.findForumById(id);
+      if (current.is_other_topics) {
+        throw new ConflictException(
+          "Other topics can't be deleted: topics without a forum go there",
+        );
+      }
 
       const { error } = await this.admin.from('forums').delete().eq('id', id);
 
@@ -397,7 +414,8 @@ export class ForumService {
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
       ) {
         throw error;
       }

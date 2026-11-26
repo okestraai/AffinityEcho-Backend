@@ -6,8 +6,15 @@ describe('endStudentStatus', () => {
   const client = (profile: any, updated: any[] = [{ id: 'u1' }]) => {
     const read = createMockQueryChain({ data: profile, error: null });
     const update = createMockQueryChain({ data: updated, error: null });
-    const from = jest.fn().mockReturnValueOnce(read).mockReturnValueOnce(update);
-    return { admin: { from }, update };
+    const forums = createMockQueryChain({ data: [{ id: 'sf1' }, { id: 'sf2' }], error: null });
+    const members = createMockQueryChain({ data: null, error: null });
+    const from = jest
+      .fn()
+      .mockReturnValueOnce(read)
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(forums)
+      .mockReturnValueOnce(members);
+    return { admin: { from }, update, forums, members };
   };
 
   it('keeps the school as a past school and leaves Students', async () => {
@@ -23,6 +30,15 @@ describe('endStudentStatus', () => {
     );
     // Only a row that is still a student changes.
     expect(update.eq).toHaveBeenCalledWith('is_student', true);
+  });
+
+  it('leaves the Students forums too', async () => {
+    const { admin, forums, members } = client({ is_student: true, school_encrypted: null });
+    await endStudentStatus(admin, 'u1');
+    expect(forums.eq).toHaveBeenCalledWith('company_name', 'Students');
+    expect(members.delete).toHaveBeenCalled();
+    expect(members.eq).toHaveBeenCalledWith('user_id', 'u1');
+    expect(members.in).toHaveBeenCalledWith('forum_id', ['sf1', 'sf2']);
   });
 
   it('does nothing for a member who is not a student', async () => {

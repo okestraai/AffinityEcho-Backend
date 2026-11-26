@@ -221,7 +221,9 @@ describe('TopicService', () => {
 
       await service.createTopic({ title: 'T', content: 'C', audience: 'company' } as any, 'u1');
 
-      expect(otherTopics.eq).toHaveBeenCalledWith('company_name', 'Acme_dec');
+      // Spaces match ignoring case, as membership does.
+      // The underscore is escaped so it isn't a LIKE wildcard.
+      expect(otherTopics.ilike).toHaveBeenCalledWith('company_name', 'Acme\\_dec');
       expect(insert.insert).toHaveBeenCalledWith(
         expect.objectContaining({ forum_id: 'ot-g', company_name: 'Acme_dec', scope: 'local' }),
       );

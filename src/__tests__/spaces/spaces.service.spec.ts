@@ -156,4 +156,34 @@ describe('SpacesService', () => {
       await expect(build(true).forumFor('u1', 'f1', 'test')).rejects.toThrow(ForbiddenException);
     });
   });
+
+  describe('feed content', () => {
+    it("refuses a post in another company's space when enforcement is on", async () => {
+      client.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { user_id: 'author', visibility: 'company', company_name: 'Meta' }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', company_encrypted: 'enc_Google', company_type: 'static' }, error: null }));
+      await expect(build(true).assertContent('u1', 'post', 'p1', 'test')).rejects.toThrow(ForbiddenException);
+    });
+
+    it("lets the author see their own company post", async () => {
+      client.from.mockReturnValueOnce(createMockQueryChain({ data: { user_id: 'u1', visibility: 'company', company_name: 'Meta' }, error: null }));
+      await expect(build(true).assertContent('u1', 'post', 'p1', 'test')).resolves.toBeUndefined();
+    });
+
+    it("checks a nook message by its nook's space", async () => {
+      client.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { nook_id: 'n1' }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'n1', scope: 'company', company_name: 'Students' }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', is_student: false }, error: null }));
+      await expect(build(true).assertContent('u1', 'nook_message', 'm1', 'test')).rejects.toThrow(ForbiddenException);
+    });
+
+    it("checks a comment by its topic's space", async () => {
+      client.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { topic_id: 't1' }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 't1', scope: 'local', company_name: 'Meta' }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', company_encrypted: 'enc_Google', company_type: 'static' }, error: null }));
+      await expect(build(true).assertComment('u1', 'c1', 'test')).rejects.toThrow(ForbiddenException);
+    });
+  });
 });

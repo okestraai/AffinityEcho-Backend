@@ -85,6 +85,12 @@ export class NookReactionsController {
     @Body() reactionDto: ReactionDto,
     @CurrentUser() user: any,
   ) {
+    await this.spaces.assertContent(
+      user.userId,
+      'nook_message',
+      messageId,
+      'nook.message_react',
+    );
     return this.reactionsService.toggleMessageReaction(
       messageId,
       user.userId,

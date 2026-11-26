@@ -3,7 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
+import { RedisService } from '../../../common/services/redis.service';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { AdminForumQueryDto } from '../dto/admin-forum-query.dto';
@@ -34,6 +36,7 @@ export class AdminForumsService {
   constructor(
     private config: ConfigService,
     private adminUsers: AdminUsersService,
+    @Optional() private redis?: RedisService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -189,6 +192,10 @@ export class AdminForumsService {
     body: any,
     ip?: string,
   ) {
+    for (const flag of ['is_locked', 'is_hidden'] as const) {
+      if (body[flag] !== undefined && typeof body[flag] !== 'boolean')
+        throw new BadRequestException(`${flag} must be true or false`);
+    }
     const current = await this.getForum(forumId);
     const renaming =
       body.name !== undefined &&
@@ -239,6 +246,7 @@ export class AdminForumsService {
       .select()
       .single();
     if (error) throw new BadRequestException(error.message);
+    await this.clearTopicLists();
     await this.adminUsers.logAction(
       adminId,
       adminUsername,
@@ -269,6 +277,7 @@ export class AdminForumsService {
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', forumId);
     if (error) throw new BadRequestException(error.message);
+    await this.clearTopicLists();
     await this.adminUsers.logAction(
       adminId,
       adminUsername,
@@ -415,6 +424,7 @@ export class AdminForumsService {
 
     await this.recountTopics(forum.id);
     await this.recountTopics(otherTopics.id);
+    await this.clearTopicLists();
     await this.adminUsers.logAction(
       adminId,
       adminUsername,
@@ -426,6 +436,15 @@ export class AdminForumsService {
       ip,
     );
     return { success: true, data: { forum, topics_moved: topicsMoved } };
+  }
+
+  // Cached topic lists would show a hidden forum's topics for a few minutes.
+  private async clearTopicLists() {
+    try {
+      await this.redis?.delPattern('topics:*');
+    } catch {
+      // The cache expires on its own within minutes.
+    }
   }
 
   private spaceOf(scope?: string, companyName?: string | null): ForumSpace {

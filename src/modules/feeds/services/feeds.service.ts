@@ -41,6 +41,7 @@ interface FeedItem {
 }
 
 import { SpacesService } from '../../spaces/spaces.service';
+import { filterValue } from '../../../database/query-builder';
 @Injectable()
 export class FeedsService {
   private admin;
@@ -109,13 +110,11 @@ export class FeedsService {
         const contentFetchers: Promise<FeedItem[]>[] = [];
 
         // Pre-fetch user's company list for company-scoped filtering
-        let userCompanyList: string[] | null = null;
-        if (filter === FeedFilter.COMPANY || company) {
-          const viewer = await this.spaces.forUser(userId);
-          userCompanyList = viewer.spaces;
-          if (company)
-            this.spaces.assertInSpace(viewer, userId, company, 'feed.company');
-        }
+        // Every feed view is limited to the member's own spaces, not only the company view.
+        const viewer = await this.spaces.forUser(userId);
+        const userCompanyList: string[] = viewer.spaces;
+        if (company)
+          this.spaces.assertInSpace(viewer, userId, company, 'feed.company');
 
         if (
           contentType === ContentTypeFilter.ALL ||
@@ -334,7 +333,12 @@ export class FeedsService {
       query = query.in('company_name', company ? [company] : companyList);
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('visibility', 'global');
-    } else if (filter === FeedFilter.FOLLOWING) {
+    } else {
+      query = query.or(
+        spaceFilter('visibility.neq.company', userCompanyList ?? []),
+      );
+    }
+    if (filter === FeedFilter.FOLLOWING) {
       if (followingIds && followingIds.length > 0) {
         query = query.in('user_id', followingIds);
       } else {
@@ -444,14 +448,22 @@ export class FeedsService {
       .neq('user_id', userId);
 
     if (filter === FeedFilter.COMPANY || company) {
-      query = query.eq('scope', 'company');
+      // Space topics are stored with scope 'local'; the company name is what matters.
       const companyList =
         userCompanyList && userCompanyList.length > 0 ? userCompanyList : [];
       // A member with no space sees no company posts.
       query = query.in('company_name', company ? [company] : companyList);
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('scope', 'global');
-    } else if (filter === FeedFilter.FOLLOWING) {
+    } else {
+      query = query.or(
+        spaceFilter(
+          'scope.eq.global,company_name.is.null',
+          userCompanyList ?? [],
+        ),
+      );
+    }
+    if (filter === FeedFilter.FOLLOWING) {
       if (followingIds && followingIds.length > 0) {
         query = query.in('user_id', followingIds);
       } else {
@@ -577,7 +589,15 @@ export class FeedsService {
       query = query.in('company_name', company ? [company] : companyList);
     } else if (filter === FeedFilter.GLOBAL) {
       query = query.eq('scope', 'global');
-    } else if (filter === FeedFilter.FOLLOWING) {
+    } else {
+      query = query.or(
+        spaceFilter(
+          'scope.eq.global,company_name.is.null',
+          userCompanyList ?? [],
+        ),
+      );
+    }
+    if (filter === FeedFilter.FOLLOWING) {
       if (followingIds && followingIds.length > 0) {
         query = query.in('creator_id', followingIds);
       } else {
@@ -1114,4 +1134,11 @@ export class FeedsService {
     await this.redis.set(cacheKey, [...prefs.entries()], 900000);
     return prefs;
   }
+}
+
+// Open content, or content in one of the member's spaces.
+function spaceFilter(open: string, spaces: string[]): string {
+  return spaces.length
+    ? `${open},company_name.in.(${spaces.map(filterValue).join(',')})`
+    : open;
 }

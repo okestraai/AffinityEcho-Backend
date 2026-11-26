@@ -178,6 +178,58 @@ export class SpacesService {
     this.assertCanSee(user, userId, nook, action);
   }
 
+  // Checks a member may see a comment, from its topic's space.
+  async assertComment(userId: string, commentId: string, action: string) {
+    const { data: comment } = await this.admin
+      .from('forum_comments')
+      .select('topic_id')
+      .eq('id', commentId)
+      .maybeSingle();
+    if (comment?.topic_id)
+      await this.assertTopic(userId, comment.topic_id, action);
+  }
+
+  // Checks the item behind a feed like, reaction, comment, share or bookmark.
+  async assertContent(
+    userId: string,
+    contentType: string,
+    contentId: string,
+    action: string,
+  ) {
+    if (contentType === 'topic')
+      return this.assertTopic(userId, contentId, action);
+    if (contentType === 'nook')
+      return this.assertNook(userId, contentId, action);
+    if (contentType === 'nook_message') {
+      const { data: message } = await this.admin
+        .from('nook_messages')
+        .select('nook_id')
+        .eq('id', contentId)
+        .maybeSingle();
+      if (message?.nook_id)
+        await this.assertNook(userId, message.nook_id, action);
+      return;
+    }
+    if (contentType === 'post') {
+      const { data: post } = await this.admin
+        .from('feed_posts')
+        .select('user_id, visibility, company_name')
+        .eq('id', contentId)
+        .maybeSingle();
+      if (!post || post.user_id === userId) return;
+      const user = await this.forUser(userId);
+      this.assertCanSee(
+        user,
+        userId,
+        {
+          company_name: post.company_name,
+          scope: post.visibility === 'company' ? 'local' : 'global',
+        },
+        action,
+      );
+    }
+  }
+
   // Forums members can't see; their topics are left out of every list.
   async closedForumIds(): Promise<string[]> {
     const { data } = await this.admin

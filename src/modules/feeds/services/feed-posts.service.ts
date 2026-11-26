@@ -19,6 +19,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
 import { SpacesService } from '../../spaces/spaces.service';
+import { filterValue } from '../../../database/query-builder';
 @Injectable()
 export class FeedPostsService {
   private admin;
@@ -211,6 +212,20 @@ export class FeedPostsService {
         throw new NotFoundException(MSG.FEED.POST_NOT_FOUND);
       }
 
+      // Company and Students posts are only for members of that space.
+      if (post.user_id !== userId) {
+        const viewer = await this.spaces.forUser(userId);
+        this.spaces.assertCanSee(
+          viewer,
+          userId,
+          {
+            company_name: post.company_name,
+            scope: post.visibility === 'company' ? 'local' : 'global',
+          },
+          'post.view',
+        );
+      }
+
       // Track view (fire-and-forget)
       this.trackView(postId, userId).catch(() => {});
 
@@ -265,10 +280,28 @@ export class FeedPostsService {
         },
       };
     } catch (error) {
-      if (error instanceof NotFoundException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      )
+        throw error;
       logger.error(MSG.FEED.POST_FAILED, { error });
       throw new BadRequestException(MSG.FEED.POST_FAILED);
     }
+  }
+
+  // Someone else's profile shows their company and Students posts only to members of that space.
+  private async visibleToViewer(
+    authorId: string,
+    viewerId?: string,
+  ): Promise<string | null> {
+    if (!viewerId || viewerId === authorId) return null;
+    const viewer = await this.spaces.forUser(viewerId);
+    if (viewer.isStaff) return null;
+    const spaces = viewer.spaces.map(filterValue).join(',');
+    return spaces
+      ? `visibility.neq.company,company_name.in.(${spaces})`
+      : 'visibility.neq.company';
   }
 
   async getUserPosts(
@@ -282,11 +315,8 @@ export class FeedPostsService {
     const offset = (page - 1) * limit;
 
     try {
-      const {
-        data: posts,
-        error,
-        count,
-      } = await this.admin
+      const onlyVisible = await this.visibleToViewer(userId, requestingUserId);
+      let postsQuery = this.admin
         .from('feed_posts')
         .select(
           `
@@ -308,6 +338,8 @@ export class FeedPostsService {
         .or('is_hidden.is.null,is_hidden.eq.false')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
+      if (onlyVisible) postsQuery = postsQuery.or(onlyVisible);
+      const { data: posts, error, count } = await postsQuery;
 
       if (error) {
         logger.error('Failed to fetch user posts', { error });
