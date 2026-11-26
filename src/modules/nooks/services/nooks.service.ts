@@ -20,6 +20,7 @@ import { Queue } from 'bullmq';
 
 import { SpacesService } from '../../spaces/spaces.service';
 import { filterValue } from '../../../database/query-builder';
+import { STUDENTS_SPACE } from '../../spaces/spaces.constants';
 @Injectable()
 export class NooksService {
   private admin;
@@ -78,7 +79,16 @@ export class NooksService {
       supabaseQuery = supabaseQuery.eq('urgency', filters.urgency);
     }
 
-    if (filters.scope && filters.scope !== 'all') {
+    // Students Nooks are company-scoped Nooks in the Students space.
+    if (filters.scope === 'students') {
+      supabaseQuery = supabaseQuery
+        .eq('scope', 'company')
+        .eq('company_name', STUDENTS_SPACE);
+    } else if (filters.scope === 'company') {
+      supabaseQuery = supabaseQuery
+        .eq('scope', 'company')
+        .or(`company_name.is.null,company_name.neq.${STUDENTS_SPACE}`);
+    } else if (filters.scope && filters.scope !== 'all') {
       supabaseQuery = supabaseQuery.eq('scope', filters.scope);
     }
 
@@ -175,7 +185,8 @@ export class NooksService {
       const space = createNookDto.audience
         ? this.spaces.audienceSpace(viewer, createNookDto.audience)
         : viewer.company;
-      if (createNookDto.audience) insertData.scope = space ? 'company' : 'global';
+      if (createNookDto.audience)
+        insertData.scope = space ? 'company' : 'global';
       if (space) insertData.company_name = space;
     }
 

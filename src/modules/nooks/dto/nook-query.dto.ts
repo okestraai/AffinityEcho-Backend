@@ -28,11 +28,13 @@ export class NookQueryDto {
 
   @ApiProperty({
     required: false,
-    enum: ['company', 'global', 'all'],
+    enum: ['company', 'global', 'students', 'all'],
     default: 'all',
+    description:
+      'company means your company spaces; students means the Students space',
   })
   @IsOptional()
-  @IsEnum(['company', 'global', 'all'])
+  @IsEnum(['company', 'global', 'students', 'all'])
   scope?: string = 'all';
 
   @ApiProperty({

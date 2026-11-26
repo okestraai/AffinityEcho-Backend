@@ -130,6 +130,18 @@ describe('NooksService', () => {
       expect(row.audience).toBeUndefined();
     });
 
+    it('filters to Students Nooks, and keeps them out of Company', async () => {
+      const students = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: { role: 'user', is_student: true }, error: null })).mockReturnValue(students);
+      await service.findAll({ scope: 'students' } as any, 'u1');
+      expect(students.eq).toHaveBeenCalledWith('company_name', 'Students');
+
+      const company = createMockQueryChain({ data: [], error: null, count: 0 });
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: { role: 'user' }, error: null })).mockReturnValue(company);
+      await service.findAll({ scope: 'company' } as any, 'u1');
+      expect(company.or).toHaveBeenCalledWith('company_name.is.null,company_name.neq.Students');
+    });
+
     it("lists only global nooks and the member's own spaces", async () => {
       const profile = createMockQueryChain({ data: { role: 'user', company_encrypted: 'Acme', company_type: 'static' }, error: null });
       const nooks = createMockQueryChain({ data: [], error: null, count: 0 });
