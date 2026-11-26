@@ -1636,12 +1636,14 @@ model events {
   removed_at             DateTime? @db.Timestamptz(3)
   cancelled_at           DateTime? @db.Timestamptz(3)
   deleted_at             DateTime? @db.Timestamptz(3)
+  cover_updated_at       DateTime? @db.Timestamptz(3)
   created_at             DateTime  @default(now()) @db.Timestamptz(3)
   updated_at             DateTime  @default(now()) @db.Timestamptz(3)
 
   event_registrations event_registrations[]
   event_views         event_views[]
   event_reports       event_reports[]
+  event_covers        event_covers?
 
   @@index([host_id, created_at(sort: Desc)], map: "events_host_idx")
   @@index([starts_at], map: "events_starts_idx")
@@ -1666,6 +1668,15 @@ model event_registrations {
   @@unique([event_id, user_id], map: "event_registrations_event_user_key")
   @@unique([event_id, check_in_code], map: "event_registrations_code_key")
   @@index([user_id], map: "event_registrations_user_idx")
+}
+
+model event_covers {
+  event_id   String   @id @db.Uuid
+  mime       String   @db.VarChar(20)
+  data       Bytes
+  size       Int
+  updated_at DateTime @default(now()) @db.Timestamptz(3)
+  event      events   @relation(fields: [event_id], references: [id], onDelete: Cascade)
 }
 
 model event_views {

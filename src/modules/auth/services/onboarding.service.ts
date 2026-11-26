@@ -18,6 +18,7 @@ import {
   titleCaseWords,
 } from '../../../common/constants/onboarding-options';
 import { CompaniesService } from '../../companies/companies.service';
+import { trackEventOnboarding } from '../../analytics/server-events';
 
 @Injectable()
 export class OnboardingService {
@@ -127,6 +128,8 @@ export class OnboardingService {
         logger.error('Failed to update user profile', { userId, error });
         throw new BadRequestException(MSG.AUTH.ONBOARDING_FAILED);
       }
+
+      trackEventOnboarding(userId);
 
       // For welcome email: We cannot safely decrypt names here (security best practice)
       // Use username or fallback as display name

@@ -8,6 +8,7 @@ import { EncryptionUtil } from '../../common/utils/encryption.util';
 import { EmailService } from '../../common/utils/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import logger from '../../common/utils/logger.util';
+import { trackServerEvent } from '../analytics/server-events';
 import { EVENTS_QUEUE, UPDATE_GROUP_MS } from './events.constants';
 
 type NoticeKind = 'updated' | 'cancelled';
@@ -275,6 +276,12 @@ export class EventNoticesProcessor extends WorkerHost {
     const kind = job.name === 'cancelled' ? 'cancelled' : 'updated';
     const sent = await this.notices.notifyGuests(job.data.eventId, kind);
     logger.info('Event notice sent', { eventId: job.data.eventId, kind, sent });
+    if (sent > 0)
+      trackServerEvent('event_updated_notified', null, {
+        eventId: job.data.eventId,
+        kind,
+        guests: sent,
+      });
   }
 }
 

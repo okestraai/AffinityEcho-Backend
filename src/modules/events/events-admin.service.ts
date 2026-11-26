@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../../database/supabase.client';
+import { getPool } from '../../database/pg-client';
 import logger from '../../common/utils/logger.util';
 import { EventNoticesService } from './event-notices.service';
 
@@ -18,6 +19,54 @@ export class EventsAdminService {
     private readonly notices: EventNoticesService,
   ) {
     this.admin = supabaseAdmin(config);
+  }
+
+  // The sign-up funnel from event links, for the last `days` days.
+  async funnel(days?: string) {
+    const n = Math.min(365, Math.max(1, Math.floor(Number(days) || 30)));
+    const { rows } = await getPool().query(
+      `WITH w AS (SELECT now() - ($1::int * interval '1 day') AS since),
+            a AS (SELECT name, metadata FROM analytics_events, w
+                   WHERE session_key = 'server' AND created_at >= w.since
+                     AND name LIKE 'event\\_%')
+       SELECT
+         (SELECT count(*) FROM event_views, w WHERE event_views.created_at >= w.since)::int AS link_opens,
+         (SELECT count(*) FROM a WHERE name = 'event_otp_requested')::int AS codes_requested,
+         (SELECT count(*) FROM a WHERE name = 'event_otp_verified')::int AS codes_verified,
+         (SELECT count(*) FROM a WHERE name = 'event_otp_verified' AND (metadata->>'newAccount')::boolean)::int AS new_accounts,
+         (SELECT count(*) FROM a WHERE name = 'event_registered' AND NOT coalesce((metadata->>'again')::boolean, false))::int AS registrations,
+         (SELECT count(*) FROM analytics_events, w
+           WHERE type = 'custom' AND name = 'event_onboarding_started' AND created_at >= w.since)::int AS onboarding_started,
+         (SELECT count(*) FROM a WHERE name = 'event_onboarding_completed')::int AS onboarded,
+         (SELECT count(*) FROM a WHERE name = 'event_onboarding_completed' AND (metadata->>'daysSinceSignup')::int <= 7)::int AS onboarded_in_7_days,
+         (SELECT count(*) FROM a WHERE name = 'event_created')::int AS events_created,
+         (SELECT coalesce(sum((metadata->>'guests')::int), 0) FROM a WHERE name = 'event_updated_notified')::int AS guests_notified,
+         (SELECT count(*) FROM user_profiles, w WHERE user_profiles.created_at >= w.since)::int AS all_signups`,
+      [n],
+    );
+    const r = rows[0];
+    const pct = (part: number, whole: number) =>
+      whole ? Math.round((part / whole) * 1000) / 10 : null;
+    return {
+      days: n,
+      linkOpens: r.link_opens,
+      codesRequested: r.codes_requested,
+      codesVerified: r.codes_verified,
+      newAccounts: r.new_accounts,
+      registrations: r.registrations,
+      onboardingStarted: r.onboarding_started,
+      onboarded: r.onboarded,
+      onboardedIn7Days: r.onboarded_in_7_days,
+      eventsCreated: r.events_created,
+      guestsNotified: r.guests_notified,
+      allSignups: r.all_signups,
+      rates: {
+        openToCode: pct(r.codes_requested, r.link_opens),
+        codeToVerified: pct(r.codes_verified, r.codes_requested),
+        newAccountsOnboardedIn7Days: pct(r.onboarded_in_7_days, r.new_accounts),
+        signupsFromEvents: pct(r.new_accounts, r.all_signups),
+      },
+    };
   }
 
   async list(query: {

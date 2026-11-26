@@ -9,13 +9,23 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -24,6 +34,7 @@ import { PermissionGuard } from '../../common/guards/permission.guard';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { EventsService } from './events.service';
 import { EventsAdminService } from './events-admin.service';
+import { COVER_MAX_BYTES } from './event-cover';
 import {
   CheckInDto,
   CreateEventDto,
@@ -62,6 +73,60 @@ export class EventsController {
   })
   reveal(@Param('slug') slug: string, @Body() dto: RevealDto) {
     return this.events.revealWithCode(cleanSlug(slug), dto.code);
+  }
+
+  @Public()
+  @Get('public/:slug/cover')
+  @ApiOperation({ summary: "The event's cover picture, if it has one" })
+  async cover(@Param('slug') slug: string, @Res() res: Response) {
+    const file = await this.events.coverFile(cleanSlug(slug));
+    res.setHeader('Content-Type', file.mime);
+    res.setHeader('Content-Length', String(file.data.length));
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // The web app runs on another address, so the picture must be loadable from there.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    // The link carries the version, so a new picture gets a new link.
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.end(file.data);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @Put(':eventId/cover')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseInterceptors(
+    FileInterceptor('cover', {
+      limits: { fileSize: COVER_MAX_BYTES, files: 1, fields: 0 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { cover: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({
+    summary: 'Add or replace the cover picture (JPEG or PNG, up to 2 MB)',
+  })
+  setCover(
+    @CurrentUser() user: any,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @UploadedFile() file?: { buffer: Buffer },
+  ) {
+    return this.events.setCover(user.userId, eventId, file?.buffer);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @Delete(':eventId/cover')
+  @ApiOperation({ summary: 'Remove the cover picture' })
+  removeCover(
+    @CurrentUser() user: any,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
+    return this.events.removeCover(user.userId, eventId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -238,6 +303,15 @@ export class EventsController {
 @Controller('admin/events')
 export class AdminEventsController {
   constructor(private readonly admin: EventsAdminService) {}
+
+  @Get('funnel')
+  @RequirePermission('events:view')
+  @ApiOperation({
+    summary: 'Sign-ups from event links: opens, codes, accounts, onboarding',
+  })
+  funnel(@Query('days') days?: string) {
+    return this.admin.funnel(days);
+  }
 
   @Get()
   @RequirePermission('events:view')

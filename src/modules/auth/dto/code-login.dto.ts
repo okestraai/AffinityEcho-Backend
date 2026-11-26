@@ -27,6 +27,15 @@ export class SendCodeDto {
   @IsOptional()
   @IsBoolean()
   existingOnly?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'The event page the code was asked from, only for counting sign-ups from events',
+    example: 'career-night-ab12cd',
+  })
+  @IsOptional()
+  @Matches(/^[a-z0-9-]{3,80}$/)
+  eventSlug?: string;
 }
 
 export class VerifyCodeDto extends SendCodeDto {

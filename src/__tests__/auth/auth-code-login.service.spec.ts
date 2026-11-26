@@ -12,6 +12,10 @@ import {
 } from '../../__tests__/helpers/mock-supabase';
 
 // ── Module-level mocks ───────────────────────────────────────────────
+const trackServerEvent = jest.fn();
+jest.mock('../../modules/analytics/server-events', () => ({
+  trackServerEvent: (...args: unknown[]) => trackServerEvent(...args),
+}));
 jest.mock('../../database/supabase.client', () => ({
   supabaseAdmin: jest.fn(),
 }));
@@ -182,6 +186,25 @@ describe('AuthService – email code sign-in', () => {
       await new Promise((r) => setTimeout(r, 80));
       expect(stored).toBe(true);
       expect((mockEmail as any).sendSignInCodeEmail).toHaveBeenCalled();
+    });
+
+    it('counts a code asked from an event page the same way, account or not', async () => {
+      trackServerEvent.mockClear();
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'new@example.com', eventSlug: 'night-ab12cd' });
+      from().mockReturnValueOnce(chain({ username: 'ada' }));
+      await service.sendLoginCode({ email: 'ada@example.com', eventSlug: 'night-ab12cd' });
+      expect(trackServerEvent.mock.calls).toEqual([
+        ['event_otp_requested', null, { slug: 'night-ab12cd' }],
+        ['event_otp_requested', null, { slug: 'night-ab12cd' }],
+      ]);
+    });
+
+    it('counts nothing for codes asked outside an event page', async () => {
+      trackServerEvent.mockClear();
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'new@example.com' });
+      expect(trackServerEvent).not.toHaveBeenCalled();
     });
 
     it('allows 3 sends every 5 minutes', async () => {

@@ -24,6 +24,8 @@ import {
   UpdateEventDto,
 } from './dto/event.dto';
 import { EventNoticesService } from './event-notices.service';
+import { cleanCover } from './event-cover';
+import { trackServerEvent } from '../analytics/server-events';
 
 // Details that belong to one mode and are cleared when the event no longer uses it.
 // Events no member sees: removed by a moderator or deleted by the host.
@@ -62,7 +64,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Columns anyone may see. The address and join link are for guests and the host only.
 const PUBLIC_COLUMNS =
-  'id, slug, title, description, mode, starts_at, ends_at, time_zone, venue_name, venue_city, capacity_in_person, capacity_online, registration_closes_at, organiser_name, status, created_at';
+  'id, slug, title, description, mode, starts_at, ends_at, time_zone, venue_name, venue_city, capacity_in_person, capacity_online, registration_closes_at, organiser_name, status, cover_updated_at, created_at';
 const ALL_COLUMNS = `${PUBLIC_COLUMNS}, host_id, venue_address, map_url, join_url, cancelled_at, removed_reason`;
 
 @Injectable()
@@ -127,7 +129,13 @@ export class EventsService {
         .insert({ ...row, host_id: hostId, slug: makeSlug(dto.title) })
         .select(ALL_COLUMNS)
         .single();
-      if (!error) return this.hostView(data);
+      if (!error) {
+        trackServerEvent('event_created', hostId, {
+          eventId: data.id,
+          mode: data.mode,
+        });
+        return this.hostView(data);
+      }
       if (error.code !== '23505') {
         logger.error('Event create failed', { error: error.message });
         throw new BadRequestException('Could not create the event');
@@ -439,6 +447,12 @@ export class EventsService {
         regId = inserted.rows[0].id;
       }
       await client.query('COMMIT');
+      trackServerEvent('event_registered', userId, {
+        eventId: event.id,
+        attendance: dto.attendance,
+        source: dto.source ?? 'link',
+        again: !!existing.rows[0],
+      });
       await this.notices.sendConfirmation(regId);
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
@@ -553,6 +567,52 @@ export class EventsService {
     return { success: true };
   }
 
+  // ── Cover picture ────────────────────────────────────────────
+
+  async setCover(hostId: string, eventId: string, file?: Buffer) {
+    const event = await this.hostEvent(hostId, eventId);
+    const cover = cleanCover(file);
+    const now = new Date();
+    try {
+      await getPool().query(
+        `INSERT INTO event_covers (event_id, mime, data, size, updated_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (event_id) DO UPDATE
+           SET mime = EXCLUDED.mime, data = EXCLUDED.data, size = EXCLUDED.size, updated_at = EXCLUDED.updated_at`,
+        [event.id, cover.mime, cover.data, cover.data.length, now],
+      );
+      await getPool().query(
+        'UPDATE events SET cover_updated_at = $2 WHERE id = $1',
+        [event.id, now],
+      );
+    } catch (error) {
+      logger.error('Cover save failed', { error });
+      throw new BadRequestException('Could not save the picture');
+    }
+    return { coverVersion: now.getTime() };
+  }
+
+  async removeCover(hostId: string, eventId: string) {
+    const event = await this.hostEvent(hostId, eventId);
+    await this.admin.from('event_covers').delete().eq('event_id', event.id);
+    await this.admin
+      .from('events')
+      .update({ cover_updated_at: null })
+      .eq('id', event.id);
+    return { coverVersion: null };
+  }
+
+  // The picture itself, for anyone who can see the event page.
+  async coverFile(slug: string): Promise<{ mime: string; data: Buffer }> {
+    const event = await this.bySlug(slug);
+    const { rows } = await getPool().query(
+      'SELECT mime, data FROM event_covers WHERE event_id = $1',
+      [event.id],
+    );
+    if (!rows[0]) throw new NotFoundException('No picture');
+    return { mime: rows[0].mime, data: rows[0].data };
+  }
+
   // ── Helpers ──────────────────────────────────────────────────
 
   private async bySlug(slug: string, all = false) {
@@ -645,6 +705,10 @@ export class EventsService {
       venueCity: e.venue_city,
       organiserName: e.organiser_name,
       status: e.status,
+      phase: eventPhase(e),
+      coverVersion: e.cover_updated_at
+        ? new Date(e.cover_updated_at).getTime()
+        : null,
       registrationOpen:
         e.status === 'published' && new Date(closes).getTime() > Date.now(),
       placesLeft: counts
@@ -745,6 +809,17 @@ export class EventsService {
       return null;
     }
   }
+}
+
+// Upcoming until it starts, live until it ends, then ended. Cancelled wins.
+export function eventPhase(
+  e: { status: string; starts_at: string; ends_at: string },
+  now = Date.now(),
+): 'upcoming' | 'live' | 'ended' | 'cancelled' {
+  if (e.status === 'cancelled') return 'cancelled';
+  if (now >= new Date(e.ends_at).getTime()) return 'ended';
+  if (now >= new Date(e.starts_at).getTime()) return 'live';
+  return 'upcoming';
 }
 
 function fitsMode(mode: EventMode, attendance: Attendance): boolean {

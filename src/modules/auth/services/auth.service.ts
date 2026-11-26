@@ -22,6 +22,7 @@ import { ResetPasswordWithOtpDto } from '../dto/reset-password.dto';
 import { RefreshTokenDto } from '../dto/password.dto';
 import { OnboardingDataDto } from '../dto/onboarding.dto';
 import logger from '../../../common/utils/logger.util';
+import { trackServerEvent } from '../../analytics/server-events';
 import { UserProfileResponse } from '../interfaces/user-profile.interface';
 import { OnboardingService } from './onboarding.service';
 import { MSG } from '../../../common/constants/messages';
@@ -194,6 +195,10 @@ export class AuthService {
       );
     }
 
+    // Counted for every request, so the number never says whether the email has an account.
+    if (dto.eventSlug)
+      trackServerEvent('event_otp_requested', null, { slug: dto.eventSlug });
+
     const { data: profile } = await this.admin
       .from('user_profiles')
       .select('username, is_suspended, is_deleted')
@@ -341,6 +346,11 @@ export class AuthService {
         update.last_name_encrypted = this.encryption.encrypt(dto.lastName);
     }
     await this.admin.from('user_profiles').update(update).eq('id', user.id);
+    if (dto.eventSlug)
+      trackServerEvent('event_otp_verified', user.id, {
+        slug: dto.eventSlug,
+        newAccount: created,
+      });
 
     const role = user.role || 'user';
     let permissions: string[] | null | undefined;
