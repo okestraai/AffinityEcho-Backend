@@ -11,7 +11,6 @@ import { JwtStrategy } from './strategies/jwt.strategy'; // Add this
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 import { EmailService } from '../../common/utils/email/email.service';
 import { PassportModule } from '@nestjs/passport';
-import { RedisService } from '../../common/services/redis.service';
 
 @Module({
   imports: [
@@ -36,7 +35,6 @@ import { RedisService } from '../../common/services/redis.service';
     EncryptionUtil,
     EmailService,
     OnboardingService,
-    RedisService,
   ],
   exports: [AuthService, JwtAuthGuard, JwtModule],
 })

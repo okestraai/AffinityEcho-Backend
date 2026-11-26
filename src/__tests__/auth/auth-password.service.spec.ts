@@ -187,6 +187,47 @@ describe('AuthService – password', () => {
       expect(bcrypt.hash).toHaveBeenCalledWith('NewStrongPass1!', 12);
     });
 
+    it('accepts a reset code only once, even for two requests at the same time', async () => {
+      mockAdminSupabase.client.from.mockImplementation(() =>
+        createMockQueryChain({
+          data: { id: 'user-123', username: 'u' },
+          error: null,
+        }),
+      );
+      const results = await Promise.allSettled([
+        service.resetPasswordWithOtp(dto),
+        service.resetPasswordWithOtp(dto),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    });
+
+    it('keeps a pending reset code when someone asks to resend a sign-up code', async () => {
+      mockAdminSupabase.client.from.mockImplementation(() =>
+        createMockQueryChain({
+          data: { id: 'user-123', username: 'u', email_confirmed_at: null },
+          error: null,
+        }),
+      );
+      await service.resendOtp({ email: 'user@example.com' } as any);
+      await expect(service.resetPasswordWithOtp(dto)).resolves.toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('reset successfully'),
+        }),
+      );
+    });
+
+    it('does not accept a reset code as a sign-up code', async () => {
+      mockAdminSupabase.client.from.mockImplementation(() =>
+        createMockQueryChain({
+          data: { id: 'user-123', username: 'u' },
+          error: null,
+        }),
+      );
+      await expect(
+        service.verifyOtp('user@example.com', '654321'),
+      ).rejects.toThrow();
+    });
+
     it('should throw BadRequestException for wrong OTP', async () => {
       await expect(
         service.resetPasswordWithOtp({ ...dto, otp: '000000' }),
@@ -219,7 +260,10 @@ describe('AuthService – password', () => {
 
       await service.resetPasswordWithOtp(dto);
       expect(
-        await (service as any).otpStore.get('user@example.com'),
+        await (service as any).otpStore.get(
+          'user@example.com',
+          'password_reset',
+        ),
       ).toBeNull();
     });
 
@@ -246,8 +290,9 @@ describe('AuthService – password', () => {
       it('lets the person try again after the wait', async () => {
         for (let i = 0; i < 3; i++) await guess('000000').catch(() => {});
         now += 5 * 60 * 1000 + 1000;
-        (service as any).otpStore.local.get('user@example.com').expires =
-          now + 60_000;
+        (service as any).otpStore.local.get(
+          'password_reset:user@example.com',
+        ).expires = now + 60_000;
         mockAdminSupabase.client.from
           .mockReturnValueOnce(
             createMockQueryChain({
@@ -268,13 +313,15 @@ describe('AuthService – password', () => {
       it('never locks the email for a day, so a stranger cannot block a reset', async () => {
         for (let i = 0; i < 12; i++) {
           if (i > 0 && i % 3 === 0) now += 5 * 60 * 1000 + 1000;
-          (service as any).otpStore.local.get('user@example.com').expires =
-            now + 60_000;
+          (service as any).otpStore.local.get(
+            'password_reset:user@example.com',
+          ).expires = now + 60_000;
           await guess('000000').catch(() => {});
         }
         now += 5 * 60 * 1000 + 1000;
-        (service as any).otpStore.local.get('user@example.com').expires =
-          now + 60_000;
+        (service as any).otpStore.local.get(
+          'password_reset:user@example.com',
+        ).expires = now + 60_000;
         mockAdminSupabase.client.from
           .mockReturnValueOnce(
             createMockQueryChain({
@@ -293,10 +340,15 @@ describe('AuthService – password', () => {
       });
 
       it('does not count a guess when no code is waiting', async () => {
-        const waiting = (service as any).otpStore.local.get('user@example.com');
+        const waiting = (service as any).otpStore.local.get(
+          'password_reset:user@example.com',
+        );
         (service as any).otpStore.local.clear();
         for (let i = 0; i < 5; i++) await guess('000000').catch(() => {});
-        (service as any).otpStore.local.set('user@example.com', waiting);
+        (service as any).otpStore.local.set(
+          'password_reset:user@example.com',
+          waiting,
+        );
         mockAdminSupabase.client.from
           .mockReturnValueOnce(
             createMockQueryChain({

@@ -27,7 +27,7 @@ import { OnboardingService } from './onboarding.service';
 import { MSG } from '../../../common/constants/messages';
 import { RedisService } from '../../../common/services/redis.service';
 import { AttemptCounter } from '../../../common/utils/attempt-counter';
-import { OtpStore, newOtp } from '../../../common/utils/otp-store';
+import { OtpStore, OtpType, newOtp } from '../../../common/utils/otp-store';
 
 @Injectable()
 export class AuthService {
@@ -105,7 +105,7 @@ export class AuthService {
   private async storeOtp(
     email: string,
     otp: string,
-    type: 'signup' | 'password_reset' = 'signup',
+    type: OtpType = 'signup',
   ): Promise<void> {
     const now = Date.now();
     await this.otpStore.set(email, {
@@ -117,18 +117,12 @@ export class AuthService {
     });
   }
 
-  // ──────────────────────────────────────────────────────────────
-  // FIXED: VERIFY OTP (only delete on success)
-  // ──────────────────────────────────────────────────────────────
+  // A sign-up code is used up when it matches.
   private async verifyStoredOtp(
     email: string,
     token: string,
   ): Promise<boolean> {
-    const isValid = await this.checkOtp(email.toLowerCase(), token);
-    if (isValid) {
-      await this.otpStore.delete(email);
-    }
-    return isValid;
+    return this.checkOtp(email, token, 'signup');
   }
 
   // 3 wrong codes, then a 5-minute wait. No daily cap: the key is an email anyone can type, so a
@@ -136,11 +130,11 @@ export class AuthService {
   private async checkOtp(
     key: string,
     token: string,
-    type?: string,
+    type: OtpType,
   ): Promise<boolean> {
     key = key.toLowerCase();
     const now = Date.now();
-    const stored = await this.otpStore.get(key);
+    const stored = await this.otpStore.get(key, type);
     const live = !!stored && stored.expires >= now;
     const burstKey = `otp:burst:${key}`;
     // Only a real guess at a live code counts; it is counted before the check.
@@ -158,10 +152,8 @@ export class AuthService {
       }
     }
 
-    const matches =
-      live &&
-      (type === undefined || stored.type === type) &&
-      this.otpStore.matches(stored, key, token);
+    // Taking the code removes it in the same step, so two requests can't both use it.
+    const matches = live && (await this.otpStore.take(key, type, token));
 
     if (matches) {
       await this.otpGuesses.clear(burstKey);
@@ -928,9 +920,6 @@ export class AuthService {
         );
       }
 
-      // Clear OTP after successful reset
-      await this.otpStore.delete(dto.email);
-
       // OPTIMIZATION: Send confirmation email (already have username)
       try {
         const username = profile.username || 'User';
@@ -1090,7 +1079,7 @@ export class AuthService {
     const email = dto.email.toLowerCase();
     const now = Date.now();
 
-    const existing = await this.otpStore.get(email);
+    const existing = await this.otpStore.get(email, 'signup');
     if (existing) {
       if (existing.attempts >= this.MAX_OTP_ATTEMPTS) {
         const timeLeft = this.OTP_COOLDOWN_MS - (now - existing.lastSent);

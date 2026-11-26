@@ -531,7 +531,7 @@ describe('AuthService – core (signup, login, verifyOtp)', () => {
       await service.verifyOtp(email, token);
 
       expect(
-        await (service as any).otpStore.get('user@example.com'),
+        await (service as any).otpStore.get('user@example.com', 'signup'),
       ).toBeNull();
     });
   });
