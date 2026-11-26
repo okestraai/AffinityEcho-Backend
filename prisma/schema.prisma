@@ -80,6 +80,9 @@ model user_profiles {
   expected_grad_year          Int?      @db.SmallInt
   show_school                 Boolean   @default(false)
   student_status_checked_at   DateTime? @db.Timestamptz(3)
+  event_policy_accepted_at     DateTime? @db.Timestamptz(3)
+  event_hosting_stopped_at     DateTime? @db.Timestamptz(3)
+  event_hosting_stopped_reason String?
   company_key                 String?
   communication_method String?   @db.VarChar(50)
   mentoring_as             String?   @db.VarChar(20) // 'mentor', 'mentee', 'both', null
@@ -1607,3 +1610,82 @@ model companies {
   created_at DateTime @default(now()) @db.Timestamptz(3)
   updated_at DateTime @default(now()) @db.Timestamptz(3)
 }
+
+model events {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                   String    @unique(map: "events_slug_key") @db.VarChar(80)
+  host_id                String    @db.Uuid
+  title                  String    @db.VarChar(120)
+  description            String    @default("")
+  mode                   String    @db.VarChar(10)
+  starts_at              DateTime  @db.Timestamptz(3)
+  ends_at                DateTime  @db.Timestamptz(3)
+  time_zone              String    @db.VarChar(64)
+  venue_name             String?   @db.VarChar(160)
+  venue_address          String?   @db.VarChar(300)
+  venue_city             String?   @db.VarChar(120)
+  map_url                String?   @db.VarChar(500)
+  join_url               String?   @db.VarChar(500)
+  capacity_in_person     Int?
+  capacity_online        Int?
+  registration_closes_at DateTime? @db.Timestamptz(3)
+  organiser_name         String    @db.VarChar(120)
+  status                 String    @default("published") @db.VarChar(12)
+  removed_reason         String?
+  removed_by             String?   @db.Uuid
+  removed_at             DateTime? @db.Timestamptz(3)
+  cancelled_at           DateTime? @db.Timestamptz(3)
+  created_at             DateTime  @default(now()) @db.Timestamptz(3)
+  updated_at             DateTime  @default(now()) @db.Timestamptz(3)
+
+  event_registrations event_registrations[]
+  event_views         event_views[]
+  event_reports       event_reports[]
+
+  @@index([host_id, created_at(sort: Desc)], map: "events_host_idx")
+  @@index([starts_at], map: "events_starts_idx")
+}
+
+model event_registrations {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id        String    @db.Uuid
+  user_id         String    @db.Uuid
+  name_encrypted  String
+  email_encrypted String?
+  share_email     Boolean   @default(false)
+  attendance      String    @db.VarChar(10)
+  check_in_code   String    @db.VarChar(12)
+  checked_in_at   DateTime? @db.Timestamptz(3)
+  source          String    @default("link") @db.VarChar(20)
+  status          String    @default("registered") @db.VarChar(12)
+  created_at      DateTime  @default(now()) @db.Timestamptz(3)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(3)
+  event           events    @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  @@unique([event_id, user_id], map: "event_registrations_event_user_key")
+  @@unique([event_id, check_in_code], map: "event_registrations_code_key")
+  @@index([user_id], map: "event_registrations_user_idx")
+}
+
+model event_views {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id   String   @db.Uuid
+  user_id    String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  event      events   @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  @@index([event_id], map: "event_views_event_idx")
+}
+
+model event_reports {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id    String   @db.Uuid
+  reporter_id String   @db.Uuid
+  reason      String   @db.VarChar(500)
+  status      String   @default("open") @db.VarChar(12)
+  created_at  DateTime @default(now()) @db.Timestamptz(3)
+  event       events   @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  @@unique([event_id, reporter_id], map: "event_reports_event_reporter_key")
+}
+
