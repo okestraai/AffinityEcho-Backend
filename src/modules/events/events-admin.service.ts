@@ -75,7 +75,7 @@ export class EventsAdminService {
         updated_at: now,
       })
       .eq('id', eventId)
-      .neq('status', 'removed')
+      .not('status', 'in', ['removed', 'deleted'])
       .select('id, status');
     if (!data?.length)
       throw new NotFoundException('Event not found or already removed');

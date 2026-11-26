@@ -13,7 +13,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { ATTENDANCE, Attendance, EVENT_MODES, EventMode } from '../events.constants';
+import {
+  ATTENDANCE,
+  Attendance,
+  EVENT_MODES,
+  EventMode,
+} from '../events.constants';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -44,7 +49,10 @@ export class CreateEventDto {
   @IsISO8601({ strict: true })
   endsAt!: string;
 
-  @ApiProperty({ example: 'Africa/Lagos', description: 'IANA time zone of the event' })
+  @ApiProperty({
+    example: 'Africa/Lagos',
+    description: 'IANA time zone of the event',
+  })
   @IsString()
   @MaxLength(64)
   timeZone!: string;
@@ -76,7 +84,9 @@ export class CreateEventDto {
   @MaxLength(500)
   mapUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Virtual and hybrid events; shown only to guests' })
+  @ApiPropertyOptional({
+    description: 'Virtual and hybrid events; shown only to guests',
+  })
   @IsOptional()
   @IsUrl(https)
   @MaxLength(500)
@@ -120,19 +130,26 @@ export class RegisterDto {
   @IsIn(ATTENDANCE)
   attendance!: Attendance;
 
-  @ApiPropertyOptional({ description: 'Share your email with the host. Off by default.' })
+  @ApiPropertyOptional({
+    description: 'Share your email with the host. Off by default.',
+  })
   @IsOptional()
   @IsBoolean()
   shareEmail?: boolean;
 
-  @ApiPropertyOptional({ description: 'Needed when your profile has no name yet' })
+  @ApiPropertyOptional({
+    description: 'Needed when your profile has no name yet',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
   @Length(1, 120)
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Where the guest came from', example: 'link' })
+  @ApiPropertyOptional({
+    description: 'Where the guest came from',
+    example: 'link',
+  })
   @IsOptional()
   @IsIn(['link', 'app', 'share'])
   source?: string;
@@ -147,7 +164,9 @@ export class RegistrationSharingDto {
 export class CheckInDto {
   @ApiPropertyOptional({ description: 'The code on the guest’s QR or email' })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @IsString()
   @Length(4, 12)
   code?: string;
@@ -172,4 +191,14 @@ export class RemoveEventDto {
   @IsString()
   @Length(3, 500)
   reason!: string;
+}
+
+export class RevealDto {
+  @ApiProperty({
+    description: 'The code from the registration email',
+    example: 'ABCD2345',
+  })
+  @IsString()
+  @Length(4, 12)
+  code!: string;
 }

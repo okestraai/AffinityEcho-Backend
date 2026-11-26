@@ -100,7 +100,8 @@ export class EventNoticesService {
           heading: reg.event.title,
           intro:
             'Here are the details for your place. The calendar file is attached.',
-          checkInCode: inPerson ? reg.check_in_code : null,
+          checkInCode: reg.check_in_code,
+          showQr: inPerson,
         }),
         attachments,
       );
@@ -224,6 +225,7 @@ export class EventNoticesService {
       heading: string;
       intro: string;
       checkInCode: string | null;
+      showQr?: boolean;
       noDetails?: boolean;
     },
   ) {
@@ -231,6 +233,7 @@ export class EventNoticesService {
     const inPerson = reg.attendance === 'in_person';
     const showDetails = !extra.noDetails;
     return {
+      showQr: false,
       ...extra,
       name: this.decrypt(reg.name_encrypted) ?? 'there',
       title: e.title,

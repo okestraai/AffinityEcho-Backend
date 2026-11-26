@@ -34,12 +34,16 @@ CREATE TABLE IF NOT EXISTS "events" (
   "updated_at"             TIMESTAMPTZ(3) NOT NULL DEFAULT now(),
   CONSTRAINT "events_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "events_mode_chk" CHECK ("mode" IN ('virtual', 'physical', 'hybrid')),
-  CONSTRAINT "events_status_chk" CHECK ("status" IN ('published', 'cancelled', 'removed')),
   CONSTRAINT "events_times_chk" CHECK ("ends_at" > "starts_at"),
   CONSTRAINT "events_capacity_chk" CHECK (
     ("capacity_in_person" IS NULL OR "capacity_in_person" > 0) AND
     ("capacity_online" IS NULL OR "capacity_online" > 0))
 );
+-- Deleted events are kept for the audit trail but shown nowhere.
+ALTER TABLE "events" DROP CONSTRAINT IF EXISTS "events_status_chk";
+ALTER TABLE "events" ADD CONSTRAINT "events_status_chk"
+  CHECK ("status" IN ('published', 'cancelled', 'removed', 'deleted'));
+ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMPTZ(3);
 CREATE UNIQUE INDEX IF NOT EXISTS "events_slug_key" ON "events" ("slug");
 CREATE INDEX IF NOT EXISTS "events_host_idx" ON "events" ("host_id", "created_at" DESC);
 CREATE INDEX IF NOT EXISTS "events_starts_idx" ON "events" ("starts_at");

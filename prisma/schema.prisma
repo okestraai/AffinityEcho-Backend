@@ -1635,6 +1635,7 @@ model events {
   removed_by             String?   @db.Uuid
   removed_at             DateTime? @db.Timestamptz(3)
   cancelled_at           DateTime? @db.Timestamptz(3)
+  deleted_at             DateTime? @db.Timestamptz(3)
   created_at             DateTime  @default(now()) @db.Timestamptz(3)
   updated_at             DateTime  @default(now()) @db.Timestamptz(3)
 

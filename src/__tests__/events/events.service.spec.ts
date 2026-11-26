@@ -98,9 +98,16 @@ describe('EventsService', () => {
       await expect(service.create('u1', virtualDto)).rejects.toThrow('up to 5 events a day');
     });
 
-    it('needs a join link online and a full venue in person', async () => {
+    it('lets the join link be added later, but needs a full venue in person', async () => {
+      const insert = chain({ ...event, mode: 'virtual', join_url: null });
+      client.from
+        .mockReturnValueOnce(chain({ has_completed_onboarding: true, event_policy_accepted_at: 'x' }))
+        .mockReturnValueOnce(chain([], { count: 0 }))
+        .mockReturnValueOnce(insert);
+      await service.create('u1', { ...virtualDto, joinUrl: undefined });
+      expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({ mode: 'virtual', join_url: null }));
+
       client.from.mockReturnValue(chain({ has_completed_onboarding: true, event_policy_accepted_at: 'x' }, { count: 0 }));
-      await expect(service.create('u1', { ...virtualDto, joinUrl: undefined })).rejects.toThrow('join');
       await expect(
         service.create('u1', { ...virtualDto, mode: 'physical', venueName: 'Hall', venueCity: 'Accra' }),
       ).rejects.toThrow('venue name, address and city');
@@ -165,6 +172,56 @@ describe('EventsService', () => {
     it("hides another member's event from a would-be host", async () => {
       client.from.mockReturnValueOnce(chain(event));
       await expect(service.hostPage('someone-else', 'e1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deleting', () => {
+    it('hides the event and tells guests of an upcoming event', async () => {
+      const update = chain([{ id: 'e1' }]);
+      client.from.mockReturnValueOnce(chain(event)).mockReturnValueOnce(update);
+      await service.remove('host', 'e1');
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'deleted' }));
+      expect(notices.queueCancel).toHaveBeenCalledWith('e1');
+    });
+
+    it("doesn't message guests about a past event", async () => {
+      client.from
+        .mockReturnValueOnce(chain({ ...event, ends_at: future(-1) }))
+        .mockReturnValueOnce(chain([{ id: 'e1' }]));
+      await service.remove('host', 'e1');
+      expect(notices.queueCancel).not.toHaveBeenCalled();
+    });
+
+    it('treats a deleted event as missing', async () => {
+      client.from.mockReturnValueOnce(chain({ ...event, status: 'deleted' }));
+      await expect(service.publicView(event.slug)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('reveal with the event code', () => {
+    it('shows an in-person guest the address and not the join link', async () => {
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ id: 'r1', attendance: 'in_person', status: 'registered' }));
+      const details = await service.revealWithCode(event.slug, ' abcd2345 ');
+      expect(details).toMatchObject({ venueAddress: '1 Main St', joinUrl: null });
+    });
+
+    it('shows an online guest the join link and not the address', async () => {
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ id: 'r1', attendance: 'online', status: 'registered' }));
+      const details = await service.revealWithCode(event.slug, 'ABCD2345');
+      expect(details).toMatchObject({ venueAddress: null, joinUrl: 'https://meet.example.com/a' });
+    });
+
+    it('refuses a wrong or cancelled code', async () => {
+      client.from.mockReturnValueOnce(chain(event)).mockReturnValueOnce(chain(null));
+      await expect(service.revealWithCode(event.slug, 'NOPE1234')).rejects.toThrow(NotFoundException);
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ id: 'r1', attendance: 'online', status: 'cancelled' }));
+      await expect(service.revealWithCode(event.slug, 'ABCD2345')).rejects.toThrow(NotFoundException);
     });
   });
 

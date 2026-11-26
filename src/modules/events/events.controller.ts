@@ -30,6 +30,7 @@ import {
   RegisterDto,
   RegistrationSharingDto,
   RemoveEventDto,
+  RevealDto,
   ReportEventDto,
   UpdateEventDto,
 } from './dto/event.dto';
@@ -49,6 +50,18 @@ export class EventsController {
   })
   publicView(@Param('slug') slug: string) {
     return this.events.publicView(cleanSlug(slug));
+  }
+
+  @Public()
+  @Post('public/:slug/reveal')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary:
+      "Show a guest's address or join link from their event code, without signing in",
+  })
+  reveal(@Param('slug') slug: string, @Body() dto: RevealDto) {
+    return this.events.revealWithCode(cleanSlug(slug), dto.code);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -106,6 +119,19 @@ export class EventsController {
     @Param('eventId', ParseUUIDPipe) eventId: string,
   ) {
     return this.events.cancel(user.userId, eventId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @Delete(':eventId')
+  @ApiOperation({
+    summary: 'Delete your event; guests still coming are told it is off',
+  })
+  remove(
+    @CurrentUser() user: any,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
+    return this.events.remove(user.userId, eventId);
   }
 
   @UseGuards(JwtAuthGuard)

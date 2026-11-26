@@ -26,6 +26,9 @@ import {
 import { EventNoticesService } from './event-notices.service';
 
 // Details that belong to one mode and are cleared when the event no longer uses it.
+// Events no member sees: removed by a moderator or deleted by the host.
+const HIDDEN_STATUSES = ['removed', 'deleted'];
+
 const MODE_FIELDS = [
   'venue_name',
   'venue_address',
@@ -179,6 +182,46 @@ export class EventsService {
       throw new ConflictException('This event is already cancelled');
     await this.notices.queueCancel(eventId);
     return { success: true };
+  }
+
+  // Deleting hides the event everywhere. Guests who were still coming are told it's off.
+  async remove(hostId: string, eventId: string) {
+    const event = await this.hostEvent(hostId, eventId);
+    const now = new Date().toISOString();
+    const { data } = await this.admin
+      .from('events')
+      .update({ status: 'deleted', deleted_at: now, updated_at: now })
+      .eq('id', eventId)
+      .not('status', 'in', HIDDEN_STATUSES)
+      .select('id');
+    if (!data?.length) throw new NotFoundException('Event not found');
+    if (
+      event.status === 'published' &&
+      new Date(event.ends_at).getTime() > Date.now()
+    ) {
+      await this.notices.queueCancel(eventId);
+    }
+    return { success: true };
+  }
+
+  // A registered guest's code shows the details for how they're attending, without signing in.
+  async revealWithCode(slug: string, code: string) {
+    const event = await this.bySlug(slug, true);
+    const { data: reg } = await this.admin
+      .from('event_registrations')
+      .select('id, attendance, status')
+      .eq('event_id', event.id)
+      .eq('check_in_code', code.trim().toUpperCase())
+      .maybeSingle();
+    if (!reg || reg.status !== 'registered')
+      throw new NotFoundException('That code is not valid for this event');
+    const inPerson = reg.attendance === 'in_person';
+    return {
+      attendance: reg.attendance,
+      venueAddress: inPerson ? event.venue_address : null,
+      mapUrl: inPerson ? event.map_url : null,
+      joinUrl: inPerson ? null : event.join_url,
+    };
   }
 
   // Link opens, registrations split by in person and online, and the guest list.
@@ -462,14 +505,14 @@ export class EventsService {
             .from('events')
             .select(PUBLIC_COLUMNS)
             .in('id', ids)
-            .neq('status', 'removed')
+            .not('status', 'in', HIDDEN_STATUSES)
             .order('starts_at', { ascending: true })
         : Promise.resolve({ data: [] }),
       this.admin
         .from('events')
         .select(PUBLIC_COLUMNS)
         .eq('host_id', userId)
-        .neq('status', 'removed')
+        .not('status', 'in', HIDDEN_STATUSES)
         .order('starts_at', { ascending: false }),
     ]);
     const attendanceOf = new Map(
@@ -514,7 +557,7 @@ export class EventsService {
       .select(all ? ALL_COLUMNS : `${PUBLIC_COLUMNS}`)
       .eq('slug', slug)
       .maybeSingle();
-    if (!data || data.status === 'removed')
+    if (!data || HIDDEN_STATUSES.includes(data.status))
       throw new NotFoundException('Event not found');
     return data;
   }
@@ -526,7 +569,11 @@ export class EventsService {
       .eq('id', eventId)
       .maybeSingle();
     // Someone else's event is reported as missing.
-    if (!data || data.host_id !== hostId || data.status === 'removed')
+    if (
+      !data ||
+      data.host_id !== hostId ||
+      HIDDEN_STATUSES.includes(data.status)
+    )
       throw new NotFoundException('Event not found');
     return data;
   }
@@ -661,8 +708,7 @@ export class EventsService {
     const online = e.mode === 'virtual' || e.mode === 'hybrid';
     if (inPerson && (!e.venue_name || !e.venue_address || !e.venue_city))
       throw new BadRequestException('Add the venue name, address and city');
-    if (online && !e.join_url)
-      throw new BadRequestException('Add the link guests use to join');
+    // The join link can be added later; guests are told when it is.
     if (!inPerson) {
       e.venue_name = null;
       e.venue_address = null;

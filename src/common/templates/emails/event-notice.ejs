@@ -24,8 +24,12 @@
           </table>
           <% if (checkInCode) { %>
           <div style="text-align:center;margin:24px 0 8px;">
+            <% if (showQr) { %>
             <p style="margin:0 0 8px;color:#374151;">Show this at the door to check in:</p>
             <img src="cid:checkin-qr" width="180" height="180" alt="Check-in QR code" style="display:inline-block;">
+            <% } else { %>
+            <p style="margin:0 0 8px;color:#374151;">Your event code. Enter it on the event page to see the join link again:</p>
+            <% } %>
             <p style="margin:8px 0 0;font-size:20px;letter-spacing:4px;font-weight:700;"><%= checkInCode %></p>
           </div>
           <% } %>
