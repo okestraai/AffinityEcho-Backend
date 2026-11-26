@@ -1241,6 +1241,8 @@ export class ForumService {
           category: forum.category,
           rules: forum.rules || [],
           moderators: forum.moderators || [],
+          is_other_topics: !!forum.is_other_topics,
+          sort_order: forum.sort_order ?? 0,
           originalTopicCount: forum.topic_count || 0,
           originalMemberCount: forum.member_count || 0,
           lastActivity: forum.last_activity,
