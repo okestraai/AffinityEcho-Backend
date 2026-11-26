@@ -201,6 +201,8 @@ export class AuthService {
       .maybeSingle();
     // Suspended and deleted accounts get the same reply and no code.
     if (profile?.is_suspended || profile?.is_deleted) return reply;
+    // The sign-in screen only serves existing accounts; the reply doesn't say which.
+    if (!profile && dto.existingOnly) return reply;
 
     const now = Date.now();
     const code = newOtp();
@@ -268,6 +270,9 @@ export class AuthService {
 
     let created = false;
     if (!user) {
+      if (dto.existingOnly) {
+        throw new UnauthorizedException('That code is wrong or has expired.');
+      }
       if (dto.termsAccepted !== true) {
         throw new BadRequestException(
           'Accept the terms to create your account',

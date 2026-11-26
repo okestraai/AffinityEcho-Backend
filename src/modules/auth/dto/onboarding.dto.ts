@@ -15,6 +15,7 @@ import {
   ArrayMaxSize,
   Matches,
   ValidateIf,
+  Equals,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { MAX_ETHNICITIES } from '../../../common/constants/onboarding-options';
@@ -162,8 +163,7 @@ export class OnboardingDataDto {
   @IsBoolean()
   showSchool?: boolean;
 
-  @ApiPropertyOptional({ example: true, description: 'User confirmed age 18+' })
-  @IsOptional()
-  @IsBoolean()
-  ageConfirmed?: boolean;
+  @ApiProperty({ example: true, description: 'User confirmed age 18+' })
+  @Equals(true, { message: 'Confirm that you are 18 or older' })
+  ageConfirmed!: boolean;
 }

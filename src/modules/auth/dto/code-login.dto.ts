@@ -19,6 +19,14 @@ export class SendCodeDto {
   @IsEmail()
   @MaxLength(254)
   email!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Sign-in only: no code is sent and no account is made for an unknown email',
+  })
+  @IsOptional()
+  @IsBoolean()
+  existingOnly?: boolean;
 }
 
 export class VerifyCodeDto extends SendCodeDto {
@@ -26,7 +34,9 @@ export class VerifyCodeDto extends SendCodeDto {
   @Matches(/^\d{6}$/, { message: 'The code is 6 digits' })
   code!: string;
 
-  @ApiPropertyOptional({ description: 'Saved for a new account, so onboarding does not ask again' })
+  @ApiPropertyOptional({
+    description: 'Saved for a new account, so onboarding does not ask again',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -40,7 +50,9 @@ export class VerifyCodeDto extends SendCodeDto {
   @Length(1, 60)
   lastName?: string;
 
-  @ApiPropertyOptional({ description: 'Needed when the code creates a new account' })
+  @ApiPropertyOptional({
+    description: 'Needed when the code creates a new account',
+  })
   @IsOptional()
   @IsBoolean()
   termsAccepted?: boolean;

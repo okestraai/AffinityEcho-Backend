@@ -10,6 +10,7 @@ import { sameCountryBonus } from '../../modules/mentorship/services/mentorship-d
 import {
   splitEthnicities,
   titleCaseWords,
+  isReservedSpaceName,
 } from '../../common/constants/onboarding-options';
 
 const errorsFor = async (body: Record<string, unknown>) =>
@@ -18,6 +19,7 @@ const errorsFor = async (body: Record<string, unknown>) =>
       plainToInstance(OnboardingDataDto, {
         firstName: 'A',
         lastName: 'B',
+        ageConfirmed: true,
         ...body,
       }),
     )
@@ -26,6 +28,18 @@ const errorsFor = async (body: Record<string, unknown>) =>
 describe('onboarding field rules', () => {
   it('accepts sign-ups with no country, so older apps keep working', async () => {
     expect(await errorsFor({})).toEqual([]);
+  });
+
+  it('needs the 18+ confirmation', async () => {
+    expect(await errorsFor({ ageConfirmed: undefined })).toEqual(['ageConfirmed']);
+    expect(await errorsFor({ ageConfirmed: false })).toEqual(['ageConfirmed']);
+  });
+
+  it('keeps our space names for spaces', () => {
+    for (const name of ['Global', ' shared ', 'Students', 'Others']) {
+      expect(isReservedSpaceName(name)).toBe(true);
+    }
+    expect(isReservedSpaceName('Global Bank')).toBe(false);
   });
 
   it('accepts a lower-case country code and refuses a made-up one', async () => {
@@ -94,7 +108,11 @@ describe('onboarding helpers', () => {
 
   it('capitalises each word but keeps the rest as typed', () => {
     expect(titleCaseWords('  university of  lagos ')).toBe(
-      'University Of Lagos',
+      'University of Lagos',
+    );
+    expect(titleCaseWords('the bank of america')).toBe('The Bank of America');
+    expect(titleCaseWords('London School Of Economics')).toBe(
+      'London School Of Economics',
     );
     expect(titleCaseWords('MIT')).toBe('MIT');
   });

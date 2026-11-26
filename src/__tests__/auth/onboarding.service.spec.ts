@@ -200,7 +200,7 @@ describe('OnboardingService', () => {
       expect(saved.country_code).toBe('NG');
       expect(saved.race_encrypted).toBe('enc_Black / African, Caribbean');
       expect(saved.is_student).toBe(true);
-      expect(saved.school_encrypted).toBe('enc_University Of Lagos');
+      expect(saved.school_encrypted).toBe('enc_University of Lagos');
       expect(saved.show_school).toBe(true);
     });
 

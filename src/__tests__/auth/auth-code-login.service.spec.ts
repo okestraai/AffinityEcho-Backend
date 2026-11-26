@@ -140,6 +140,19 @@ describe('AuthService – email code sign-in', () => {
       expect((mockEmail as any).sendSignInCodeEmail).not.toHaveBeenCalled();
     });
 
+    it('sends nothing to an unknown email on the sign-in screen, with the same reply', async () => {
+      from().mockReturnValueOnce(chain(null));
+      const reply = await service.sendLoginCode({ email: 'new@example.com', existingOnly: true });
+      expect(reply.message).toBe('If this email can sign in, a code is on its way.');
+      expect((mockEmail as any).sendSignInCodeEmail).not.toHaveBeenCalled();
+    });
+
+    it('sends a code to a known email on the sign-in screen', async () => {
+      from().mockReturnValueOnce(chain({ username: 'ada' }));
+      await service.sendLoginCode({ email: 'ada@example.com', existingOnly: true });
+      expect((mockEmail as any).sendSignInCodeEmail).toHaveBeenCalled();
+    });
+
     it('allows 3 sends every 5 minutes', async () => {
       from().mockReturnValue(chain(null));
       for (let i = 0; i < 3; i++) await service.sendLoginCode({ email: 'a@example.com' });
@@ -210,6 +223,20 @@ describe('AuthService – email code sign-in', () => {
       await expect(
         service.verifyLoginCode({ email: 'new@example.com', code: sentCode() }),
       ).rejects.toThrow('Accept the terms');
+    });
+
+    it('never makes an account from the sign-in screen', async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'new@example.com' });
+      from().mockReturnValueOnce(chain(null));
+      await expect(
+        service.verifyLoginCode({
+          email: 'new@example.com',
+          code: sentCode(),
+          termsAccepted: true,
+          existingOnly: true,
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('makes an account with no password for a new email', async () => {

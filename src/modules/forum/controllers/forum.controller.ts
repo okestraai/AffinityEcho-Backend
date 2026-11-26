@@ -80,13 +80,18 @@ export class ForumController {
     return this.forumService.getLocalForumMetrics(companyName);
   }
 
-  @Get('recent-discussions/:companyName')
+  // Members with no company (students, people not working) call it without one.
+  @Get(['recent-discussions', 'recent-discussions/:companyName'])
   @ApiOperation({
     summary: 'Get recent discussions across all topics',
     description:
       'Fetch recent discussions across all topics with filtering. Returns global topics and local topics matching provided company name.',
   })
-  @ApiParam({ name: 'companyName', description: 'Company Name' })
+  @ApiParam({
+    name: 'companyName',
+    description: 'Company Name',
+    required: false,
+  })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({
     name: 'sortBy',
@@ -113,7 +118,7 @@ export class ForumController {
     description: 'Recent discussions retrieved successfully',
   })
   async getRecentDiscussions(
-    @Param('companyName') companyName: string,
+    @Param('companyName') companyName: string | undefined,
     @CurrentUser() user: any,
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,

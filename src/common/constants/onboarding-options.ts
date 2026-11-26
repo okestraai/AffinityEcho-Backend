@@ -30,19 +30,42 @@ export function splitEthnicities(stored: string | null): string[] {
 }
 
 // Names that belong to built-in forum spaces, so no company or school may use them.
-export const RESERVED_SPACE_NAMES = ['students', 'others', 'other companies'];
+export const RESERVED_SPACE_NAMES = [
+  'students',
+  'others',
+  'other companies',
+  'global',
+  'shared',
+];
 
 export function isReservedSpaceName(name: string): boolean {
   return RESERVED_SPACE_NAMES.includes(name.trim().toLowerCase());
 }
 
-// Capitalises the first letter of each word and leaves the rest as typed, so "MIT" stays "MIT".
+const SMALL_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'at',
+  'de',
+  'for',
+  'in',
+  'of',
+  'on',
+  'the',
+  'to',
+]);
+
+// Capitalises each word but small joining words, and leaves the rest as typed, so "MIT" stays "MIT".
 export function titleCaseWords(text: string): string {
   return text
     .trim()
     .replace(/\s+/g, ' ')
-    .replace(
-      /(^|\s)(\S)/g,
-      (_m, space: string, first: string) => space + first.toUpperCase(),
-    );
+    .split(' ')
+    .map((word, i) =>
+      i > 0 && SMALL_WORDS.has(word.toLowerCase())
+        ? word
+        : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ');
 }
