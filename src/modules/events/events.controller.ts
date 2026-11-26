@@ -76,6 +76,16 @@ export class EventsController {
   }
 
   @Public()
+  @Get('options')
+  @ApiOperation({
+    summary:
+      'Event options set by admins, such as whether cover pictures are allowed',
+  })
+  options() {
+    return this.events.options();
+  }
+
+  @Public()
   @Get('public/:slug/cover')
   @ApiOperation({ summary: "The event's cover picture, if it has one" })
   async cover(

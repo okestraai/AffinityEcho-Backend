@@ -1673,8 +1673,10 @@ model event_registrations {
 model event_covers {
   event_id   String   @id @db.Uuid
   mime       String   @db.VarChar(20)
-  data       Bytes
+  data       Bytes?
   size       Int
+  storage    String   @default("database") @db.VarChar(10)
+  object_key String?  @db.VarChar(200)
   updated_at DateTime @default(now()) @db.Timestamptz(3)
   event      events   @relation(fields: [event_id], references: [id], onDelete: Cascade)
 }

@@ -9,7 +9,8 @@ import { EmailService } from '../../common/utils/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import logger from '../../common/utils/logger.util';
 import { trackServerEvent } from '../analytics/server-events';
-import { EVENTS_QUEUE, UPDATE_GROUP_MS } from './events.constants';
+import { EVENTS_QUEUE } from './events.constants';
+import { eventSettings } from './event-settings';
 
 type NoticeKind = 'updated' | 'cancelled';
 
@@ -31,13 +32,14 @@ export class EventNoticesService {
 
   // Edits within the window reach guests as one message: a later edit finds the job already waiting.
   async queueUpdate(eventId: string) {
+    const minutes = (await eventSettings()).events.update_grouping_minutes;
     await this.queue
       .add(
         'updated',
         { eventId },
         {
           jobId: `event-updated-${eventId}`,
-          delay: UPDATE_GROUP_MS,
+          delay: minutes * 60 * 1000,
           removeOnComplete: true,
           removeOnFail: true,
         },

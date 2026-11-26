@@ -347,7 +347,14 @@ export class AdminController {
   @ApiParam({
     name: 'key',
     description: 'Settings section key',
-    enum: ['general', 'security', 'notifications', 'moderation'],
+    enum: [
+      'general',
+      'security',
+      'notifications',
+      'moderation',
+      'events',
+      'storage',
+    ],
   })
   @ApiBody({
     schema: {

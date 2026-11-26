@@ -2,12 +2,22 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { supabaseAdmin } from '../../../database/supabase.client';
 import { AdminUsersService } from './admin-users.service';
+import {
+  EVENT_DEFAULTS,
+  STORAGE_DEFAULTS,
+  checkEventSettings,
+  checkStorageSettings,
+  clearEventSettingsCache,
+} from '../../events/event-settings';
+import { coverBucketStatus } from '../../events/cover-bucket';
 
 const VALID_KEYS = [
   'general',
   'security',
   'notifications',
   'moderation',
+  'events',
+  'storage',
 ] as const;
 type SettingKey = (typeof VALID_KEYS)[number];
 
@@ -30,10 +40,18 @@ export class AdminSettingsService {
 
     if (error) throw new BadRequestException(error.message);
 
-    const settings: Record<string, any> = {};
+    const settings: Record<string, any> = {
+      events: { ...EVENT_DEFAULTS },
+      storage: { ...STORAGE_DEFAULTS },
+    };
     for (const row of data ?? []) {
-      settings[row.key] = row.value;
+      settings[row.key] =
+        row.key === 'events' || row.key === 'storage'
+          ? { ...settings[row.key], ...row.value }
+          : row.value;
     }
+    // Read only: set on the server, shown so admins know whether the bucket can be chosen.
+    settings.storage_status = coverBucketStatus(this.config);
 
     return { success: true, data: settings };
   }
@@ -50,6 +68,14 @@ export class AdminSettingsService {
         `Invalid settings key. Must be one of: ${VALID_KEYS.join(', ')}`,
       );
     }
+
+    // Event and storage values are checked strictly; the older sections keep their free-form shape.
+    if (key === 'events') value = checkEventSettings(value);
+    if (key === 'storage')
+      value = checkStorageSettings(
+        value,
+        coverBucketStatus(this.config).bucketReady,
+      );
 
     // Fetch current value and merge (partial update)
     const { data: existing } = await this.admin
@@ -75,6 +101,7 @@ export class AdminSettingsService {
       .single();
 
     if (error) throw new BadRequestException(error.message);
+    if (key === 'events' || key === 'storage') clearEventSettingsCache();
 
     await this.adminUsers.logAction(
       adminId,

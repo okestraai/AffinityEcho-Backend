@@ -4,11 +4,7 @@ export type EventMode = (typeof EVENT_MODES)[number];
 export const ATTENDANCE = ['in_person', 'online'] as const;
 export type Attendance = (typeof ATTENDANCE)[number];
 
-// Hosts may create this many events a day.
-export const EVENTS_PER_DAY = 5;
-
-// Edits made within this window reach guests as one message.
-export const UPDATE_GROUP_MS = 2 * 60 * 1000;
+// Events per day and the update grouping window are admin settings (event-settings.ts).
 
 export const EVENTS_QUEUE = 'events';
 

@@ -11,12 +11,7 @@ import { supabaseAdmin } from '../../database/supabase.client';
 import { getPool } from '../../database/pg-client';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 import logger from '../../common/utils/logger.util';
-import {
-  Attendance,
-  EVENTS_PER_DAY,
-  EventMode,
-  NOTIFIED_FIELDS,
-} from './events.constants';
+import { Attendance, EventMode, NOTIFIED_FIELDS } from './events.constants';
 import {
   CheckInDto,
   CreateEventDto,
@@ -25,6 +20,8 @@ import {
 } from './dto/event.dto';
 import { EventNoticesService } from './event-notices.service';
 import { cleanCover } from './event-cover';
+import { coverBucketFrom, type CoverBucket } from './cover-bucket';
+import { eventSettings, eventSettingsNow } from './event-settings';
 import { trackServerEvent } from '../analytics/server-events';
 
 // Details that belong to one mode and are cleared when the event no longer uses it.
@@ -70,6 +67,7 @@ const ALL_COLUMNS = `${PUBLIC_COLUMNS}, host_id, venue_address, map_url, join_ur
 @Injectable()
 export class EventsService {
   private admin;
+  private readonly bucket: CoverBucket | null;
 
   constructor(
     config: ConfigService,
@@ -77,6 +75,16 @@ export class EventsService {
     private readonly notices: EventNoticesService,
   ) {
     this.admin = supabaseAdmin(config);
+    this.bucket = coverBucketFrom(config);
+  }
+
+  // What the event screens need to know about the admin's settings.
+  async options() {
+    const { events } = await eventSettings();
+    return {
+      coversEnabled: events.covers_enabled,
+      coverMaxMb: events.cover_max_mb,
+    };
   }
 
   // ── Hosting ──────────────────────────────────────────────────
@@ -115,9 +123,10 @@ export class EventsService {
       .select('id', { count: 'exact' })
       .eq('host_id', hostId)
       .gte('created_at', since);
-    if ((count ?? 0) >= EVENTS_PER_DAY)
+    const perDay = (await eventSettings()).events.events_per_day;
+    if ((count ?? 0) >= perDay)
       throw new BadRequestException(
-        `You can create up to ${EVENTS_PER_DAY} events a day`,
+        `You can create up to ${perDay} events a day`,
       );
 
     const row = this.eventColumns(dto);
@@ -572,15 +581,37 @@ export class EventsService {
 
   async setCover(hostId: string, eventId: string, file?: Buffer) {
     const event = await this.hostEvent(hostId, eventId);
-    const cover = cleanCover(file);
+    const { events, storage } = await eventSettings();
+    if (!events.covers_enabled)
+      throw new ForbiddenException('Cover pictures are turned off');
+    const cover = cleanCover(file, events.cover_max_mb * 1024 * 1024);
     const now = new Date();
+    const useBucket = storage.cover_storage === 'bucket' && !!this.bucket;
+    if (storage.cover_storage === 'bucket' && !this.bucket)
+      logger.warn(
+        'Cover storage is set to the bucket, but no bucket is set up; using the database',
+      );
+    const previous = await this.coverRow(event.id);
+    const key = useBucket
+      ? `event-covers/${event.id}/${now.getTime()}.${cover.mime === 'image/png' ? 'png' : 'jpg'}`
+      : null;
     try {
+      if (key) await this.bucket!.put(key, cover.data, cover.mime);
       await getPool().query(
-        `INSERT INTO event_covers (event_id, mime, data, size, updated_at)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO event_covers (event_id, mime, data, size, storage, object_key, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (event_id) DO UPDATE
-           SET mime = EXCLUDED.mime, data = EXCLUDED.data, size = EXCLUDED.size, updated_at = EXCLUDED.updated_at`,
-        [event.id, cover.mime, cover.data, cover.data.length, now],
+           SET mime = EXCLUDED.mime, data = EXCLUDED.data, size = EXCLUDED.size,
+               storage = EXCLUDED.storage, object_key = EXCLUDED.object_key, updated_at = EXCLUDED.updated_at`,
+        [
+          event.id,
+          cover.mime,
+          key ? null : cover.data,
+          cover.data.length,
+          key ? 'bucket' : 'database',
+          key,
+          now,
+        ],
       );
       await getPool().query(
         'UPDATE events SET cover_updated_at = $2 WHERE id = $1',
@@ -588,14 +619,17 @@ export class EventsService {
       );
     } catch (error) {
       logger.error('Cover save failed', { error });
+      if (key) await this.removeObject(key);
       throw new BadRequestException('Could not save the picture');
     }
+    if (previous?.object_key && previous.object_key !== key)
+      await this.removeObject(previous.object_key);
     return { coverVersion: now.getTime() };
   }
 
   async removeCover(hostId: string, eventId: string) {
     const event = await this.hostEvent(hostId, eventId);
-    await this.admin.from('event_covers').delete().eq('event_id', event.id);
+    await this.dropCover(event.id);
     await this.admin
       .from('events')
       .update({ cover_updated_at: null })
@@ -608,14 +642,23 @@ export class EventsService {
     slug: string,
   ): Promise<{ mime: string; data: Buffer; version: number | null }> {
     const event = await this.bySlug(slug);
-    const { rows } = await getPool().query(
-      'SELECT mime, data FROM event_covers WHERE event_id = $1',
-      [event.id],
-    );
-    if (!rows[0]) throw new NotFoundException('No picture');
+    if (!(await eventSettings()).events.covers_enabled)
+      throw new NotFoundException('No picture');
+    const row = await this.coverRow(event.id, true);
+    if (!row) throw new NotFoundException('No picture');
+    let data: Buffer | null = row.data ?? null;
+    if (row.storage === 'bucket') {
+      if (!this.bucket || !row.object_key)
+        throw new NotFoundException('No picture');
+      data = await this.bucket.get(row.object_key).catch((error) => {
+        logger.error('Cover read from the bucket failed', { error });
+        return null;
+      });
+    }
+    if (!data) throw new NotFoundException('No picture');
     return {
-      mime: rows[0].mime,
-      data: rows[0].data,
+      mime: row.mime,
+      data,
       version: event.cover_updated_at
         ? new Date(event.cover_updated_at).getTime()
         : null,
@@ -625,14 +668,38 @@ export class EventsService {
   // A deleted or removed event keeps no picture.
   async dropCover(eventId: string) {
     try {
+      const row = await this.coverRow(eventId);
       await getPool().query('DELETE FROM event_covers WHERE event_id = $1', [
         eventId,
       ]);
+      if (row?.object_key) await this.removeObject(row.object_key);
     } catch (error) {
       logger.warn('Cover clean-up failed', { error });
     }
   }
 
+  private async coverRow(eventId: string, withData = false) {
+    const { rows } = await getPool().query(
+      `SELECT mime, storage, object_key${withData ? ', data' : ''} FROM event_covers WHERE event_id = $1`,
+      [eventId],
+    );
+    return rows[0] as
+      | {
+          mime: string;
+          storage: string;
+          object_key: string | null;
+          data?: Buffer | null;
+        }
+      | undefined;
+  }
+
+  // A picture left behind in the bucket only costs space, so a failed delete is logged, not raised.
+  private async removeObject(key: string) {
+    if (!this.bucket) return;
+    await this.bucket
+      .remove(key)
+      .catch((error) => logger.warn('Bucket clean-up failed', { key, error }));
+  }
 
   // ── Helpers ──────────────────────────────────────────────────
 
@@ -727,9 +794,10 @@ export class EventsService {
       organiserName: e.organiser_name,
       status: e.status,
       phase: eventPhase(e),
-      coverVersion: e.cover_updated_at
-        ? new Date(e.cover_updated_at).getTime()
-        : null,
+      coverVersion:
+        e.cover_updated_at && eventSettingsNow().events.covers_enabled
+          ? new Date(e.cover_updated_at).getTime()
+          : null,
       registrationOpen:
         e.status === 'published' && new Date(closes).getTime() > Date.now(),
       placesLeft: counts

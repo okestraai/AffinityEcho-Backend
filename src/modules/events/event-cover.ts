@@ -104,13 +104,18 @@ export function stripPng(data: Buffer): Buffer {
 }
 
 // Checks an upload and returns it ready to store.
-export function cleanCover(data: Buffer | undefined): {
+export function cleanCover(
+  data: Buffer | undefined,
+  maxBytes = COVER_MAX_BYTES,
+): {
   mime: CoverMime;
   data: Buffer;
 } {
   if (!data?.length) throw new BadRequestException('Choose a picture');
-  if (data.length > COVER_MAX_BYTES)
-    throw new BadRequestException('The picture must be 2 MB or smaller');
+  if (data.length > Math.min(maxBytes, COVER_MAX_BYTES))
+    throw new BadRequestException(
+      `The picture must be ${Math.min(maxBytes, COVER_MAX_BYTES) / (1024 * 1024)} MB or smaller`,
+    );
   const mime = coverType(data);
   if (!mime) throw new BadRequestException('Use a JPEG or PNG picture');
   return {
