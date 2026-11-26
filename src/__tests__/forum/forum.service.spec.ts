@@ -578,6 +578,17 @@ describe('ForumService', () => {
       expect(result.companyName).toBe('Acme');
     });
 
+    it('lists every visible forum in the space, Other topics last', async () => {
+      const chain = createMockQueryChain({ data: [], error: null });
+      mockClient.from.mockReturnValueOnce(chain);
+
+      await service.getFoundationForumsWithMetrics('Students');
+      expect(chain.eq).toHaveBeenCalledWith('company_name', 'Students');
+      expect(chain.eq).not.toHaveBeenCalledWith('category', 'foundation');
+      expect(chain.or).toHaveBeenCalledWith('is_hidden.is.null,is_hidden.eq.false');
+      expect(chain.order).toHaveBeenNthCalledWith(1, 'is_other_topics', { ascending: true });
+    });
+
     it('should return empty result when no foundation forums found', async () => {
       const chain = createMockQueryChain({ data: [], error: null });
       mockClient.from.mockReturnValueOnce(chain);

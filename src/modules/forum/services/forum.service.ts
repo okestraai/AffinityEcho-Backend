@@ -951,7 +951,9 @@ export class ForumService {
       `,
         )
         .eq('company_name', companyName)
-        .eq('is_global', false);
+        .eq('is_global', false)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .is('deleted_at', null);
 
       if (error) {
         logger.error(MSG.FORUM.METRICS_FAILED, {
@@ -1050,10 +1052,15 @@ export class ForumService {
         topic_count,
         member_count,
         last_activity,
-        category
+        category,
+        is_shared,
+        is_other_topics,
+        sort_order
       `,
         )
         .eq('is_global', true)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .is('deleted_at', null)
         .order('topic_count', { ascending: false })
         .order('member_count', { ascending: false });
 
@@ -1120,11 +1127,18 @@ export class ForumService {
         last_activity,
         category,
         rules,
-        moderators
+        moderators,
+        is_other_topics,
+        sort_order
         `,
         )
+        // Every forum in the space, in admins' order, with Other topics last.
         .eq('company_name', companyName)
-        .eq('category', 'foundation')
+        .eq('is_global', false)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+        .is('deleted_at', null)
+        .order('is_other_topics', { ascending: true })
+        .order('sort_order', { ascending: true })
         .order('name', { ascending: true });
 
       if (error) {
