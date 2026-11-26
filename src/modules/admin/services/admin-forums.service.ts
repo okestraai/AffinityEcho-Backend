@@ -190,10 +190,10 @@ export class AdminForumsService {
     ip?: string,
   ) {
     const current = await this.getForum(forumId);
-    if (
-      current.is_other_topics &&
-      (body.name !== undefined || body.is_hidden === true)
-    ) {
+    const renaming =
+      body.name !== undefined &&
+      (typeof body.name !== 'string' || body.name.trim() !== current.name);
+    if (current.is_other_topics && (renaming || body.is_hidden === true)) {
       throw new ConflictException(
         "Other topics can't be renamed or hidden: topics without a forum go there",
       );
@@ -201,7 +201,7 @@ export class AdminForumsService {
     const update: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
-    if (body.name !== undefined) {
+    if (renaming) {
       const newName = typeof body.name === 'string' ? body.name.trim() : '';
       if (!newName) throw new BadRequestException('Forum name is required');
       await this.assertNameFree(current, newName, forumId);

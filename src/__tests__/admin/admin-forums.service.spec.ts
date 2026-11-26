@@ -225,6 +225,14 @@ describe('AdminForumsService', () => {
       await expect(service.deleteForum('a', 'A', 'ot', 'r')).rejects.toThrow(ConflictException);
     });
 
+    it('accepts its own unchanged name, as the edit form sends it', async () => {
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: { id: 'ot', name: 'Other topics', is_other_topics: true }, error: null }))
+        .mockReturnValue(createMockQueryChain({ data: { id: 'ot' }, error: null }));
+      const result = await service.updateForum('a', 'A', 'ot', { name: 'Other topics', is_locked: true, is_hidden: false });
+      expect(result.success).toBe(true);
+    });
+
     it('can still be locked', async () => {
       mockClient.from
         .mockReturnValueOnce(otherTopics())
