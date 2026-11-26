@@ -206,19 +206,24 @@ export class AuthService {
 
     const now = Date.now();
     const code = newOtp();
-    await this.otpStore.set(email, {
-      hash: this.otpStore.hash(email, code),
-      expires: now + LOGIN_CODE_TTL_MS,
-      attempts: 0,
-      lastSent: now,
-      type: 'login',
-    });
-    const sending = this.emailService.sendSignInCodeEmail(
-      email,
-      code,
-      profile?.username || 'there',
-    );
-    // On the sign-in screen, waiting for the mail (or its failure) would show which emails have accounts.
+    // The code is stored before the email goes out, so it always works once it arrives.
+    const sending = this.otpStore
+      .set(email, {
+        hash: this.otpStore.hash(email, code),
+        expires: now + LOGIN_CODE_TTL_MS,
+        attempts: 0,
+        lastSent: now,
+        type: 'login',
+      })
+      .then(() =>
+        this.emailService.sendSignInCodeEmail(
+          email,
+          code,
+          profile?.username || 'there',
+        ),
+      );
+    // On the sign-in screen nothing past the account lookup is awaited, so a known email
+    // answers exactly like an unknown one.
     if (dto.existingOnly) {
       sending.catch((error) =>
         logger.error('Could not send a sign-in code', { error }),

@@ -163,6 +163,27 @@ describe('AuthService – email code sign-in', () => {
       await new Promise((r) => setTimeout(r, 80));
     });
 
+    it('answers a known email on the sign-in screen before the code is even stored', async () => {
+      from().mockReturnValueOnce(chain({ username: 'ada' }));
+      const store = (service as any).otpStore;
+      const realSet = store.set.bind(store);
+      let stored = false;
+      jest.spyOn(store, 'set').mockImplementationOnce(
+        (...args: any[]) =>
+          new Promise((resolve) =>
+            setTimeout(() => {
+              stored = true;
+              resolve(realSet(...args));
+            }, 50),
+          ),
+      );
+      await service.sendLoginCode({ email: 'ada@example.com', existingOnly: true });
+      expect(stored).toBe(false);
+      await new Promise((r) => setTimeout(r, 80));
+      expect(stored).toBe(true);
+      expect((mockEmail as any).sendSignInCodeEmail).toHaveBeenCalled();
+    });
+
     it('allows 3 sends every 5 minutes', async () => {
       from().mockReturnValue(chain(null));
       for (let i = 0; i < 3; i++) await service.sendLoginCode({ email: 'a@example.com' });
