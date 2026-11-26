@@ -8,6 +8,8 @@ import {
   Query,
   Res,
   UseGuards,
+  HttpCode,
+  HttpStatus,
   Put,
   Patch,
 } from '@nestjs/common';
@@ -37,6 +39,8 @@ import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { OnboardingDataDto } from '../dto/onboarding.dto';
 import { ResetPasswordWithOtpDto } from '../dto/reset-password.dto';
 
+import { SendCodeDto, SetPasswordDto, VerifyCodeDto } from '../dto/code-login.dto';
+import { Throttle } from '@nestjs/throttler';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -285,6 +289,44 @@ export class AuthController {
   })
   async me(@CurrentUser() user: any) {
     return this.authService.getCurrentUser(user.userId);
+  }
+
+  @Public()
+  @Post('code/send')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Email me a sign-in code',
+    description:
+      'Sends a 6-digit code, valid 10 minutes. The reply is the same whether or not the email has an account. 3 sends every 5 minutes.',
+  })
+  @ApiBody({ type: SendCodeDto })
+  async sendLoginCode(@Body() dto: SendCodeDto) {
+    return this.authService.sendLoginCode(dto);
+  }
+
+  @Public()
+  @Post('code/verify')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Sign in with an email code',
+    description:
+      'A right code signs the member in. A new email gets an account with no password (termsAccepted is needed). 5 tries per code.',
+  })
+  @ApiBody({ type: VerifyCodeDto })
+  async verifyLoginCode(@Body() dto: VerifyCodeDto) {
+    return this.authService.verifyLoginCode(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @Post('password/set')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a password after signing in with a code' })
+  @ApiBody({ type: SetPasswordDto })
+  async setPassword(@CurrentUser() user: any, @Body() dto: SetPasswordDto) {
+    return this.authService.setPassword(user.userId, dto.password);
   }
 
   @Public()

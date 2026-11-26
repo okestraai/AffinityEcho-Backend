@@ -43,6 +43,8 @@ export const VALID_PERMISSIONS = [
   'nooks:delete',
   'nooks:remove_member',
   'nooks:export',
+  'events:view',
+  'events:manage',
   'notifications:view',
   'notifications:create',
   'notifications:send',

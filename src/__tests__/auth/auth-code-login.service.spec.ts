@@ -1,0 +1,257 @@
+import {
+  UnauthorizedException,
+  BadRequestException,
+  ConflictException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { AuthService } from '../../modules/auth/services/auth.service';
+import {
+  createMockQueryChain,
+  createMockSupabaseClient,
+  createMockConfigService,
+} from '../../__tests__/helpers/mock-supabase';
+
+// ── Module-level mocks ───────────────────────────────────────────────
+jest.mock('../../database/supabase.client', () => ({
+  supabaseAdmin: jest.fn(),
+}));
+
+jest.mock('../../common/utils/logger.util', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed-password'),
+  compare: jest.fn().mockResolvedValue(true),
+}));
+
+jest.mock('uuid', () => ({
+  v4: jest.fn().mockReturnValue('user-123'),
+}));
+
+import { supabaseAdmin } from '../../database/supabase.client';
+import * as bcrypt from 'bcrypt';
+
+// ── Helper factories ─────────────────────────────────────────────────
+
+function createMockJwtService() {
+  return {
+    sign: jest.fn().mockReturnValue('mock-jwt-token'),
+    verify: jest
+      .fn()
+      .mockReturnValue({ sub: 'user-123', email: 'test@example.com' }),
+  };
+}
+
+function createMockEncryptionUtil() {
+  return {
+    encrypt: jest.fn((val: string) => `enc_${val}`),
+    decrypt: jest.fn((val: string) => val.replace('enc_', '')),
+  };
+}
+
+function createMockEmailService() {
+  return {
+    sendOtpEmail: jest.fn().mockResolvedValue(undefined),
+    sendSignInCodeEmail: jest.fn().mockResolvedValue(undefined),
+    sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+    sendPasswordResetOtpEmail: jest.fn().mockResolvedValue(undefined),
+    sendPasswordResetConfirmation: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function createMockOnboardingService() {
+  return {
+    saveOnboardingData: jest.fn().mockResolvedValue({
+      message: 'Onboarding completed',
+      has_completed_onboarding: true,
+    }),
+    getOnboardingStatus: jest.fn().mockResolvedValue({
+      hasCompletedOnboarding: false,
+    }),
+  };
+}
+
+// ── Test Suite ────────────────────────────────────────────────────────
+
+describe('AuthService – email code sign-in', () => {
+  let service: AuthService;
+  let mockConfig: ReturnType<typeof createMockConfigService>;
+  let mockJwt: ReturnType<typeof createMockJwtService>;
+  let mockEncryption: ReturnType<typeof createMockEncryptionUtil>;
+  let mockEmail: ReturnType<typeof createMockEmailService>;
+  let mockOnboarding: ReturnType<typeof createMockOnboardingService>;
+  let mockAdminSupabase: ReturnType<typeof createMockSupabaseClient>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockConfig = createMockConfigService();
+    mockJwt = createMockJwtService();
+    mockEncryption = createMockEncryptionUtil();
+    mockEmail = createMockEmailService();
+    mockOnboarding = createMockOnboardingService();
+
+    mockAdminSupabase = createMockSupabaseClient();
+
+    (supabaseAdmin as jest.Mock).mockReturnValue(mockAdminSupabase.client);
+
+    // Reset bcrypt mocks to defaults
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    service = new AuthService(
+      mockConfig as any,
+      mockJwt as any,
+      mockEncryption as any,
+      mockEmail as any,
+      mockOnboarding as any,
+    );
+  });
+
+  const from = () => mockAdminSupabase.client.from as jest.Mock;
+  const chain = (data: any) => createMockQueryChain({ data, error: null });
+  // The last code emailed to an address.
+  const sentCode = () =>
+    (mockEmail as any).sendSignInCodeEmail.mock.calls.at(-1)[1] as string;
+
+  describe('sendLoginCode', () => {
+    it('gives the same reply for an unknown email and sends a code', async () => {
+      from().mockReturnValueOnce(chain(null));
+      const reply = await service.sendLoginCode({ email: 'New@Example.com' });
+      expect(reply.message).toBe('If this email can sign in, a code is on its way.');
+      expect((mockEmail as any).sendSignInCodeEmail).toHaveBeenCalledWith(
+        'new@example.com',
+        expect.stringMatching(/^\d{6}$/),
+        'there',
+      );
+    });
+
+    it('sends nothing to a suspended account, with the same reply', async () => {
+      from().mockReturnValueOnce(chain({ username: 'x', is_suspended: true }));
+      const reply = await service.sendLoginCode({ email: 'sus@example.com' });
+      expect(reply.message).toBe('If this email can sign in, a code is on its way.');
+      expect((mockEmail as any).sendSignInCodeEmail).not.toHaveBeenCalled();
+    });
+
+    it('allows 3 sends every 5 minutes', async () => {
+      from().mockReturnValue(chain(null));
+      for (let i = 0; i < 3; i++) await service.sendLoginCode({ email: 'a@example.com' });
+      await expect(service.sendLoginCode({ email: 'a@example.com' })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('verifyLoginCode', () => {
+    const user = {
+      id: 'u1',
+      email: 'ada@example.com',
+      username: 'Quiet_Owl',
+      role: 'user',
+      has_completed_onboarding: false,
+      password_hash: null,
+      first_name_encrypted: null,
+    };
+
+    it('refuses a wrong code', async () => {
+      from().mockReturnValue(chain(null));
+      await service.sendLoginCode({ email: 'ada@example.com' });
+      await expect(
+        service.verifyLoginCode({ email: 'ada@example.com', code: '000000' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('allows 5 tries per code', async () => {
+      from().mockReturnValue(chain(null));
+      await service.sendLoginCode({ email: 'ada@example.com' });
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          service.verifyLoginCode({ email: 'ada@example.com', code: '000000' }),
+        ).rejects.toThrow(UnauthorizedException);
+      }
+      await expect(
+        service.verifyLoginCode({ email: 'ada@example.com', code: sentCode() }),
+      ).rejects.toThrow('Too many attempts');
+    });
+
+    it('signs in an existing member without making a second account', async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'ada@example.com' });
+      const update = chain(null);
+      from().mockReturnValueOnce(chain(user)).mockReturnValueOnce(update);
+      const result = await service.verifyLoginCode({
+        email: 'ada@example.com',
+        code: sentCode(),
+        firstName: 'Ada',
+      });
+      expect(result.created).toBe(false);
+      expect(result.accessToken ?? (result as any).access_token).toBeDefined();
+      expect(result.user.has_password).toBe(false);
+      expect(update.update).toHaveBeenCalledWith(
+        expect.objectContaining({ first_name_encrypted: 'enc_Ada' }),
+      );
+      // The code is used once.
+      await expect(
+        service.verifyLoginCode({ email: 'ada@example.com', code: sentCode() }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('needs the terms before making a new account', async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'new@example.com' });
+      from().mockReturnValueOnce(chain(null));
+      await expect(
+        service.verifyLoginCode({ email: 'new@example.com', code: sentCode() }),
+      ).rejects.toThrow('Accept the terms');
+    });
+
+    it('makes an account with no password for a new email', async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'new@example.com' });
+      const insert = chain(null);
+      from()
+        .mockReturnValueOnce(chain(null))
+        .mockReturnValueOnce(insert)
+        .mockReturnValueOnce(chain({ ...user, id: 'user-123', email: 'new@example.com' }))
+        .mockReturnValue(chain(null));
+      const result = await service.verifyLoginCode({
+        email: 'new@example.com',
+        code: sentCode(),
+        termsAccepted: true,
+      });
+      expect(result.created).toBe(true);
+      expect(insert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'new@example.com', password_hash: null, terms_accepted: true }),
+      );
+    });
+
+    it('refuses a suspended account', async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'ada@example.com' });
+      from().mockReturnValueOnce(chain({ ...user, is_suspended: true }));
+      await expect(
+        service.verifyLoginCode({ email: 'ada@example.com', code: sentCode() }),
+      ).rejects.toThrow('suspended');
+    });
+  });
+
+  describe('setPassword', () => {
+    it('sets a password only when there is none', async () => {
+      from().mockReturnValueOnce(chain([{ id: 'u1' }]));
+      await expect(service.setPassword('u1', 'StrongPass1!')).resolves.toBeDefined();
+      from().mockReturnValueOnce(chain([]));
+      await expect(service.setPassword('u1', 'StrongPass1!')).rejects.toThrow(ConflictException);
+    });
+
+    it('refuses a weak password', async () => {
+      await expect(service.setPassword('u1', 'short')).rejects.toThrow(BadRequestException);
+    });
+  });
+});

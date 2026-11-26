@@ -28,6 +28,16 @@ import { MSG } from '../../../common/constants/messages';
 import { RedisService } from '../../../common/services/redis.service';
 import { AttemptCounter } from '../../../common/utils/attempt-counter';
 import { OtpStore, OtpType, newOtp } from '../../../common/utils/otp-store';
+import {
+  SendCodeDto,
+  VerifyCodeDto,
+} from '../dto/code-login.dto';
+
+// Email sign-in codes: valid 10 minutes, 5 tries each, and 3 sends every 5 minutes.
+const LOGIN_CODE_TTL_MS = 10 * 60 * 1000;
+const LOGIN_CODE_MAX_TRIES = 5;
+const LOGIN_CODE_MAX_SENDS = 3;
+const LOGIN_CODE_SEND_WINDOW_MS = 5 * 60 * 1000;
 import { splitEthnicities } from '../../../common/constants/onboarding-options';
 
 @Injectable()
@@ -132,19 +142,21 @@ export class AuthService {
     key: string,
     token: string,
     type: OtpType,
+    maxAttempts = this.MAX_OTP_ATTEMPTS,
   ): Promise<boolean> {
     key = key.toLowerCase();
     const now = Date.now();
     const stored = await this.otpStore.get(key, type);
     const live = !!stored && stored.expires >= now;
-    const burstKey = `otp:burst:${key}`;
+    const burstKey =
+      type === 'login' ? `otp:burst:login:${key}` : `otp:burst:${key}`;
     // Only a real guess at a live code counts; it is counted before the check.
     if (live) {
       const tryNumber = await this.otpGuesses.bump(
         burstKey,
         this.OTP_COOLDOWN_MS,
       );
-      if (tryNumber > this.MAX_OTP_ATTEMPTS) {
+      if (tryNumber > maxAttempts) {
         const { msLeft } = await this.otpGuesses.count(burstKey);
         const minutes = Math.max(1, Math.ceil(msLeft / 60_000));
         throw new BadRequestException(
@@ -161,6 +173,162 @@ export class AuthService {
       return true;
     }
     return false;
+  }
+
+  // ── EMAIL CODE SIGN-IN ─────────────────────────────────────────
+  // The same reply whether or not the email has an account, so the route can't be used to find members.
+  async sendLoginCode(dto: SendCodeDto) {
+    const email = dto.email.toLowerCase();
+    const reply = { message: 'If this email can sign in, a code is on its way.' };
+
+    const sends = await this.otpGuesses.bump(
+      `otp:send:login:${email}`,
+      LOGIN_CODE_SEND_WINDOW_MS,
+    );
+    if (sends > LOGIN_CODE_MAX_SENDS) {
+      const { msLeft } = await this.otpGuesses.count(`otp:send:login:${email}`);
+      const minutes = Math.max(1, Math.ceil(msLeft / 60_000));
+      throw new BadRequestException(
+        `Too many codes. Try again in ${minutes} minute(s).`,
+      );
+    }
+
+    const { data: profile } = await this.admin
+      .from('user_profiles')
+      .select('username, is_suspended, is_deleted')
+      .eq('email', email)
+      .maybeSingle();
+    // Suspended and deleted accounts get the same reply and no code.
+    if (profile?.is_suspended || profile?.is_deleted) return reply;
+
+    const now = Date.now();
+    const code = newOtp();
+    await this.otpStore.set(email, {
+      hash: this.otpStore.hash(email, code),
+      expires: now + LOGIN_CODE_TTL_MS,
+      attempts: 0,
+      lastSent: now,
+      type: 'login',
+    });
+    // A new code starts a fresh set of tries.
+    await this.otpGuesses.clear(`otp:burst:login:${email}`);
+    try {
+      await this.emailService.sendSignInCodeEmail(
+        email,
+        code,
+        profile?.username || 'there',
+      );
+    } catch (error) {
+      logger.error('Could not send a sign-in code', { error });
+      throw new InternalServerErrorException("We couldn't send the email. Try again.");
+    }
+    return reply;
+  }
+
+  // A right code signs the member in; a new email gets an account with no password.
+  async verifyLoginCode(dto: VerifyCodeDto) {
+    const email = dto.email.toLowerCase();
+    const ok = await this.checkOtp(email, dto.code, 'login', LOGIN_CODE_MAX_TRIES);
+    if (!ok) throw new UnauthorizedException('That code is wrong or has expired.');
+
+    let { data: user } = await this.admin
+      .from('user_profiles')
+      .select(
+        'id, email, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted, password_hash, first_name_encrypted',
+      )
+      .eq('email', email)
+      .maybeSingle();
+
+    let created = false;
+    if (!user) {
+      if (dto.termsAccepted !== true) {
+        throw new BadRequestException('Accept the terms to create your account');
+      }
+      const userId = uuidv4();
+      const made = await this.createProfile(
+        userId,
+        this.generateUsername(),
+        email,
+        undefined,
+        undefined,
+        'email',
+        undefined,
+        undefined,
+        true,
+      );
+      ({ data: user } = await this.admin
+        .from('user_profiles')
+        .select(
+          'id, email, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted, password_hash, first_name_encrypted',
+        )
+        .eq('email', email)
+        .maybeSingle());
+      if (!user) {
+        logger.error('Code sign-in could not create an account', { made });
+        throw new InternalServerErrorException('Could not create your account. Try again.');
+      }
+      created = true;
+    }
+
+    if (user.is_suspended)
+      throw new UnauthorizedException(
+        'Your account has been suspended. Please contact support for assistance.',
+      );
+    if (user.is_deleted)
+      throw new UnauthorizedException(
+        'This account has been deleted. Please contact support if you believe this is an error.',
+      );
+
+    const now = new Date().toISOString();
+    const update: Record<string, unknown> = {
+      email_confirmed_at: now,
+      last_active_at: now,
+    };
+    // The name given at sign-in is kept, so onboarding doesn't ask again.
+    if (!user.first_name_encrypted && dto.firstName) {
+      update.first_name_encrypted = this.encryption.encrypt(dto.firstName);
+      if (dto.lastName)
+        update.last_name_encrypted = this.encryption.encrypt(dto.lastName);
+    }
+    await this.admin.from('user_profiles').update(update).eq('id', user.id);
+
+    const role = user.role || 'user';
+    let permissions: string[] | null | undefined;
+    if (role === 'admin') permissions = await this.fetchAdminPermissions(user.id);
+    else if (role === 'super_admin') permissions = null;
+
+    return {
+      ...this.generateTokens(user.id, email),
+      created,
+      user: {
+        id: user.id,
+        email,
+        username: user.username,
+        role,
+        has_completed_onboarding: !!user.has_completed_onboarding,
+        is_deactivated: !!user.is_deactivated,
+        has_password: !!user.password_hash,
+        ...(permissions !== undefined && { permissions }),
+      },
+    };
+  }
+
+  // The optional step after a code sign-in. Members who already have a password change it instead.
+  async setPassword(userId: string, password: string) {
+    const check = this.validatePassword(password);
+    if (!check.isValid) throw new BadRequestException(check.message);
+    const passwordHash = await bcrypt.hash(password, 12);
+    const { data } = await this.admin
+      .from('user_profiles')
+      .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .is('password_hash', null)
+      .select('id');
+    if (!data?.length)
+      throw new ConflictException(
+        'You already have a password. Use Change password instead.',
+      );
+    return { message: 'Password set. You can now sign in with it too.' };
   }
 
   // EMAIL + PASSWORD SIGNUP

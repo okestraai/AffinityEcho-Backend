@@ -35,6 +35,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         typeof message === 'string'
           ? message
           : (message as any).message || message,
+      // A short code the apps can act on, such as ONBOARDING_REQUIRED.
+      ...(typeof message === 'object' &&
+      typeof (message as any).code === 'string'
+        ? { code: (message as any).code }
+        : {}),
     };
 
     // LOG WITH WINSTON

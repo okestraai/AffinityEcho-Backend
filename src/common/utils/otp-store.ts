@@ -1,7 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'crypto';
 import type { RedisService } from '../services/redis.service';
 
-export type OtpType = 'signup' | 'password_reset';
+export type OtpType = 'signup' | 'password_reset' | 'login';
 
 export interface OtpRecord {
   hash: string;

@@ -117,7 +117,13 @@ export class EmailService {
     }
   }
 
-  async sendEmail(to: string, subject: string, template: string, data: any) {
+  async sendEmail(
+    to: string,
+    subject: string,
+    template: string,
+    data: any,
+    attachments?: { filename: string; content: string | Buffer; contentType?: string; cid?: string }[],
+  ) {
     // Ensure connection
     if (!this.isConnected) {
       try {
@@ -137,6 +143,7 @@ export class EmailService {
         to,
         subject,
         html,
+        ...(attachments?.length ? { attachments } : {}),
       };
 
       const result = await this.transporter.sendMail(mailOptions);
@@ -159,6 +166,15 @@ export class EmailService {
       otp,
       supportEmail: this.config.get('SUPPORT_EMAIL'),
     });
+  }
+
+  async sendSignInCodeEmail(email: string, otp: string, username: string) {
+    return this.sendEmail(
+      email,
+      'Your sign-in code - Affinity Echo',
+      'sign-in-code',
+      { username, otp, supportEmail: this.config.get('SUPPORT_EMAIL') },
+    );
   }
 
   async sendPasswordResetEmail(email: string, token: string, username: string) {
