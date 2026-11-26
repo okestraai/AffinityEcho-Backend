@@ -43,7 +43,10 @@ export class EventsController {
 
   @Public()
   @Get('public/:slug')
-  @ApiOperation({ summary: 'The public event page: venue name and city, never the address or join link' })
+  @ApiOperation({
+    summary:
+      'The public event page: venue name and city, never the address or join link',
+  })
   publicView(@Param('slug') slug: string) {
     return this.events.publicView(cleanSlug(slug));
   }
@@ -51,7 +54,9 @@ export class EventsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get('mine')
-  @ApiOperation({ summary: 'My Events: registered (active and past) and hosting' })
+  @ApiOperation({
+    summary: 'My Events: registered (active and past) and hosting',
+  })
   mine(@CurrentUser() user: any) {
     return this.events.myEvents(user.userId);
   }
@@ -59,7 +64,10 @@ export class EventsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get(':slug')
-  @ApiOperation({ summary: 'The event for a signed-in member, with full details for guests and the host' })
+  @ApiOperation({
+    summary:
+      'The event for a signed-in member, with full details for guests and the host',
+  })
   memberView(@Param('slug') slug: string, @CurrentUser() user: any) {
     return this.events.memberView(cleanSlug(slug), user.userId);
   }
@@ -76,7 +84,10 @@ export class EventsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Patch(':eventId')
-  @ApiOperation({ summary: 'Edit your event; guests hear about changes grouped over 2 minutes' })
+  @ApiOperation({
+    summary:
+      'Edit your event; guests hear about changes grouped over 2 minutes',
+  })
   update(
     @CurrentUser() user: any,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -90,15 +101,23 @@ export class EventsController {
   @Post(':eventId/cancel')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel your event; guests are told' })
-  cancel(@CurrentUser() user: any, @Param('eventId', ParseUUIDPipe) eventId: string) {
+  cancel(
+    @CurrentUser() user: any,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
     return this.events.cancel(user.userId, eventId);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get(':eventId/host')
-  @ApiOperation({ summary: 'Host page: link opens, registrations and the guest list' })
-  hostPage(@CurrentUser() user: any, @Param('eventId', ParseUUIDPipe) eventId: string) {
+  @ApiOperation({
+    summary: 'Host page: link opens, registrations and the guest list',
+  })
+  hostPage(
+    @CurrentUser() user: any,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
     return this.events.hostPage(user.userId, eventId);
   }
 
@@ -106,7 +125,9 @@ export class EventsController {
   @ApiBearerAuth('access-token')
   @Post(':eventId/check-in')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Check a guest in by code (QR) or from the guest list' })
+  @ApiOperation({
+    summary: 'Check a guest in by code (QR) or from the guest list',
+  })
   checkIn(
     @CurrentUser() user: any,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -118,7 +139,9 @@ export class EventsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get(':eventId/guests.csv')
-  @ApiOperation({ summary: 'Guest list as CSV (emails only for guests who shared them)' })
+  @ApiOperation({
+    summary: 'Guest list as CSV (emails only for guests who shared them)',
+  })
   async guestCsv(
     @CurrentUser() user: any,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -135,16 +158,29 @@ export class EventsController {
   @ApiBearerAuth('access-token')
   @Post(':slug/register')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @ApiOperation({ summary: 'Register for an event. Your name is shown to the host; your email only if you choose.' })
-  register(@CurrentUser() user: any, @Param('slug') slug: string, @Body() dto: RegisterDto) {
+  @ApiOperation({
+    summary:
+      'Register for an event. Your name is shown to the host; your email only if you choose.',
+  })
+  register(
+    @CurrentUser() user: any,
+    @Param('slug') slug: string,
+    @Body() dto: RegisterDto,
+  ) {
     return this.events.register(user.userId, cleanSlug(slug), dto);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Patch(':slug/registration')
-  @ApiOperation({ summary: 'Change whether the host sees your email (until the event ends)' })
-  setSharing(@CurrentUser() user: any, @Param('slug') slug: string, @Body() dto: RegistrationSharingDto) {
+  @ApiOperation({
+    summary: 'Change whether the host sees your email (until the event ends)',
+  })
+  setSharing(
+    @CurrentUser() user: any,
+    @Param('slug') slug: string,
+    @Body() dto: RegistrationSharingDto,
+  ) {
     return this.events.setSharing(user.userId, cleanSlug(slug), dto.shareEmail);
   }
 
@@ -180,7 +216,15 @@ export class AdminEventsController {
   @Get()
   @RequirePermission('events:view')
   @ApiOperation({ summary: 'Events list, with open reports' })
-  list(@Query() query: { status?: string; reported?: string; page?: string; limit?: string }) {
+  list(
+    @Query()
+    query: {
+      status?: string;
+      reported?: string;
+      page?: string;
+      limit?: string;
+    },
+  ) {
     return this.admin.list(query);
   }
 
@@ -188,7 +232,11 @@ export class AdminEventsController {
   @HttpCode(HttpStatus.OK)
   @RequirePermission('events:manage')
   @ApiOperation({ summary: 'Remove an event; guests are told it is off' })
-  remove(@Req() req: any, @Param('eventId', ParseUUIDPipe) eventId: string, @Body() dto: RemoveEventDto) {
+  remove(
+    @Req() req: any,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Body() dto: RemoveEventDto,
+  ) {
     return this.admin.remove(actor(req), eventId, dto.reason);
   }
 
@@ -204,7 +252,11 @@ export class AdminEventsController {
   @HttpCode(HttpStatus.OK)
   @RequirePermission('events:manage')
   @ApiOperation({ summary: 'Stop a member from hosting events' })
-  stopHost(@Req() req: any, @Param('userId', ParseUUIDPipe) userId: string, @Body() dto: RemoveEventDto) {
+  stopHost(
+    @Req() req: any,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: RemoveEventDto,
+  ) {
     return this.admin.stopHost(actor(req), userId, dto.reason);
   }
 
@@ -221,7 +273,9 @@ function actor(req: any) {
   return {
     id: req.user.userId,
     username: req.user.username,
-    ip: req.headers?.['x-forwarded-for']?.split(',')[0] ?? req.socket?.remoteAddress,
+    ip:
+      req.headers?.['x-forwarded-for']?.split(',')[0] ??
+      req.socket?.remoteAddress,
   };
 }
 

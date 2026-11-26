@@ -31,7 +31,9 @@ export const ONBOARDED_ONLY = [
 const STAFF = ['moderator', 'admin', 'super_admin'];
 
 export function needsOnboarding(path: string): boolean {
+  // Express matches routes ignoring case, so the check does too.
   const first = path
+    .toLowerCase()
     .split('?')[0]
     .replace(/^\/+/, '')
     .replace(/^api\/v\d+\//, '')
@@ -54,7 +56,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       const req = context.switchToHttp().getRequest();
       if (needsOnboarding(req?.originalUrl ?? req?.url ?? '')) {
         throw new ForbiddenException({
-          message: 'Finish setting up your profile to use this part of Affinity Echo',
+          message:
+            'Finish setting up your profile to use this part of Affinity Echo',
           code: 'ONBOARDING_REQUIRED',
         });
       }

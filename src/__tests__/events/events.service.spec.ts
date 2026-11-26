@@ -145,6 +145,23 @@ describe('EventsService', () => {
       expect(notices.queueUpdate).toHaveBeenCalledWith('e1');
     });
 
+    it("clears the old mode's details when the mode changes", async () => {
+      const update = chain({ ...event, mode: 'physical', join_url: null });
+      client.from.mockReturnValueOnce(chain(event)).mockReturnValueOnce(update);
+      await service.update('host', 'e1', { mode: 'physical' });
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({ mode: 'physical', join_url: null }));
+    });
+
+    it('refuses to empty a required field but clears an optional one', async () => {
+      client.from.mockReturnValueOnce(chain(event));
+      await expect(service.update('host', 'e1', { title: null } as any)).rejects.toThrow("title can't be empty");
+
+      const update = chain(event);
+      client.from.mockReturnValueOnce(chain(event)).mockReturnValueOnce(update);
+      await service.update('host', 'e1', { mapUrl: null } as any);
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({ map_url: null }));
+    });
+
     it("hides another member's event from a would-be host", async () => {
       client.from.mockReturnValueOnce(chain(event));
       await expect(service.hostPage('someone-else', 'e1')).rejects.toThrow(NotFoundException);

@@ -8,7 +8,10 @@ import { PermissionGuard } from '../../common/guards/permission.guard';
 import { EVENTS_QUEUE } from './events.constants';
 import { EventsService } from './events.service';
 import { EventsAdminService } from './events-admin.service';
-import { EventNoticesProcessor, EventNoticesService } from './event-notices.service';
+import {
+  EventNoticesProcessor,
+  EventNoticesService,
+} from './event-notices.service';
 import { AdminEventsController, EventsController } from './events.controller';
 
 @Module({

@@ -38,18 +38,29 @@ export class EventNoticesService {
           jobId: `event-updated-${eventId}`,
           delay: UPDATE_GROUP_MS,
           removeOnComplete: true,
-          removeOnFail: 100,
+          removeOnFail: true,
         },
       )
-      .catch((error) => logger.warn('Could not queue an event update', { eventId, error }));
+      .catch((error) =>
+        logger.warn('Could not queue an event update', { eventId, error }),
+      );
   }
 
   async queueCancel(eventId: string) {
     // A cancelled event needs no update notice.
     await this.queue.remove(`event-updated-${eventId}`).catch(() => undefined);
     await this.queue
-      .add('cancelled', { eventId }, { removeOnComplete: true, removeOnFail: 100 })
-      .catch((error) => logger.warn('Could not queue an event cancellation', { eventId, error }));
+      .add(
+        'cancelled',
+        { eventId },
+        { removeOnComplete: true, removeOnFail: true },
+      )
+      .catch((error) =>
+        logger.warn('Could not queue an event cancellation', {
+          eventId,
+          error,
+        }),
+      );
   }
 
   // The guest's confirmation: details for their choice, a calendar file, and a QR to check in.
@@ -61,14 +72,21 @@ export class EventNoticesService {
       const attachments: any[] = [
         {
           filename: 'event.ics',
-          content: calendarFile(reg.event, inPerson, this.eventUrl(reg.event.slug)),
+          content: calendarFile(
+            reg.event,
+            inPerson,
+            this.eventUrl(reg.event.slug),
+          ),
           contentType: 'text/calendar; charset=utf-8; method=PUBLISH',
         },
       ];
       if (inPerson) {
         attachments.push({
           filename: 'check-in.png',
-          content: await QRCode.toBuffer(reg.check_in_code, { width: 360, margin: 1 }),
+          content: await QRCode.toBuffer(reg.check_in_code, {
+            width: 360,
+            margin: 1,
+          }),
           contentType: 'image/png',
           cid: 'checkin-qr',
         });
@@ -80,21 +98,27 @@ export class EventNoticesService {
         this.emailData(reg, {
           label: "You're registered",
           heading: reg.event.title,
-          intro: 'Here are the details for your place. The calendar file is attached.',
+          intro:
+            'Here are the details for your place. The calendar file is attached.',
           checkInCode: inPerson ? reg.check_in_code : null,
         }),
         attachments,
       );
     } catch (error) {
       // The registration stands even if the email fails; the details are on the event page.
-      logger.warn('Could not send an event confirmation', { registrationId, error });
+      logger.warn('Could not send an event confirmation', {
+        registrationId,
+        error,
+      });
     }
   }
 
   async notifyGuests(eventId: string, kind: NoticeKind) {
     const { data: event } = await this.admin
       .from('events')
-      .select('id, slug, title, starts_at, ends_at, time_zone, mode, venue_name, venue_address, venue_city, map_url, join_url, organiser_name, status')
+      .select(
+        'id, slug, title, starts_at, ends_at, time_zone, mode, venue_name, venue_address, venue_city, map_url, join_url, organiser_name, status',
+      )
       .eq('id', eventId)
       .maybeSingle();
     if (!event) return 0;
@@ -114,7 +138,9 @@ export class EventNoticesService {
         .maybeSingle();
       const reg = { ...r, email: profile?.email, event };
       const title =
-        kind === 'cancelled' ? `Cancelled: ${event.title}` : `Updated: ${event.title}`;
+        kind === 'cancelled'
+          ? `Cancelled: ${event.title}`
+          : `Updated: ${event.title}`;
       const message =
         kind === 'cancelled'
           ? 'The host cancelled this event.'
@@ -147,7 +173,11 @@ export class EventNoticesService {
               ? [
                   {
                     filename: 'event.ics',
-                    content: calendarFile(event, r.attendance === 'in_person', this.eventUrl(event.slug)),
+                    content: calendarFile(
+                      event,
+                      r.attendance === 'in_person',
+                      this.eventUrl(event.slug),
+                    ),
                     contentType: 'text/calendar; charset=utf-8; method=PUBLISH',
                   },
                 ]
@@ -163,17 +193,25 @@ export class EventNoticesService {
   private async registration(id: string) {
     const { data: reg } = await this.admin
       .from('event_registrations')
-      .select('id, user_id, attendance, name_encrypted, check_in_code, event_id')
+      .select(
+        'id, user_id, attendance, name_encrypted, check_in_code, event_id',
+      )
       .eq('id', id)
       .maybeSingle();
     if (!reg) return null;
     const [{ data: event }, { data: profile }] = await Promise.all([
       this.admin
         .from('events')
-        .select('id, slug, title, starts_at, ends_at, time_zone, mode, venue_name, venue_address, venue_city, map_url, join_url, organiser_name')
+        .select(
+          'id, slug, title, starts_at, ends_at, time_zone, mode, venue_name, venue_address, venue_city, map_url, join_url, organiser_name',
+        )
         .eq('id', reg.event_id)
         .maybeSingle(),
-      this.admin.from('user_profiles').select('email').eq('id', reg.user_id).maybeSingle(),
+      this.admin
+        .from('user_profiles')
+        .select('email')
+        .eq('id', reg.user_id)
+        .maybeSingle(),
     ]);
     if (!event || !profile?.email) return null;
     return { ...reg, event, email: profile.email };
@@ -181,7 +219,13 @@ export class EventNoticesService {
 
   private emailData(
     reg: any,
-    extra: { label: string; heading: string; intro: string; checkInCode: string | null; noDetails?: boolean },
+    extra: {
+      label: string;
+      heading: string;
+      intro: string;
+      checkInCode: string | null;
+      noDetails?: boolean;
+    },
   ) {
     const e = reg.event;
     const inPerson = reg.attendance === 'in_person';
@@ -193,7 +237,9 @@ export class EventNoticesService {
       when: whenText(e.starts_at, e.ends_at, e.time_zone),
       venue:
         showDetails && inPerson && e.venue_name
-          ? [e.venue_name, e.venue_address, e.venue_city].filter(Boolean).join(', ')
+          ? [e.venue_name, e.venue_address, e.venue_city]
+              .filter(Boolean)
+              .join(', ')
           : null,
       mapUrl: showDetails && inPerson ? e.map_url : null,
       joinUrl: showDetails && !inPerson ? e.join_url : null,
@@ -232,21 +278,41 @@ export class EventNoticesProcessor extends WorkerHost {
 export function whenText(startsAt: string, endsAt: string, timeZone: string) {
   const fmt = (d: string, opts: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat('en-GB', { timeZone, ...opts }).format(new Date(d));
-  const day = fmt(startsAt, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const day = fmt(startsAt, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
   const from = fmt(startsAt, { hour: '2-digit', minute: '2-digit' });
-  const to = fmt(endsAt, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+  const to = fmt(endsAt, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
   return `${day}, ${from} to ${to}`;
 }
 
 // A calendar file with the details for the guest's way of attending.
-export function calendarFile(e: any, inPerson: boolean, url: string | null): string {
+export function calendarFile(
+  e: any,
+  inPerson: boolean,
+  url: string | null,
+): string {
   const stamp = (d: string | Date) =>
-    new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    new Date(d)
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d{3}/, '');
   const esc = (s: string) =>
-    s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+    s
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r\n|\r|\n/g, '\\n');
   const location = inPerson
     ? [e.venue_name, e.venue_address, e.venue_city].filter(Boolean).join(', ')
-    : e.join_url ?? '';
+    : (e.join_url ?? '');
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',

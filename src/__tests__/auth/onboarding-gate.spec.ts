@@ -28,7 +28,13 @@ describe('events-only access before onboarding', () => {
     expect(guard.handleRequest(null, { ...newcomer, role: 'moderator' }, null, ctx('/api/v1/forum'))).toBeTruthy();
   });
 
+  it('cannot be passed by changing letter case', () => {
+    expect(needsOnboarding('/API/v1/FORUM/topics')).toBe(true);
+    expect(needsOnboarding('/api/v1/Feeds')).toBe(true);
+  });
+
   it('says why, with a code the apps can act on', () => {
+    expect.assertions(1);
     try {
       guard.handleRequest(null, newcomer, null, ctx('/api/v1/forum'));
     } catch (e: any) {

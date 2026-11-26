@@ -219,6 +219,15 @@ describe('QueryChain', () => {
       expect(result.data).toEqual({ id: '1', name: 'updated' });
     });
 
+    it('returns one row or null for maybeSingle, as a select does', async () => {
+      const one = createMockPool([{ id: '1' }]);
+      const found = await new QueryChain(one.pool as any, 'users').update({ name: 'x' }).eq('id', '1').select('*').maybeSingle();
+      expect(found.data).toEqual({ id: '1' });
+      const none = createMockPool([]);
+      const missing = await new QueryChain(none.pool as any, 'users').update({ name: 'x' }).eq('id', '2').select('*').maybeSingle();
+      expect(missing.data).toBeNull();
+    });
+
     it('should handle empty update data', async () => {
       const { pool } = createMockPool([]);
       const result = await new QueryChain(pool as any, 'users').update({});

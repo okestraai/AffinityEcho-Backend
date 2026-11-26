@@ -232,6 +232,50 @@ describe('AuthService – email code sign-in', () => {
       );
     });
 
+    it('stops a password set by someone who never proved the email', async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'ada@example.com' });
+      const update = chain(null);
+      from()
+        .mockReturnValueOnce(chain({ ...user, password_hash: 'attacker-hash', email_confirmed_at: null }))
+        .mockReturnValueOnce(update);
+      const result = await service.verifyLoginCode({ email: 'ada@example.com', code: sentCode() });
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({ password_hash: null }));
+      expect(result.user.has_password).toBe(false);
+    });
+
+    it("keeps a confirmed member's password", async () => {
+      from().mockReturnValueOnce(chain(null));
+      await service.sendLoginCode({ email: 'ada@example.com' });
+      const update = chain(null);
+      from()
+        .mockReturnValueOnce(chain({ ...user, password_hash: 'own-hash', email_confirmed_at: '2026-01-01' }))
+        .mockReturnValueOnce(update);
+      const result = await service.verifyLoginCode({ email: 'ada@example.com', code: sentCode() });
+      expect(update.update).toHaveBeenCalledWith(expect.not.objectContaining({ password_hash: null }));
+      expect(result.user.has_password).toBe(true);
+    });
+
+    it("doesn't give fresh tries when a new code is sent", async () => {
+      from().mockReturnValue(chain(null));
+      await service.sendLoginCode({ email: 'bo@example.com' });
+      for (let i = 0; i < 5; i++) {
+        await expect(service.verifyLoginCode({ email: 'bo@example.com', code: '000000' })).rejects.toThrow(UnauthorizedException);
+      }
+      await service.sendLoginCode({ email: 'bo@example.com' });
+      await expect(
+        service.verifyLoginCode({ email: 'bo@example.com', code: sentCode() }),
+      ).rejects.toThrow('Too many attempts');
+    });
+
+    it('caps tries per hour across codes', async () => {
+      from().mockReturnValue(chain(null));
+      for (let i = 0; i < 15; i++) {
+        await service.verifyLoginCode({ email: 'cy@example.com', code: '000000' }).catch(() => undefined);
+      }
+      await expect(service.verifyLoginCode({ email: 'cy@example.com', code: '000000' })).rejects.toThrow('Try again later');
+    });
+
     it('refuses a suspended account', async () => {
       from().mockReturnValueOnce(chain(null));
       await service.sendLoginCode({ email: 'ada@example.com' });

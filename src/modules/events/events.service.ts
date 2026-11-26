@@ -25,6 +25,26 @@ import {
 } from './dto/event.dto';
 import { EventNoticesService } from './event-notices.service';
 
+// Details that belong to one mode and are cleared when the event no longer uses it.
+const MODE_FIELDS = [
+  'venue_name',
+  'venue_address',
+  'venue_city',
+  'map_url',
+  'capacity_in_person',
+  'join_url',
+  'capacity_online',
+] as const;
+
+const REQUIRED_FIELDS = [
+  'title',
+  'mode',
+  'starts_at',
+  'ends_at',
+  'time_zone',
+  'organiser_name',
+] as const;
+
 export interface Guest {
   registrationId: string;
   name: string;
@@ -65,9 +85,13 @@ export class EventsService {
       .eq('id', hostId)
       .maybeSingle();
     if (!host?.has_completed_onboarding)
-      throw new ForbiddenException('Finish setting up your profile to host events');
+      throw new ForbiddenException(
+        'Finish setting up your profile to host events',
+      );
     if (host.event_hosting_stopped_at)
-      throw new ForbiddenException('Hosting has been turned off for your account');
+      throw new ForbiddenException(
+        'Hosting has been turned off for your account',
+      );
     if (!host.event_policy_accepted_at) {
       if (dto.acceptPolicy !== true)
         throw new BadRequestException({
@@ -117,6 +141,10 @@ export class EventsService {
     const changes = this.eventColumns(dto, true);
     const merged = { ...current, ...changes };
     this.checkShape(merged);
+    // Details the new mode doesn't use are cleared in the database too, not only checked.
+    for (const key of MODE_FIELDS) {
+      if (merged[key] !== current[key]) changes[key] = merged[key];
+    }
 
     const { data, error } = await this.admin
       .from('events')
@@ -126,11 +154,13 @@ export class EventsService {
       .select(ALL_COLUMNS)
       .maybeSingle();
     if (error) throw new BadRequestException('Could not save the event');
-    if (!data) throw new ConflictException('This event can no longer be changed');
+    if (!data)
+      throw new ConflictException('This event can no longer be changed');
 
     // Guests hear about changes that matter to them, grouped over a short window.
     const changed = NOTIFIED_FIELDS.filter(
-      (f) => f in changes && String(changes[f] ?? '') !== String(current[f] ?? ''),
+      (f) =>
+        f in changes && String(changes[f] ?? '') !== String(current[f] ?? ''),
     );
     if (changed.length) await this.notices.queueUpdate(eventId);
     return this.hostView(data);
@@ -145,7 +175,8 @@ export class EventsService {
       .eq('id', eventId)
       .eq('status', 'published')
       .select('id');
-    if (!data?.length) throw new ConflictException('This event is already cancelled');
+    if (!data?.length)
+      throw new ConflictException('This event is already cancelled');
     await this.notices.queueCancel(eventId);
     return { success: true };
   }
@@ -153,13 +184,14 @@ export class EventsService {
   // Link opens, registrations split by in person and online, and the guest list.
   async hostPage(hostId: string, eventId: string) {
     const event = await this.hostEvent(hostId, eventId);
-    const [{ count: views }, guests]: [{ count: number | null }, Guest[]] = await Promise.all([
-      this.admin
-        .from('event_views')
-        .select('id', { count: 'exact' })
-        .eq('event_id', eventId),
-      this.guestList(eventId),
-    ]);
+    const [{ count: views }, guests]: [{ count: number | null }, Guest[]] =
+      await Promise.all([
+        this.admin
+          .from('event_views')
+          .select('id', { count: 'exact' })
+          .eq('event_id', eventId),
+        this.guestList(eventId),
+      ]);
     const active = guests.filter((g) => g.status === 'registered');
     return {
       event: this.hostView(event),
@@ -239,7 +271,9 @@ export class EventsService {
     const event = await this.bySlug(slug, true);
     const { data: reg } = await this.admin
       .from('event_registrations')
-      .select('id, attendance, share_email, check_in_code, checked_in_at, status')
+      .select(
+        'id, attendance, share_email, check_in_code, checked_in_at, status',
+      )
       .eq('event_id', event.id)
       .eq('user_id', userId)
       .maybeSingle();
@@ -605,6 +639,13 @@ export class EventsService {
     };
     if (dto.timeZone !== undefined && !validTimeZone(dto.timeZone))
       throw new BadRequestException('Unknown time zone');
+    if (map.description === null) map.description = '';
+    for (const key of REQUIRED_FIELDS) {
+      if (map[key] === null)
+        throw new BadRequestException(
+          `${key.replace(/_/g, ' ')} can't be empty`,
+        );
+    }
     const out: Record<string, any> = {};
     for (const [k, v] of Object.entries(map)) {
       if (v !== undefined) out[k] = v;
@@ -635,9 +676,15 @@ export class EventsService {
     }
     const start = new Date(e.starts_at).getTime();
     const end = new Date(e.ends_at).getTime();
-    if (!(end > start)) throw new BadRequestException('The event must end after it starts');
-    if (e.registration_closes_at && new Date(e.registration_closes_at).getTime() > start)
-      throw new BadRequestException('Registration must close before the event starts');
+    if (!(end > start))
+      throw new BadRequestException('The event must end after it starts');
+    if (
+      e.registration_closes_at &&
+      new Date(e.registration_closes_at).getTime() > start
+    )
+      throw new BadRequestException(
+        'Registration must close before the event starts',
+      );
   }
 
   private decrypt(value?: string | null): string | null {
@@ -652,7 +699,9 @@ export class EventsService {
 
 function fitsMode(mode: EventMode, attendance: Attendance): boolean {
   if (mode === 'hybrid') return true;
-  return mode === 'physical' ? attendance === 'in_person' : attendance === 'online';
+  return mode === 'physical'
+    ? attendance === 'in_person'
+    : attendance === 'online';
 }
 
 function validTimeZone(zone: string): boolean {
@@ -672,13 +721,15 @@ function makeSlug(title: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 50);
   let tail = '';
-  for (let i = 0; i < 6; i++) tail += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)].toLowerCase();
+  for (let i = 0; i < 6; i++)
+    tail += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)].toLowerCase();
   return `${base || 'event'}-${tail}`;
 }
 
 function checkInCode(): string {
   let code = '';
-  for (let i = 0; i < 8; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  for (let i = 0; i < 8; i++)
+    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
   return code;
 }
 

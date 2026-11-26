@@ -619,7 +619,8 @@ export class QueryChain {
     const sql = `UPDATE ${escapeIdentifier(this.table)} SET ${sets} ${where} RETURNING *`;
     const result = await this.pool.query(sql);
 
-    if (this.isSingle) {
+    // maybeSingle() means one row or null, as for a select.
+    if (this.isSingle || this.isMaybeSingle) {
       return { data: result.rows[0] || null, error: null };
     }
     return { data: result.rows, error: null };
@@ -642,7 +643,8 @@ export class QueryChain {
               .join(', ');
       const sql = `DELETE FROM ${escapeIdentifier(this.table)} ${where} RETURNING ${returnCols}`;
       const result = await this.pool.query(sql);
-      if (this.isSingle) return { data: result.rows[0] || null, error: null };
+      if (this.isSingle || this.isMaybeSingle)
+        return { data: result.rows[0] || null, error: null };
       return { data: result.rows, error: null };
     }
     const sql = `DELETE FROM ${escapeIdentifier(this.table)} ${where}`;

@@ -28,16 +28,15 @@ import { MSG } from '../../../common/constants/messages';
 import { RedisService } from '../../../common/services/redis.service';
 import { AttemptCounter } from '../../../common/utils/attempt-counter';
 import { OtpStore, OtpType, newOtp } from '../../../common/utils/otp-store';
-import {
-  SendCodeDto,
-  VerifyCodeDto,
-} from '../dto/code-login.dto';
+import { SendCodeDto, VerifyCodeDto } from '../dto/code-login.dto';
 
 // Email sign-in codes: valid 10 minutes, 5 tries each, and 3 sends every 5 minutes.
 const LOGIN_CODE_TTL_MS = 10 * 60 * 1000;
 const LOGIN_CODE_MAX_TRIES = 5;
 const LOGIN_CODE_MAX_SENDS = 3;
 const LOGIN_CODE_SEND_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_CODE_TRIES_PER_HOUR = 15;
+const LOGIN_CODE_TRIES_PER_DAY = 40;
 import { splitEthnicities } from '../../../common/constants/onboarding-options';
 
 @Injectable()
@@ -179,7 +178,9 @@ export class AuthService {
   // The same reply whether or not the email has an account, so the route can't be used to find members.
   async sendLoginCode(dto: SendCodeDto) {
     const email = dto.email.toLowerCase();
-    const reply = { message: 'If this email can sign in, a code is on its way.' };
+    const reply = {
+      message: 'If this email can sign in, a code is on its way.',
+    };
 
     const sends = await this.otpGuesses.bump(
       `otp:send:login:${email}`,
@@ -210,8 +211,6 @@ export class AuthService {
       lastSent: now,
       type: 'login',
     });
-    // A new code starts a fresh set of tries.
-    await this.otpGuesses.clear(`otp:burst:login:${email}`);
     try {
       await this.emailService.sendSignInCodeEmail(
         email,
@@ -220,7 +219,9 @@ export class AuthService {
       );
     } catch (error) {
       logger.error('Could not send a sign-in code', { error });
-      throw new InternalServerErrorException("We couldn't send the email. Try again.");
+      throw new InternalServerErrorException(
+        "We couldn't send the email. Try again.",
+      );
     }
     return reply;
   }
@@ -228,21 +229,49 @@ export class AuthService {
   // A right code signs the member in; a new email gets an account with no password.
   async verifyLoginCode(dto: VerifyCodeDto) {
     const email = dto.email.toLowerCase();
-    const ok = await this.checkOtp(email, dto.code, 'login', LOGIN_CODE_MAX_TRIES);
-    if (!ok) throw new UnauthorizedException('That code is wrong or has expired.');
+    // Caps over longer windows, which a new code doesn't reset, so codes can't be guessed over time.
+    for (const [key, windowMs, max] of [
+      [`otp:hour:login:${email}`, 60 * 60 * 1000, LOGIN_CODE_TRIES_PER_HOUR],
+      [`otp:day:login:${email}`, 24 * 60 * 60 * 1000, LOGIN_CODE_TRIES_PER_DAY],
+    ] as const) {
+      if ((await this.otpGuesses.bump(key, windowMs)) > max) {
+        throw new BadRequestException('Too many attempts. Try again later.');
+      }
+    }
+    const ok = await this.checkOtp(
+      email,
+      dto.code,
+      'login',
+      LOGIN_CODE_MAX_TRIES,
+    );
+    if (!ok)
+      throw new UnauthorizedException('That code is wrong or has expired.');
 
     let { data: user } = await this.admin
       .from('user_profiles')
       .select(
-        'id, email, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted, password_hash, first_name_encrypted',
+        'id, email, username, role, has_completed_onboarding, is_deactivated, is_suspended, is_deleted, password_hash, first_name_encrypted, email_confirmed_at',
       )
       .eq('email', email)
       .maybeSingle();
 
+    // Someone may have signed up with this email and a password without ever proving it.
+    // The real owner has now proved it, so that password stops working.
+    let clearPassword = false;
+    if (user && !user.email_confirmed_at && user.password_hash) {
+      clearPassword = true;
+      user.password_hash = null;
+      logger.warn('Cleared an unconfirmed password on code sign-in', {
+        userId: user.id,
+      });
+    }
+
     let created = false;
     if (!user) {
       if (dto.termsAccepted !== true) {
-        throw new BadRequestException('Accept the terms to create your account');
+        throw new BadRequestException(
+          'Accept the terms to create your account',
+        );
       }
       const userId = uuidv4();
       const made = await this.createProfile(
@@ -265,7 +294,9 @@ export class AuthService {
         .maybeSingle());
       if (!user) {
         logger.error('Code sign-in could not create an account', { made });
-        throw new InternalServerErrorException('Could not create your account. Try again.');
+        throw new InternalServerErrorException(
+          'Could not create your account. Try again.',
+        );
       }
       created = true;
     }
@@ -283,6 +314,7 @@ export class AuthService {
     const update: Record<string, unknown> = {
       email_confirmed_at: now,
       last_active_at: now,
+      ...(clearPassword ? { password_hash: null } : {}),
     };
     // The name given at sign-in is kept, so onboarding doesn't ask again.
     if (!user.first_name_encrypted && dto.firstName) {
@@ -294,7 +326,8 @@ export class AuthService {
 
     const role = user.role || 'user';
     let permissions: string[] | null | undefined;
-    if (role === 'admin') permissions = await this.fetchAdminPermissions(user.id);
+    if (role === 'admin')
+      permissions = await this.fetchAdminPermissions(user.id);
     else if (role === 'super_admin') permissions = null;
 
     return {
@@ -320,7 +353,10 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 12);
     const { data } = await this.admin
       .from('user_profiles')
-      .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+      .update({
+        password_hash: passwordHash,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', userId)
       .is('password_hash', null)
       .select('id');

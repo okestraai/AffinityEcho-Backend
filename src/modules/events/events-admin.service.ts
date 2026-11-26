@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../../database/supabase.client';
@@ -16,7 +20,12 @@ export class EventsAdminService {
     this.admin = supabaseAdmin(config);
   }
 
-  async list(query: { status?: string; reported?: string; page?: string; limit?: string }) {
+  async list(query: {
+    status?: string;
+    reported?: string;
+    page?: string;
+    limit?: string;
+  }) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     let q = this.admin
@@ -68,7 +77,8 @@ export class EventsAdminService {
       .eq('id', eventId)
       .neq('status', 'removed')
       .select('id, status');
-    if (!data?.length) throw new NotFoundException('Event not found or already removed');
+    if (!data?.length)
+      throw new NotFoundException('Event not found or already removed');
     await this.admin
       .from('event_reports')
       .update({ status: 'closed' })
@@ -89,7 +99,8 @@ export class EventsAdminService {
       .eq('id', userId)
       .is('event_hosting_stopped_at', null)
       .select('id');
-    if (!data?.length) throw new ConflictException('User not found or already stopped');
+    if (!data?.length)
+      throw new ConflictException('User not found or already stopped');
     await this.log(admin, 'stop_event_host', 'user', userId, reason);
     return { success: true };
   }
@@ -97,7 +108,10 @@ export class EventsAdminService {
   async allowHost(admin: AdminActor, userId: string) {
     const { data } = await this.admin
       .from('user_profiles')
-      .update({ event_hosting_stopped_at: null, event_hosting_stopped_reason: null })
+      .update({
+        event_hosting_stopped_at: null,
+        event_hosting_stopped_reason: null,
+      })
       .eq('id', userId)
       .select('id');
     if (!data?.length) throw new NotFoundException('User not found');
