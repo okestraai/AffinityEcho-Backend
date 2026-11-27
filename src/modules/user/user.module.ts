@@ -16,9 +16,10 @@ import { CompanyVerificationService } from './services/company-verification.serv
 import { UnifiedProfileService } from './services/unified-profile.service';
 import { EmailService } from '../../common/utils/email/email.service';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
+import { SpacesModule } from '../spaces/spaces.module';
 
 @Module({
-  imports: [EncryptionModule, FeedsModule, CompaniesModule],
+  imports: [EncryptionModule, FeedsModule, CompaniesModule, SpacesModule],
   controllers: [CompanyVerificationController, UserController],
   providers: [
     UserService,

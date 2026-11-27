@@ -1,3 +1,4 @@
+import { canSeeActivity } from '../../../common/utils/activity-access';
 import {
   Injectable,
   NotFoundException,
@@ -315,6 +316,13 @@ export class FeedPostsService {
     const offset = (page - 1) * limit;
 
     try {
+      if (!(await canSeeActivity(this.admin, userId, requestingUserId))) {
+        return {
+          success: true,
+          data: [],
+          pagination: { page, limit, total: 0, hasMore: false },
+        };
+      }
       const onlyVisible = await this.visibleToViewer(userId, requestingUserId);
       let postsQuery = this.admin
         .from('feed_posts')

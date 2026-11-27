@@ -1,3 +1,4 @@
+jest.mock('../../common/utils/activity-access', () => ({ canSeeActivity: jest.fn().mockResolvedValue(true) }));
 jest.mock('../../database/supabase.client', () => ({
   supabaseAdmin: jest.fn(),
   supabaseClient: jest.fn(),
@@ -18,6 +19,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { UserProfileService } from '../../modules/user/services/user-profile.service';
+import { canSeeActivity } from '../../common/utils/activity-access';
 import { supabaseAdmin } from '../../database/supabase.client';
 import {
   createMockSupabaseClient,
@@ -26,11 +28,16 @@ import {
 } from '../helpers/mock-supabase';
 import { MSG } from '../../common/constants/messages';
 
+// Real member ids are UUIDs; the profile lookup refuses anything else.
+const A = '00000000-0000-4000-8000-00000000000a';
+const B = '00000000-0000-4000-8000-00000000000b';
+
 describe('UserProfileService', () => {
   let service: UserProfileService;
   let mockClient: any;
   let mockEncryption: any;
   let mockIdentityReveal: any;
+  let mockSpaces: any;
 
   const mockProfile = {
     id: 'u1',
@@ -83,14 +90,27 @@ describe('UserProfileService', () => {
       isRevealed: jest.fn().mockResolvedValue(false),
     };
 
+    mockSpaces = {
+      forUser: jest.fn().mockResolvedValue({ company: null, spaces: [], isStudent: false, isStaff: false }),
+      canSee: jest.fn((user: any, item: any) =>
+        item.company_name ? user.spaces.includes(item.company_name) : item.scope !== 'local'),
+    };
+
     service = new UserProfileService(
       createMockConfigService() as any,
       mockEncryption,
       mockIdentityReveal,
+      mockSpaces,
     );
   });
 
   describe('getUserProfileById', () => {
+    it("refuses another member's id that isn't a UUID before any block lookup", async () => {
+      mockClient.from.mockReturnValueOnce(createMockQueryChain({ data: { ...mockProfile }, error: null }));
+      await expect(service.getUserProfileById('x),and(blocker_id.eq.y', B)).rejects.toThrow(NotFoundException);
+      expect(mockClient.from).toHaveBeenCalledTimes(1);
+    });
+
     it('should return own profile with full data', async () => {
       const profileChain = createMockQueryChain({
         data: mockProfile,
@@ -168,7 +188,7 @@ describe('UserProfileService', () => {
         .mockReturnValueOnce(profileChain)
         .mockReturnValueOnce(blockChain);
 
-      await expect(service.getUserProfileById('u1', 'u2')).rejects.toThrow(
+      await expect(service.getUserProfileById(A, B)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -200,7 +220,7 @@ describe('UserProfileService', () => {
         .mockReturnValueOnce(iFollowChain)
         .mockReturnValueOnce(theyFollowChain);
 
-      await expect(service.getUserProfileById('u1', 'u2')).rejects.toThrow(
+      await expect(service.getUserProfileById(A, B)).rejects.toThrow(
         ForbiddenException,
       );
     });
@@ -232,7 +252,7 @@ describe('UserProfileService', () => {
         .mockReturnValueOnce(iFollowChain)
         .mockReturnValueOnce(theyFollowChain);
 
-      const result = await service.getUserProfileById('u1', 'u2');
+      const result = await service.getUserProfileById(A, B);
       expect(result.success).toBe(true);
       expect(result.data.message).toBe(MSG.USER.FOLLOW_TO_VIEW);
     });
@@ -258,7 +278,7 @@ describe('UserProfileService', () => {
         .mockReturnValueOnce(statsProfileChain) // getUserStats profile check
         .mockReturnValue(defaultChain);         // remaining getUserStats queries
 
-      const result = await service.getUserProfileById('u1', 'u2');
+      const result = await service.getUserProfileById(A, B);
       expect(result.data.followersCount).toBeUndefined();
       expect(result.data.followingCount).toBeUndefined();
     });
@@ -494,6 +514,107 @@ describe('UserProfileService', () => {
       const result = await service.getUserActivity('u1', 'all');
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(0);
+    });
+  });
+
+  describe('space limits on another member\'s activity', () => {
+    it("shows no activity when the viewer may not see it (blocked, private or activity off)", async () => {
+      (canSeeActivity as jest.Mock).mockResolvedValueOnce(false);
+      const result: any = await service.getUserActivity('author', 'all', 1, 20, 'viewer');
+      expect(result.data).toEqual([]);
+      expect(mockClient.from).not.toHaveBeenCalled();
+    });
+
+    it("refuses another member's stats when they keep activity private", async () => {
+      (canSeeActivity as jest.Mock).mockResolvedValueOnce(false);
+      await expect(service.getStatsFor('author', 'viewer')).rejects.toThrow(ForbiddenException);
+    });
+
+      await service.getUserStats('author', 'viewer').catch(() => undefined);
+      const anonFiltered = chains.filter((c) => c.or.mock.calls.some((call: any[]) => call[0] === 'is_anonymous.is.null,is_anonymous.eq.false'));
+      expect(anonFiltered.length).toBe(6);
+    });
+
+    it('limits posts, topics and nooks to open content and the viewer\'s spaces', async () => {
+      mockSpaces.forUser.mockResolvedValue({ company: 'Acme', spaces: ['Acme', 'Students'], isStudent: true, isStaff: false });
+      const chains = [0, 1, 2].map(() => createMockQueryChain({ data: [], error: null, count: 0 }));
+      chains.forEach((c) => mockClient.from.mockReturnValueOnce(c));
+
+      await service.getUserActivity('author', 'all', 1, 20, 'viewer');
+
+      expect(chains[0].or).toHaveBeenCalledWith('visibility.neq.company,company_name.in.("Acme","Students")');
+      expect(chains[1].or).toHaveBeenCalledWith('scope.eq.global,company_name.in.("Acme","Students")');
+      expect(chains[2].or).toHaveBeenCalledWith('scope.eq.global,company_name.is.null,company_name.in.("Acme","Students")');
+    });
+
+    it('lets staff see every space', async () => {
+      mockSpaces.forUser.mockResolvedValue({ company: null, spaces: [], isStudent: false, isStaff: true });
+      const chains = [0, 1, 2].map(() => createMockQueryChain({ data: [], error: null, count: 0 }));
+      chains.forEach((c) => mockClient.from.mockReturnValueOnce(c));
+
+      await service.getUserActivity('author', 'all', 1, 20, 'moderator');
+
+      expect(chains[0].or).not.toHaveBeenCalledWith(expect.stringContaining('visibility.neq.company'));
+      expect(chains[1].or).not.toHaveBeenCalledWith(expect.stringContaining('scope.eq.global'));
+    });
+
+    it('shows only open content to a member with no spaces', async () => {
+      const chains = [0, 1, 2].map(() => createMockQueryChain({ data: [], error: null, count: 0 }));
+      chains.forEach((c) => mockClient.from.mockReturnValueOnce(c));
+
+      await service.getUserActivity('author', 'all', 1, 20, 'viewer');
+
+      expect(chains[0].or).toHaveBeenCalledWith('visibility.neq.company');
+      expect(chains[1].or).toHaveBeenCalledWith('scope.eq.global');
+    });
+
+    it('does not limit the member\'s own activity', async () => {
+      const chains = [0, 1, 2].map(() => createMockQueryChain({ data: [], error: null, count: 0 }));
+      chains.forEach((c) => mockClient.from.mockReturnValueOnce(c));
+
+      await service.getUserActivity('author', 'all', 1, 20, 'author');
+
+      expect(mockSpaces.forUser).not.toHaveBeenCalled();
+      expect(chains[0].or).not.toHaveBeenCalledWith(expect.stringContaining('visibility.neq.company'));
+    });
+
+    it('drops recent comments on content in spaces the viewer is not in', async () => {
+      mockSpaces.forUser.mockResolvedValue({ company: 'Acme', spaces: ['Acme'], isStudent: false, isStaff: false });
+      jest.spyOn(service, 'getUserProfileById').mockResolvedValue({ success: true, data: { ...mockProfile } } as any);
+      const empty = createMockQueryChain({ data: [], error: null });
+      const comments = createMockQueryChain({
+        data: [
+          { id: 'c1', content_type: 'post', content_id: 'p-acme', content: 'ok', created_at: '2026-01-03' },
+          { id: 'c2', content_type: 'post', content_id: 'p-other', content: 'leak', created_at: '2026-01-02' },
+          { id: 'c3', content_type: 'topic', content_id: 't-students', content: 'leak', created_at: '2026-01-01' },
+        ],
+        error: null,
+      });
+      const names = createMockQueryChain({ data: { first_name_encrypted: null, last_name_encrypted: null }, error: null });
+      const posts = createMockQueryChain({
+        data: [
+          { id: 'p-acme', visibility: 'company', company_name: 'Acme' },
+          { id: 'p-other', visibility: 'company', company_name: 'Globex' },
+        ],
+        error: null,
+      });
+      const topics = createMockQueryChain({ data: [{ id: 't-students', scope: 'local', company_name: 'Students' }], error: null });
+      // The second feed_posts and forum_topics reads are the comment lookups.
+      let postReads = 0;
+      let topicReads = 0;
+      mockClient.from.mockImplementation((table: string) => {
+        if (table === 'feed_comments') return comments;
+        if (table === 'user_profiles') return names;
+        if (table === 'feed_posts') return ++postReads === 1 ? createMockQueryChain({ data: [], error: null }) : postReads === 2 ? posts : empty;
+        if (table === 'forum_topics') return ++topicReads === 1 ? createMockQueryChain({ data: [], error: null }) : topicReads === 2 ? topics : empty;
+        return empty;
+      });
+      jest.spyOn(service as any, 'getViewerEngagementSummary').mockResolvedValue(null);
+      jest.spyOn(service as any, 'enrichProfileActivityItems').mockResolvedValue(undefined);
+
+      const result: any = await service.getFullUserProfile('author', 'viewer');
+
+      expect(result.data.recent_activity.comments.map((c: any) => c.id)).toEqual(['c1']);
     });
   });
 });

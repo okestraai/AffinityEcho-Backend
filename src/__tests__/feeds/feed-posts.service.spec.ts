@@ -1,3 +1,4 @@
+jest.mock('../../common/utils/activity-access', () => ({ canSeeActivity: jest.fn().mockResolvedValue(true) }));
 jest.mock('../../database/supabase.client', () => ({
   supabaseAdmin: jest.fn(),
   supabaseClient: jest.fn(),

@@ -1,3 +1,5 @@
+import { SpacesService } from '../../spaces/spaces.service';
+import { filterValue } from '../../../database/query-builder';
 import {
   Injectable,
   BadRequestException,
@@ -32,6 +34,7 @@ export class FeedEngagementService {
     private identityReveal: IdentityRevealUtil,
     private contentSafety: ContentSafetyService,
     @InjectQueue('moderation') private moderationQueue: Queue,
+    private spaces: SpacesService,
   ) {
     this.admin = supabaseAdmin(config);
   }
@@ -798,6 +801,18 @@ export class FeedEngagementService {
         };
       }
 
+      // Bookmarks stay, but content from spaces the member has left is not shown.
+      const viewer = await this.spaces.forUser(userId);
+      const mine = viewer.spaces.length
+        ? `,company_name.in.(${viewer.spaces.map(filterValue).join(',')})`
+        : '';
+      const openPosts = viewer.isStaff
+        ? undefined
+        : `visibility.neq.company${mine}`;
+      const openPlaces = viewer.isStaff
+        ? undefined
+        : `scope.eq.global,company_name.is.null${mine}`;
+
       // Group bookmark content_ids by type
       const postIds = bookmarks
         .filter((b: any) => b.content_type === 'post')
@@ -827,6 +842,7 @@ export class FeedEngagementService {
               )
               .in('id', postIds)
               .or('is_hidden.is.null,is_hidden.eq.false')
+              .or(openPosts)
           : Promise.resolve({ data: [] }),
         topicIds.length > 0
           ? this.admin
@@ -836,6 +852,7 @@ export class FeedEngagementService {
               )
               .in('id', topicIds)
               .or('is_hidden.is.null,is_hidden.eq.false')
+              .or(openPlaces)
           : Promise.resolve({ data: [] }),
         nookIds.length > 0
           ? this.admin
@@ -845,6 +862,7 @@ export class FeedEngagementService {
               )
               .in('id', nookIds)
               .or('is_hidden.is.null,is_hidden.eq.false')
+              .or(openPlaces)
               .gt('expires_at', new Date().toISOString())
           : Promise.resolve({ data: [] }),
         this.admin

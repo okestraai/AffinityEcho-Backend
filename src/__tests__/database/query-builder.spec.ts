@@ -394,6 +394,29 @@ describe('QueryChain', () => {
     });
   });
 
+  describe('optional or() limits', () => {
+    it('adds no clause when there is no limit', async () => {
+      const { pool } = createMockPool([]);
+      await new QueryChain(pool as any, 't').select('*').eq('user_id', 'u1').or(undefined).or(null).or('');
+      const sql = pool.query.mock.calls[0][0] as string;
+      expect(sql).not.toContain(' OR ');
+      expect(sql).not.toContain('()');
+    });
+
+    it('builds the space and anonymous limits used on profiles and bookmarks', async () => {
+      const { pool } = createMockPool([]);
+      await new QueryChain(pool as any, 't')
+        .select('*')
+        .or('visibility.neq.company,company_name.in.("Acme","Students")')
+        .or('scope.eq.global,company_name.is.null,company_name.in.("Acme")')
+        .or('is_anonymous.is.null,is_anonymous.eq.false');
+      const sql = pool.query.mock.calls[0][0] as string;
+      expect(sql).toContain(`"visibility" != 'company' OR "company_name" IN ('Acme', 'Students')`);
+      expect(sql).toContain(`"company_name" IS NULL`);
+      expect(sql).toContain(`"is_anonymous" IS NULL OR "is_anonymous" = 'false'`);
+    });
+  });
+
   describe('quoted list values', () => {
     const whereOf = async (expr: string) => {
       const { pool } = createMockPool([]);

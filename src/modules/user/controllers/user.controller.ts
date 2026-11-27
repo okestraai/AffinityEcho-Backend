@@ -467,8 +467,8 @@ export class UserController {
   @Get(':userId/stats')
   @ApiOperation({ summary: 'Get user statistics' })
   @ApiParam({ name: 'userId', description: 'User ID' })
-  getUserStats(@Param('userId') userId: string) {
-    return this.userProfileService.getUserStats(userId);
+  async getUserStats(@Req() req: any, @Param('userId') userId: string) {
+    return this.userProfileService.getStatsFor(userId, req.user.sub);
   }
 
   @Get(':userId/badges')

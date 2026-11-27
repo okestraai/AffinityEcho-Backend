@@ -10,6 +10,10 @@ import logger from '../../../common/utils/logger.util';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { IdentityRevealUtil } from '../../../common/utils/identity-reveal.util';
 import { MSG } from '../../../common/constants/messages';
+import { filterValue } from '../../../database/query-builder';
+import { SpacesService, type UserSpaces } from '../../spaces/spaces.service';
+import { canSeeActivity } from '../../../common/utils/activity-access';
+import { isUUID } from 'class-validator';
 
 @Injectable()
 export class UserProfileService {
@@ -19,8 +23,69 @@ export class UserProfileService {
     private config: ConfigService,
     private encryption: EncryptionUtil,
     private identityReveal: IdentityRevealUtil,
+    private spaces: SpacesService,
   ) {
     this.admin = supabaseAdmin(config);
+  }
+
+  // What another member may see of someone's activity: open content and content in the viewer's own spaces.
+  private async visibleActivity(targetUserId: string, viewerId?: string) {
+    if (!viewerId || viewerId === targetUserId) return null;
+    const viewer = await this.spaces.forUser(viewerId);
+    const mine = viewer.spaces.length
+      ? `,company_name.in.(${viewer.spaces.map(filterValue).join(',')})`
+      : '';
+    return {
+      posts: viewer.isStaff ? undefined : `visibility.neq.company${mine}`,
+      // Topics in a space are marked local; an old local topic with no space stays hidden.
+      topics: viewer.isStaff ? undefined : `scope.eq.global${mine}`,
+      places: viewer.isStaff
+        ? undefined
+        : `scope.eq.global,company_name.is.null${mine}`,
+      viewer,
+    };
+  }
+
+  // Keeps only comments on posts, topics and nooks the viewer can see.
+  private async commentsOnVisibleContent(comments: any[], viewer: UserSpaces) {
+    const idsOf = (type: string) =>
+      comments.filter((c) => c.content_type === type).map((c) => c.content_id);
+    const [posts, topics, nooks] = await Promise.all([
+      this.itemsById(
+        'feed_posts',
+        'id, visibility, company_name',
+        idsOf('post'),
+      ),
+      this.itemsById('forum_topics', 'id, scope, company_name', idsOf('topic')),
+      this.itemsById('nooks', 'id, scope, company_name', idsOf('nook')),
+    ]);
+    const seen = (item: any, post = false) =>
+      !!item &&
+      this.spaces.canSee(viewer, {
+        company_name: item.company_name,
+        scope: post
+          ? item.visibility === 'company'
+            ? 'local'
+            : 'global'
+          : item.scope === 'company'
+            ? 'local'
+            : item.scope,
+      });
+    return comments.filter((c) =>
+      c.content_type === 'post'
+        ? seen(posts.get(c.content_id), true)
+        : c.content_type === 'topic'
+          ? seen(topics.get(c.content_id))
+          : c.content_type === 'nook'
+            ? seen(nooks.get(c.content_id))
+            : false,
+    );
+  }
+
+  private async itemsById(table: string, fields: string, ids: string[]) {
+    if (!ids.length) return new Map<string, any>();
+    const { data } = await this.admin.from(table).select(fields).in('id', ids);
+    return new Map<string, any>((data || []).map((r: any) => [r.id, r]));
   }
 
   // ============ PROFILE MANAGEMENT ============
@@ -84,6 +149,10 @@ export class UserProfileService {
 
       // Block check — if either user has blocked the other, hide profile
       if (!isOwnProfile && currentUserId) {
+        // The ids go into a filter expression, so anything that isn't an id is refused first.
+        if (!isUUID(userId) || !isUUID(currentUserId)) {
+          throw new NotFoundException(MSG.USER.NOT_FOUND);
+        }
         const { data: block } = await this.admin
           .from('user_blocks')
           .select('id')
@@ -220,7 +289,7 @@ export class UserProfileService {
 
       // Stats — only if show_activity is on (use live counts)
       if (showActivity) {
-        const statsResult = await this.getUserStats(userId);
+        const statsResult = await this.getUserStats(userId, currentUserId);
         response.stats = {
           postsCreated: statsResult.data.postsCreated,
           commentsPosted: statsResult.data.commentsPosted,
@@ -308,6 +377,12 @@ export class UserProfileService {
       currentUserId,
     );
     const now = new Date().toISOString();
+    const only = await this.visibleActivity(targetUserId, currentUserId);
+    const activityShown = await canSeeActivity(
+      this.admin,
+      targetUserId,
+      currentUserId,
+    );
 
     const [
       { data: recentPosts },
@@ -326,6 +401,7 @@ export class UserProfileService {
         .eq('user_id', targetUserId)
         .eq('is_archived', false)
         .or('is_hidden.is.null,is_hidden.eq.false')
+        .or(only?.posts)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -337,6 +413,7 @@ export class UserProfileService {
         .eq('user_id', targetUserId)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .or('is_deleted.is.null,is_deleted.eq.false')
+        .or(only?.topics)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -350,6 +427,7 @@ export class UserProfileService {
         .gt('expires_at', now)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .is('deleted_at', null)
+        .or(only?.places)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -362,7 +440,7 @@ export class UserProfileService {
         .or('is_hidden.is.null,is_hidden.eq.false')
         .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false })
-        .limit(5),
+        .limit(only ? 20 : 5),
 
       isOwnProfile
         ? Promise.resolve(false)
@@ -456,7 +534,12 @@ export class UserProfileService {
       created_at: n.created_at,
     }));
 
-    const formattedComments = (recentComments || []).map((c: any) => ({
+    const shownComments = only
+      ? (
+          await this.commentsOnVisibleContent(recentComments || [], only.viewer)
+        ).slice(0, 5)
+      : recentComments || [];
+    const formattedComments = shownComments.map((c: any) => ({
       id: c.id,
       content_type: c.content_type,
       content_id: c.content_id,
@@ -490,12 +573,14 @@ export class UserProfileService {
       data: {
         profile: baseResult.data,
         identity_revealed: identityRevealed,
-        recent_activity: {
-          posts: formattedPosts,
-          topics: formattedTopics,
-          nooks: formattedNooks,
-          comments: formattedComments,
-        },
+        recent_activity: activityShown
+          ? {
+              posts: formattedPosts,
+              topics: formattedTopics,
+              nooks: formattedNooks,
+              comments: formattedComments,
+            }
+          : { posts: [], topics: [], nooks: [], comments: [] },
         viewer_engagement: viewerEngagement,
       },
     };
@@ -616,6 +701,8 @@ export class UserProfileService {
     viewerId: string,
     targetUserId: string,
   ): Promise<any> {
+    // Counted only over what the viewer may see.
+    const only = await this.visibleActivity(targetUserId, viewerId);
     const [{ data: posts }, { data: topics }] = await Promise.all([
       this.admin
         .from('feed_posts')
@@ -623,6 +710,7 @@ export class UserProfileService {
         .eq('user_id', targetUserId)
         .eq('is_archived', false)
         .or('is_hidden.is.null,is_hidden.eq.false')
+        .or(only?.posts)
         .limit(100),
       this.admin
         .from('forum_topics')
@@ -630,6 +718,7 @@ export class UserProfileService {
         .eq('user_id', targetUserId)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .or('is_deleted.is.null,is_deleted.eq.false')
+        .or(only?.topics)
         .limit(100),
     ]);
 
@@ -734,7 +823,15 @@ export class UserProfileService {
 
   // ============ STATISTICS ============
 
-  async getUserStats(userId: string) {
+  // Another member's stats, refused when they've blocked each other or keep their activity private.
+  async getStatsFor(userId: string, viewerId: string) {
+    if (!(await canSeeActivity(this.admin, userId, viewerId))) {
+      throw new ForbiddenException(MSG.USER.PROFILE_PRIVATE);
+    }
+    return this.getUserStats(userId, viewerId);
+  }
+
+  async getUserStats(userId: string, viewerId?: string) {
     logger.info('Fetching user stats', { userId });
 
     try {
@@ -1063,6 +1160,14 @@ export class UserProfileService {
     const activities: any[] = [];
     let totalCount = 0;
     const viewerId = currentUserId || userId;
+    if (!(await canSeeActivity(this.admin, userId, currentUserId))) {
+      return {
+        success: true,
+        data: [],
+        pagination: { page, limit, total: 0, hasMore: false },
+      };
+    }
+    const only = await this.visibleActivity(userId, currentUserId);
 
     try {
       const perSourceLimit = type === 'all' ? limit : limit;
@@ -1081,6 +1186,7 @@ export class UserProfileService {
               .eq('user_id', userId)
               .eq('is_archived', false)
               .or('is_hidden.is.null,is_hidden.eq.false')
+              .or(only?.posts)
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
           : Promise.resolve({ data: null, count: 0 }),
@@ -1094,6 +1200,7 @@ export class UserProfileService {
               .eq('user_id', userId)
               .or('is_hidden.is.null,is_hidden.eq.false')
               .or('is_deleted.is.null,is_deleted.eq.false')
+              .or(only?.topics)
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
           : Promise.resolve({ data: null, count: 0 }),
@@ -1109,6 +1216,7 @@ export class UserProfileService {
               .gt('expires_at', now)
               .or('is_hidden.is.null,is_hidden.eq.false')
               .is('deleted_at', null)
+              .or(only?.places)
               .order('created_at', { ascending: false })
               .range(perSourceOffset, perSourceOffset + perSourceLimit - 1)
           : Promise.resolve({ data: null, count: 0 }),

@@ -383,8 +383,9 @@ export class QueryChain {
     return this;
   }
 
-  or(expr: string): this {
-    this.filters.push({ type: 'or', expr });
+  // No expression means no filter, so callers can pass an optional limit.
+  or(expr?: string | null): this {
+    if (expr) this.filters.push({ type: 'or', expr });
     return this;
   }
 

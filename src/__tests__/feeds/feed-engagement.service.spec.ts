@@ -23,6 +23,7 @@ import {
 import { MSG } from '../../common/constants/messages';
 
 describe('FeedEngagementService', () => {
+  let mockSpaces: any;
   let service: FeedEngagementService;
   let mockClient: any;
   let mockRedis: any;
@@ -57,6 +58,9 @@ describe('FeedEngagementService', () => {
 
     const mockModerationQueue = { add: jest.fn().mockResolvedValue({}) };
 
+    mockSpaces = {
+      forUser: jest.fn().mockResolvedValue({ company: null, spaces: [], isStudent: false, isStaff: false }),
+    };
     service = new FeedEngagementService(
       createMockConfigService() as any,
       mockNotifications,
@@ -65,6 +69,7 @@ describe('FeedEngagementService', () => {
       mockIdentityReveal,
       mockContentSafety,
       mockModerationQueue as any,
+      mockSpaces,
     );
   });
 
@@ -392,6 +397,25 @@ describe('FeedEngagementService', () => {
 
       const result = await service.getUserBookmarks('u1');
       expect(result.success).toBe(true);
+    });
+
+    it("leaves out bookmarked content from spaces the member isn't in", async () => {
+      mockSpaces.forUser.mockResolvedValue({ company: 'Acme', spaces: ['Acme'], isStudent: false, isStaff: false });
+      const bookmarks = [
+        { content_type: 'post', content_id: 'p1' },
+        { content_type: 'topic', content_id: 't1' },
+      ];
+      const posts = createMockQueryChain({ data: [], error: null });
+      const topics = createMockQueryChain({ data: [], error: null });
+      mockClient.from
+        .mockReturnValueOnce(createMockQueryChain({ data: bookmarks, error: null, count: 2 }))
+        .mockReturnValueOnce(posts)
+        .mockReturnValueOnce(topics)
+        .mockReturnValue(createMockQueryChain({ data: [], error: null }));
+
+      await service.getUserBookmarks('u1');
+      expect(posts.or).toHaveBeenCalledWith('visibility.neq.company,company_name.in.("Acme")');
+      expect(topics.or).toHaveBeenCalledWith('scope.eq.global,company_name.is.null,company_name.in.("Acme")');
     });
   });
 
