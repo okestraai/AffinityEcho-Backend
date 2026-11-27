@@ -184,6 +184,10 @@ export class EventsService {
       if (merged[key] !== current[key]) changes[key] = merged[key];
     }
 
+    // Reminders sent before this moment were for the old start time.
+    const {
+      rows: [{ t: savedFrom }],
+    } = await getPool().query('SELECT clock_timestamp() AS t');
     const { data, error } = await this.admin
       .from('events')
       .update({ ...changes, updated_at: new Date().toISOString() })
@@ -197,10 +201,18 @@ export class EventsService {
 
     // Guests hear about changes that matter to them, grouped over a short window.
     const changed = NOTIFIED_FIELDS.filter(
-      (f) =>
-        f in changes && String(changes[f] ?? '') !== String(current[f] ?? ''),
+      (f) => f in changes && !sameValue(f, changes[f], current[f]),
     );
     if (changed.length) await this.notices.queueUpdate(eventId);
+    // A new start time gets fresh reminders.
+    if (changed.includes('starts_at'))
+      await getPool().query(
+        `UPDATE event_registrations
+            SET reminded_day_at = CASE WHEN reminded_day_at < $2 THEN NULL ELSE reminded_day_at END,
+                reminded_hour_at = CASE WHEN reminded_hour_at < $2 THEN NULL ELSE reminded_hour_at END
+          WHERE event_id = $1 AND (reminded_day_at < $2 OR reminded_hour_at < $2)`,
+        [eventId, savedFrom],
+      );
     return this.hostView(data);
   }
 
@@ -462,14 +474,15 @@ export class EventsService {
         await client.query(
           `UPDATE event_registrations SET name_encrypted = $1, email_encrypted = $2, share_email = $3,
              attendance = $4, check_in_code = $5, source = $6, status = 'registered',
-             checked_in_at = NULL, updated_at = now() WHERE id = $7`,
+             checked_in_at = NULL, registered_at = clock_timestamp(), cancelled_at = NULL,
+             reminded_day_at = NULL, reminded_hour_at = NULL, updated_at = now() WHERE id = $7`,
           [...values, regId],
         );
       } else {
         const inserted = await client.query(
           `INSERT INTO event_registrations
-             (event_id, user_id, name_encrypted, email_encrypted, share_email, attendance, check_in_code, source)
-           VALUES ($7, $8, $1, $2, $3, $4, $5, $6) RETURNING id`,
+             (event_id, user_id, name_encrypted, email_encrypted, share_email, attendance, check_in_code, source, registered_at)
+           VALUES ($7, $8, $1, $2, $3, $4, $5, $6, clock_timestamp()) RETURNING id`,
           [...values, event.id, userId],
         );
         regId = inserted.rows[0].id;
@@ -482,6 +495,7 @@ export class EventsService {
         again: !!existing.rows[0],
       });
       await this.notices.sendConfirmation(regId);
+      await this.notices.queueHostActivity(event.id);
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       if (error instanceof ConflictException) throw error;
@@ -519,16 +533,27 @@ export class EventsService {
   }
 
   async cancelRegistration(userId: string, slug: string) {
-    const { reg } = await this.myRegistration(userId, slug);
-    await this.admin
-      .from('event_registrations')
-      .update({
-        status: 'cancelled',
-        share_email: false,
-        email_encrypted: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', reg.id);
+    const { event, reg } = await this.myRegistration(userId, slug);
+    // Same lock and clock as registering, so the host notice counts every cancellation once.
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `event:${event.id}`,
+      ]);
+      await client.query(
+        `UPDATE event_registrations SET status = 'cancelled', share_email = false, email_encrypted = NULL,
+           cancelled_at = clock_timestamp(), updated_at = now() WHERE id = $1`,
+        [reg.id],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    await this.notices.queueHostActivity(event.id);
     return { success: true };
   }
 
@@ -985,4 +1010,11 @@ function csvCell(value: string | number | null | undefined): string {
   let text = String(value ?? '');
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// Times are compared as instants, since the database and the form write them differently.
+function sameValue(field: string, a: unknown, b: unknown) {
+  if (field.endsWith('_at') && a && b)
+    return new Date(a as string).getTime() === new Date(b as string).getTime();
+  return String(a ?? '') === String(b ?? '');
 }

@@ -30,7 +30,7 @@ const future = (days: number) => new Date(Date.now() + days * 86400000).toISOStr
 describe('EventsService', () => {
   let client: any;
   let service: EventsService;
-  let notices: { queueUpdate: jest.Mock; queueCancel: jest.Mock; sendConfirmation: jest.Mock };
+  let notices: { queueUpdate: jest.Mock; queueCancel: jest.Mock; sendConfirmation: jest.Mock; queueHostActivity: jest.Mock };
   const encryption = {
     encrypt: jest.fn((t: string) => `enc_${t}`),
     decrypt: jest.fn((t: string) => t.replace(/^enc_/, '')),
@@ -76,11 +76,14 @@ describe('EventsService', () => {
       queueUpdate: jest.fn(),
       queueCancel: jest.fn(),
       sendConfirmation: jest.fn(),
+      queueHostActivity: jest.fn(),
     };
     // Settings reads and the per-host create lock go through the pool.
     const lockClient = { query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() };
     (getPool as jest.Mock).mockReturnValue({
-      query: jest.fn().mockResolvedValue({ rows: [] }),
+      query: jest.fn(async (sql: string) =>
+        String(sql).includes('clock_timestamp() AS t') ? { rows: [{ t: new Date('2026-12-01T10:00:00Z') }] } : { rows: [] },
+      ),
       connect: jest.fn().mockResolvedValue(lockClient),
     });
     service = new EventsService(createMockConfigService() as any, encryption as any, notices as any);
@@ -169,6 +172,35 @@ describe('EventsService', () => {
         .mockReturnValueOnce(chain({ ...event, venue_name: 'Other hall' }));
       await service.update('host', 'e1', { venueName: 'Other hall' });
       expect(notices.queueUpdate).toHaveBeenCalledWith('e1');
+    });
+
+    it('resets reminders when the start time moves, so guests are reminded about the new time', async () => {
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ ...event, starts_at: future(48) }));
+      await service.update('host', 'e1', { startsAt: future(48), endsAt: future(50) });
+      const query = (getPool as jest.Mock).mock.results.at(-1)!.value.query;
+      const reset = query.mock.calls.find((c: any[]) => String(c[0]).includes('reminded_day_at < $2'));
+      // Only reminders sent before the save are cleared, so one sent for the new time isn't repeated.
+      expect(reset[1]).toEqual(['e1', new Date('2026-12-01T10:00:00Z')]);
+    });
+
+    it('keeps reminders when the same start time comes back in another format', async () => {
+      const startsAt = event.starts_at;
+      client.from
+        .mockReturnValueOnce(chain({ ...event, starts_at: startsAt.replace(/Z$/, '+00:00') }))
+        .mockReturnValueOnce(chain({ ...event, title: 'New title' }));
+      await service.update('host', 'e1', { title: 'New title', startsAt, endsAt: event.ends_at });
+      const query = (getPool as jest.Mock).mock.results.at(-1)!.value.query;
+      expect(query.mock.calls.some((c: any[]) => String(c[0]).includes('reminded_day_at < $2'))).toBe(false);
+    });
+
+    it('keeps reminders when only the venue changes', async () => {
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ ...event, venue_name: 'Other hall' }));
+      await service.update('host', 'e1', { venueName: 'Other hall' });
+      expect(client.from).toHaveBeenCalledTimes(2);
     });
 
     it("clears the old mode's details when the mode changes", async () => {
@@ -342,6 +374,32 @@ describe('EventsService', () => {
       await service.register('u1', event.slug, { attendance: 'online' }).catch(() => undefined);
       const insert = query.mock.calls.find((c: any[]) => String(c[0]).includes('INSERT INTO event_registrations'));
       expect(insert[1].slice(0, 3)).toEqual(['enc_Ada', null, false]);
+      expect(notices.queueHostActivity).toHaveBeenCalledWith('e1');
+    });
+
+    it('treats registering again as new: fresh reminders and a fresh registration time', async () => {
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ email: 'a@x.com', first_name_encrypted: 'enc_Ada' }))
+        .mockReturnValue(chain(null));
+      const query = pool([{}, {}, { rows: [{ id: 'r1', status: 'cancelled' }] }]);
+      await service.register('u1', event.slug, { attendance: 'online' }).catch(() => undefined);
+      const again = query.mock.calls.find((c: any[]) => String(c[0]).includes('UPDATE event_registrations SET'));
+      expect(again[0]).toContain('registered_at = clock_timestamp()');
+      expect(again[0]).toContain('reminded_day_at = NULL, reminded_hour_at = NULL');
+    });
+
+    it('records when a guest cancels and tells the host', async () => {
+      client.from
+        .mockReturnValueOnce(chain(event))
+        .mockReturnValueOnce(chain({ id: 'r1', status: 'registered' }));
+      const query = pool([]);
+      await service.cancelRegistration('u1', event.slug);
+      expect(query.mock.calls[1][1]).toEqual(['event:e1']);
+      const write = query.mock.calls.find((c: any[]) => String(c[0]).includes("status = 'cancelled'"));
+      expect(write[0]).toContain('cancelled_at = clock_timestamp()');
+      expect(write[1]).toEqual(['r1']);
+      expect(notices.queueHostActivity).toHaveBeenCalledWith('e1');
     });
   });
 });

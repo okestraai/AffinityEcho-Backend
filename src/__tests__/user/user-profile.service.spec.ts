@@ -530,11 +530,6 @@ describe('UserProfileService', () => {
       await expect(service.getStatsFor('author', 'viewer')).rejects.toThrow(ForbiddenException);
     });
 
-      await service.getUserStats('author', 'viewer').catch(() => undefined);
-      const anonFiltered = chains.filter((c) => c.or.mock.calls.some((call: any[]) => call[0] === 'is_anonymous.is.null,is_anonymous.eq.false'));
-      expect(anonFiltered.length).toBe(6);
-    });
-
     it('limits posts, topics and nooks to open content and the viewer\'s spaces', async () => {
       mockSpaces.forUser.mockResolvedValue({ company: 'Acme', spaces: ['Acme', 'Students'], isStudent: true, isStaff: false });
       const chains = [0, 1, 2].map(() => createMockQueryChain({ data: [], error: null, count: 0 }));

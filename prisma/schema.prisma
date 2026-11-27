@@ -1637,6 +1637,7 @@ model events {
   cancelled_at           DateTime? @db.Timestamptz(3)
   deleted_at             DateTime? @db.Timestamptz(3)
   cover_updated_at       DateTime? @db.Timestamptz(3)
+  host_notified_at       DateTime? @db.Timestamptz(3)
   created_at             DateTime  @default(now()) @db.Timestamptz(3)
   updated_at             DateTime  @default(now()) @db.Timestamptz(3)
 
@@ -1663,6 +1664,10 @@ model event_registrations {
   status          String    @default("registered") @db.VarChar(12)
   created_at      DateTime  @default(now()) @db.Timestamptz(3)
   updated_at      DateTime  @default(now()) @db.Timestamptz(3)
+  registered_at   DateTime  @default(now()) @db.Timestamptz(3)
+  cancelled_at    DateTime? @db.Timestamptz(3)
+  reminded_day_at  DateTime? @db.Timestamptz(3)
+  reminded_hour_at DateTime? @db.Timestamptz(3)
   event           events    @relation(fields: [event_id], references: [id], onDelete: Cascade)
 
   @@unique([event_id, user_id], map: "event_registrations_event_user_key")

@@ -8,6 +8,8 @@ export interface EventSettings {
   covers_enabled: boolean;
   cover_max_mb: number;
   update_grouping_minutes: number;
+  reminders_enabled: boolean;
+  host_notices_enabled: boolean;
 }
 
 export interface StorageSettings {
@@ -19,6 +21,8 @@ export const EVENT_DEFAULTS: EventSettings = {
   covers_enabled: true,
   cover_max_mb: 2,
   update_grouping_minutes: 2,
+  reminders_enabled: true,
+  host_notices_enabled: true,
 };
 
 export const STORAGE_DEFAULTS: StorageSettings = { cover_storage: 'database' };
@@ -58,6 +62,16 @@ export function checkEventSettings(
             'The grouping window must be a whole number of minutes from 0 to 30',
           );
         out.update_grouping_minutes = v as number;
+        break;
+      case 'reminders_enabled':
+        if (typeof v !== 'boolean')
+          throw new BadRequestException('Event reminders must be on or off');
+        out.reminders_enabled = v;
+        break;
+      case 'host_notices_enabled':
+        if (typeof v !== 'boolean')
+          throw new BadRequestException('Host notices must be on or off');
+        out.host_notices_enabled = v;
         break;
       default:
         throw new BadRequestException(`Unknown events setting: ${key}`);

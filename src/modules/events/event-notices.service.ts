@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import * as QRCode from 'qrcode';
 import { supabaseAdmin } from '../../database/supabase.client';
+import { getPool } from '../../database/pg-client';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
 import { EmailService } from '../../common/utils/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -13,9 +14,13 @@ import { EVENTS_QUEUE } from './events.constants';
 import { eventSettings } from './event-settings';
 
 type NoticeKind = 'updated' | 'cancelled';
+type ReminderKind = 'day' | 'hour';
+
+const HOUR = 60 * 60 * 1000;
+const REMINDER_CHECK_MS = 5 * 60 * 1000;
 
 @Injectable()
-export class EventNoticesService {
+export class EventNoticesService implements OnModuleInit {
   private admin;
   private readonly appUrl: string;
 
@@ -30,11 +35,37 @@ export class EventNoticesService {
     this.appUrl = (config.get<string>('FRONTEND_URL') ?? '').replace(/\/$/, '');
   }
 
+  // One reminder check every few minutes, however many servers run; the queue keeps a single schedule.
+  async onModuleInit() {
+    await this.queue
+      .upsertJobScheduler(
+        'event-reminders',
+        { every: REMINDER_CHECK_MS },
+        {
+          name: 'reminders',
+          data: {},
+          opts: { removeOnComplete: true, removeOnFail: true },
+        },
+      )
+      .catch((error) =>
+        logger.warn('Could not schedule event reminders', { error }),
+      );
+  }
+
   // Edits within the window reach guests as one message: a later edit finds the job already waiting.
   async queueUpdate(eventId: string) {
+    await this.queueGrouped('updated', `event-updated-${eventId}`, eventId);
+  }
+
+  // New guests and cancellations within the window reach the host as one notice.
+  async queueHostActivity(eventId: string) {
+    await this.queueGrouped('host_activity', `event-host-${eventId}`, eventId);
+  }
+
+  private async queueGrouped(name: string, baseJobId: string, eventId: string) {
     const minutes = (await eventSettings()).events.update_grouping_minutes;
-    // A message already being sent can't take this edit, so the edit gets a message of its own.
-    let jobId = `event-updated-${eventId}`;
+    // A message already being sent can't take this change, so the change gets a message of its own.
+    let jobId = baseJobId;
     const waiting = await this.queue.getJob(jobId).catch(() => undefined);
     if (
       waiting &&
@@ -43,7 +74,7 @@ export class EventNoticesService {
       jobId = `${jobId}-${Date.now()}`;
     await this.queue
       .add(
-        'updated',
+        name,
         { eventId },
         {
           jobId,
@@ -53,8 +84,164 @@ export class EventNoticesService {
         },
       )
       .catch((error) =>
-        logger.warn('Could not queue an event update', { eventId, error }),
+        logger.warn('Could not queue an event notice', {
+          name,
+          eventId,
+          error,
+        }),
       );
+  }
+
+  // Reminders a day and an hour before. Each guest's reminder is claimed before it is sent, so it goes once.
+  async sendReminders(now = new Date()) {
+    if (!(await eventSettings()).events.reminders_enabled)
+      return { day: 0, hour: 0 };
+    const hour = await this.remind('hour', now);
+    const day = await this.remind('day', now);
+    return { day, hour };
+  }
+
+  private async remind(kind: ReminderKind, now: Date) {
+    const t = now.getTime();
+    // Day reminders 2 to 24 hours ahead, hour reminders in the last 75 minutes, never right after registering.
+    const [from, to, registeredBefore] =
+      kind === 'day'
+        ? [t + 2 * HOUR, t + 24 * HOUR, t - HOUR]
+        : [t, t + 75 * 60 * 1000, t - 15 * 60 * 1000];
+    const column = kind === 'day' ? 'reminded_day_at' : 'reminded_hour_at';
+    const { rows } = await getPool().query(
+      `UPDATE event_registrations r
+          SET ${column} = now()${kind === 'hour' ? ', reminded_day_at = COALESCE(r.reminded_day_at, now())' : ''}
+         FROM events e
+        WHERE r.event_id = e.id AND e.status = 'published' AND e.deleted_at IS NULL
+          AND r.status = 'registered' AND r.${column} IS NULL AND r.user_id <> e.host_id
+          AND e.starts_at > $1 AND e.starts_at <= $2 AND r.registered_at <= $3
+      RETURNING r.id`,
+      [new Date(from), new Date(to), new Date(registeredBefore)],
+    );
+    for (const row of rows) {
+      // A reminder that couldn't be sent is released, so the next run tries again.
+      if (!(await this.sendReminder(row.id, kind)))
+        await getPool()
+          .query(
+            `UPDATE event_registrations SET ${column} = NULL WHERE id = $1`,
+            [row.id],
+          )
+          .catch(() => undefined);
+    }
+    return rows.length;
+  }
+
+  private async sendReminder(registrationId: string, kind: ReminderKind) {
+    try {
+      const reg = await this.registration(registrationId);
+      if (!reg) return true;
+      const e = reg.event;
+      const inPerson = reg.attendance === 'in_person';
+      const start = startText(e.starts_at, e.time_zone, kind === 'day');
+      const how = inPerson
+        ? `Your check-in code is ${reg.check_in_code}.`
+        : e.join_url
+          ? 'The join link is on the event page.'
+          : "The host hasn't added the join link yet.";
+      const title =
+        kind === 'day' ? `Coming up: ${e.title}` : `Starting soon: ${e.title}`;
+      await this.notifications.createNotification({
+        user_id: reg.user_id,
+        type: 'event_reminder',
+        title,
+        message: `Starts ${start}. ${how}`,
+        action_url: `/events/${e.slug}`,
+        reference_id: e.id,
+        reference_type: 'event',
+      } as any);
+      // The day reminder also comes by email, with the details and the calendar file.
+      if (kind === 'day') {
+        await this.email
+          .sendEmail(
+            reg.email,
+            title,
+            'event-notice',
+            this.emailData(reg, {
+              label: 'Event reminder',
+              heading: e.title,
+              intro: `Starts ${start}.`,
+              checkInCode: inPerson ? reg.check_in_code : null,
+            }),
+            [
+              {
+                filename: 'event.ics',
+                content: calendarFile(e, inPerson, this.eventUrl(e.slug)),
+                contentType: 'text/calendar; charset=utf-8; method=PUBLISH',
+              },
+            ],
+          )
+          .catch((error) =>
+            logger.warn('Event reminder email failed', { error }),
+          );
+      }
+      return true;
+    } catch (error) {
+      logger.warn('Could not send an event reminder', {
+        registrationId,
+        error,
+      });
+      return false;
+    }
+  }
+
+  // Tells the host how many people registered or cancelled since the last notice.
+  async notifyHost(eventId: string) {
+    if (!(await eventSettings()).events.host_notices_enabled) return 0;
+    // Takes the registration lock, so a guest still registering lands in this notice or the next.
+    const client = await getPool().connect();
+    let event: any;
+    let n: any;
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `event:${eventId}`,
+      ]);
+      ({
+        rows: [event],
+      } = await client.query(
+        `WITH before AS (SELECT host_notified_at FROM events WHERE id = $1 FOR UPDATE)
+         UPDATE events e SET host_notified_at = clock_timestamp() FROM before
+          WHERE e.id = $1 AND e.status = 'published' AND e.deleted_at IS NULL
+         RETURNING e.id, e.slug, e.title, e.host_id, before.host_notified_at AS since, e.host_notified_at AS until`,
+        [eventId],
+      ));
+      if (event)
+        ({
+          rows: [n],
+        } = await client.query(
+          `SELECT count(*) FILTER (WHERE status = 'registered' AND registered_at > $2 AND registered_at <= $4)::int AS joined,
+                  count(*) FILTER (WHERE status = 'cancelled' AND cancelled_at > $2 AND cancelled_at <= $4 AND registered_at <= $2)::int AS left_,
+                  count(*) FILTER (WHERE status = 'registered')::int AS going
+             FROM event_registrations WHERE event_id = $1 AND user_id <> $3`,
+          [eventId, event.since ?? new Date(0), event.host_id, event.until],
+        ));
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (!event) return 0;
+    if (!n.joined && !n.left_) return 0;
+    await this.notifications
+      .createNotification({
+        user_id: event.host_id,
+        type: 'event_host_activity',
+        title: `Guests: ${event.title}`,
+        message: hostActivityText(n.joined, n.left_, n.going),
+        action_url: `/events/manage/${event.id}`,
+        reference_id: event.id,
+        reference_type: 'event',
+      } as any)
+      .catch((error) => logger.warn('Host notice failed', { error }));
+    return 1;
   }
 
   async queueCancel(eventId: string) {
@@ -283,6 +470,15 @@ export class EventNoticesProcessor extends WorkerHost {
   }
 
   async process(job: Job<{ eventId: string }>) {
+    if (job.name === 'reminders') {
+      const sent = await this.notices.sendReminders();
+      if (sent.day || sent.hour) logger.info('Event reminders sent', sent);
+      return;
+    }
+    if (job.name === 'host_activity') {
+      await this.notices.notifyHost(job.data.eventId);
+      return;
+    }
     const kind = job.name === 'cancelled' ? 'cancelled' : 'updated';
     const sent = await this.notices.notifyGuests(job.data.eventId, kind);
     logger.info('Event notice sent', { eventId: job.data.eventId, kind, sent });
@@ -293,6 +489,37 @@ export class EventNoticesProcessor extends WorkerHost {
         guests: sent,
       });
   }
+}
+
+// When the event starts, in its own time zone: "on Saturday 28 November at 18:00 GMT+1" or "at 18:00 GMT+1".
+export function startText(
+  startsAt: string,
+  timeZone: string,
+  withDay: boolean,
+) {
+  const time = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(startsAt));
+  if (!withDay) return `at ${time}`;
+  const day = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(startsAt));
+  return `on ${day} at ${time}`;
+}
+
+// "2 people registered and 1 cancelled. 14 going."
+export function hostActivityText(joined: number, left: number, going: number) {
+  const parts: string[] = [];
+  if (joined)
+    parts.push(`${joined} ${joined === 1 ? 'person' : 'people'} registered`);
+  if (left) parts.push(`${left} cancelled`);
+  return `${parts.join(' and ')}. ${going} going.`;
 }
 
 export function whenText(startsAt: string, endsAt: string, timeZone: string) {

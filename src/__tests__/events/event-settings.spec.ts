@@ -26,6 +26,13 @@ describe('event settings from the admin console', () => {
     ).toEqual({ events_per_day: 10, covers_enabled: false, cover_max_mb: 1.5, update_grouping_minutes: 0 });
   });
 
+  it('lets admins switch reminders and host notices off', () => {
+    expect(checkEventSettings({ reminders_enabled: false, host_notices_enabled: false })).toEqual({
+      reminders_enabled: false,
+      host_notices_enabled: false,
+    });
+  });
+
   it.each([
     [{ events_per_day: 0 }, '1 to 50'],
     [{ events_per_day: 51 }, '1 to 50'],
@@ -34,6 +41,8 @@ describe('event settings from the admin console', () => {
     [{ cover_max_mb: 3 }, '0.5, 1, 1.5 or 2'],
     [{ covers_enabled: 'yes' }, 'on or off'],
     [{ update_grouping_minutes: 31 }, '0 to 30'],
+    [{ reminders_enabled: 'yes' }, 'Event reminders must be on or off'],
+    [{ host_notices_enabled: 1 }, 'Host notices must be on or off'],
     [{ max_cover_count: 3 }, 'Unknown events setting'],
   ])('refuses %j', (value, message) => {
     expect(() => checkEventSettings(value as any)).toThrow(message);
