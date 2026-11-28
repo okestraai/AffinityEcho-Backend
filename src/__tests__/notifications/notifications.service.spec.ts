@@ -202,6 +202,23 @@ describe('NotificationsService', () => {
       });
       expect(mockClient.from).toHaveBeenCalledWith('notifications');
     });
+
+    it('keeps notices with no person behind them apart in the grouped list, like several host notices for one event', async () => {
+      const at = (m: number) => new Date(Date.UTC(2026, 11, 1, 10, m)).toISOString();
+      const notice = (id: string, m: number, message: string) => ({
+        id, type: 'event_host_activity', reference_id: 'e1', reference_type: 'event', actor: null,
+        title: 'Guests: Career night', message, is_read: false, action_url: '/events/manage/e1', created_at: at(m),
+      });
+      const notifications = [notice('n2', 5, '1 cancelled. 0 going.'), notice('n1', 1, '1 person registered. 1 going.')];
+      mockClient.from.mockReturnValue(createMockQueryChain({ data: notifications, error: null, count: 2 }));
+
+      const result: any = await service.getUserNotifications('host', { page: 1, limit: 20, grouped: true } as any);
+
+      expect(result.data.map((n: any) => [n.id, n.message])).toEqual([
+        ['n2', '1 cancelled. 0 going.'],
+        ['n1', '1 person registered. 1 going.'],
+      ]);
+    });
   });
 
   /* ================================================================ */

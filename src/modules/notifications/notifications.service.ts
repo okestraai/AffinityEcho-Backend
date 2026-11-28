@@ -309,6 +309,7 @@ export class NotificationsService {
   private buildAggregatedMessage(group: any[]): string {
     const actors = this.getUniqueActors(group);
     const verb = ACTION_VERBS[group[0].type] || 'sent you a notification';
+    if (!actors.length) return group[0].message;
 
     if (actors.length === 1) {
       return `${actors[0].display_name} ${verb}`;
@@ -349,7 +350,8 @@ export class NotificationsService {
     const ungrouped: any[] = [];
 
     for (const n of notifications) {
-      if (!n.reference_id) {
+      // Notices with no person behind them, like event reminders, each stand alone.
+      if (!n.reference_id || !n.actor) {
         ungrouped.push(n);
         continue;
       }
